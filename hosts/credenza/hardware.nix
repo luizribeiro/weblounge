@@ -13,10 +13,4 @@
     "virtio_scsi"
     "xhci_pci"
   ];
-
-  # Boots on both BIOS and UEFI VPSes, since we haven't picked a provider yet.
-  boot.loader.grub = {
-    efiSupport = true;
-    efiInstallAsRemovable = true;
-  };
 }
