@@ -25,7 +25,7 @@ pkgs.testers.runNixOSTest {
         credenza.wait_for_unit("nginx.service")
         credenza.wait_for_open_port(80)
         client.wait_for_unit("multi-user.target")
-        client.succeed("curl -sf http://credenza/ | grep -q 'Hello from weblounge'")
+        client.succeed("curl -sf -o page.html http://credenza/ && grep -q '<title>weblounge.org</title>' page.html")
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
