@@ -25,6 +25,10 @@ in
         forwardedPorts;
     };
 
+    # QEMU's user-mode network hands out addresses over DHCP, whatever a
+    # host does in production.
+    networking.useDHCP = lib.mkVMOverride true;
+
     # QEMU boots the kernel directly, and the disk GRUB would target in
     # production doesn't exist here.
     boot.loader.grub.enable = lib.mkForce false;
