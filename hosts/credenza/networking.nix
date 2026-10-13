@@ -4,6 +4,8 @@
   networking.useDHCP = false;
   networking.useNetworkd = true;
   networking.nameservers = [ "8.8.8.8" "8.8.4.4" ];
+  # Under networkd, resolved is what applies networking.nameservers.
+  services.resolved.enable = true;
 
   systemd.network.networks."10-wan" = {
     matchConfig.MACAddress = "00:16:3c:1a:01:be";
