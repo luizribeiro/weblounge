@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: scripts/push <toplevel-flake-attr> <ssh-host>
+# Extra ssh options (port, host key checks) go in NIX_SSHOPTS.
+set -euo pipefail
+
+attr=$1
+host=$2
+
+toplevel=$(nix build --no-link --print-out-paths "$attr")
+# Trusted users may import unsigned paths regardless; this only stops the
+# daemon rejecting ones we just built (seen on the VM, whose store overlays
+# the host's).
+nix copy --no-check-sigs --to "ssh-ng://$host" "$toplevel"
+# $toplevel expands locally on purpose; NIX_SSHOPTS is a list of words.
+# shellcheck disable=SC2029,SC2086
+ssh ${NIX_SSHOPTS:-} "$host" \
+  "sudo nix-env -p /nix/var/nix/profiles/system --set $toplevel && sudo $toplevel/bin/switch-to-configuration switch"
