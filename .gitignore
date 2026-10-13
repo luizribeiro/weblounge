@@ -2,3 +2,4 @@ result
 result-*
 .direnv
 .vm
+.pre-commit-config.yaml

@@ -7,12 +7,20 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    git-hooks = {
+      url = "github:cachix/git-hooks.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { nixpkgs, ... } @ inputs:
+  outputs = { nixpkgs, git-hooks, ... } @ inputs:
     let
       inherit (nixpkgs) lib;
       weblounge = import ./lib inputs;
+      devSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+      forEachSystem = f: lib.genAttrs devSystems
+        (system: f nixpkgs.legacyPackages.${system});
+      gitHooks = forEachSystem (pkgs: import ./git-hooks.nix { inherit git-hooks pkgs; });
     in
     {
       nixosConfigurations = weblounge.hosts;
@@ -21,6 +29,7 @@
 
       checks = lib.foldl' lib.recursiveUpdate { } [
         weblounge.toplevelChecks
+        (lib.mapAttrs (_: hooks: { git-hooks = hooks; }) gitHooks)
         {
           x86_64-linux.credenza = import ./tests/credenza.nix {
             inherit weblounge;
@@ -28,5 +37,14 @@
           };
         }
       ];
+
+      formatter = forEachSystem (pkgs: pkgs.nixpkgs-fmt);
+
+      devShells = forEachSystem (pkgs: {
+        default = import ./shell.nix {
+          inherit pkgs;
+          gitHooks = gitHooks.${pkgs.stdenv.hostPlatform.system};
+        };
+      });
     };
 }
