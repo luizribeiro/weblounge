@@ -5,7 +5,7 @@ set positional-arguments
 addr := "127.0.0.1"
 ssh_opts := "-p 10022 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
 
-# Boot a host's config locally (ssh :10022, http :10080)
+# Boot a host's config locally (ssh :10022, http :10080, https :10443)
 start host="credenza":
   mkdir -p .vm
   NIX_DISK_IMAGE=.vm/{{host}}.qcow2 nix run -L .#{{host}}-vm

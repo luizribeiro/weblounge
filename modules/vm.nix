@@ -4,10 +4,13 @@ let
   forwardedPorts = {
     "10022" = 22;
     "10080" = 80;
+    "10443" = 443;
   };
 in
 {
   virtualisation.vmVariant = {
+    imports = [ ./offline-acme.nix ];
+
     virtualisation = {
       cores = 2;
       memorySize = 2048;

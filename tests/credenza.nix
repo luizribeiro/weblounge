@@ -8,7 +8,7 @@ pkgs.testers.runNixOSTest {
 
   nodes = {
     credenza = {
-      imports = weblounge.hostModules "credenza";
+      imports = weblounge.hostModules "credenza" ++ [ ../modules/offline-acme.nix ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [
         "-netdev user,id=wan,net=107.173.231.128/25,host=107.173.231.129"
@@ -21,11 +21,13 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     start_all()
 
-    with subtest("nginx serves the landing page"):
+    with subtest("nginx redirects to HTTPS and serves the parking page"):
         credenza.wait_for_unit("nginx.service")
-        credenza.wait_for_open_port(80)
+        credenza.wait_for_open_port(443)
         client.wait_for_unit("multi-user.target")
-        client.succeed("curl -sf -o page.html http://credenza/ && grep -q '<title>weblounge.org</title>' page.html")
+        redirect = client.succeed("curl -s -o /dev/null -w '%{redirect_url}' http://credenza/")
+        assert redirect == "https://credenza/", redirect
+        client.succeed("curl -sfk -o page.html https://credenza/ && grep -q '<title>weblounge.org</title>' page.html")
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")

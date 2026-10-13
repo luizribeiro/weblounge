@@ -27,6 +27,7 @@ machine, with ports forwarded from localhost:
 | ------- | -------------------- |
 | SSH     | `just vm ssh`        |
 | HTTP    | http://localhost:10080 |
+| HTTPS   | https://localhost:10443 (self-signed) |
 
 The VM's console is attached to your terminal (Ctrl-A X quits QEMU). From
 another terminal:
