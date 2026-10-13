@@ -9,7 +9,7 @@ pkgs.testers.runNixOSTest {
   nodes = {
     credenza = {
       imports = weblounge.hostModules "credenza";
-      # An extra NIC with the VPS's MAC, on a network shaped like its subnet.
+      # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [
         "-netdev user,id=wan,net=107.173.231.128/25,host=107.173.231.129"
         "-device virtio-net-pci,netdev=wan,mac=00:16:3c:1a:01:be"
@@ -37,6 +37,7 @@ pkgs.testers.runNixOSTest {
         credenza.succeed("id -nG luiz | grep -qw wheel")
         credenza.succeed("grep -q cardno: /etc/ssh/authorized_keys.d/luiz")
         credenza.succeed("su - luiz -c 'sudo -n true'")
+        credenza.succeed("getent shadow luiz | cut -d: -f2 | grep -q '^\\$y\\$'")
 
     with subtest("the VPS's NIC comes up with its static address and gateway"):
         credenza.wait_until_succeeds("ip -4 addr show | grep -q 'inet 107.173.231.206/25'", timeout=60)
