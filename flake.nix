@@ -9,13 +9,22 @@
     };
   };
 
-  outputs = inputs:
+  outputs = { nixpkgs, ... } @ inputs:
     let
+      inherit (nixpkgs) lib;
       weblounge = import ./lib inputs;
     in
     {
       nixosConfigurations = weblounge.hosts;
 
-      checks = weblounge.toplevelChecks;
+      checks = lib.foldl' lib.recursiveUpdate { } [
+        weblounge.toplevelChecks
+        {
+          x86_64-linux.credenza = import ./tests/credenza.nix {
+            inherit weblounge;
+            pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          };
+        }
+      ];
     };
 }
