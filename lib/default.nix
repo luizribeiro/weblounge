@@ -26,6 +26,10 @@ in
 {
   inherit hosts hostModules;
 
+  vmPackages = perHostOutput (name: host: {
+    "${name}-vm" = host.config.virtualisation.vmVariant.system.build.vm;
+  });
+
   toplevelChecks = perHostOutput (name: host: {
     "toplevel-${name}" = host.config.system.build.toplevel;
   });

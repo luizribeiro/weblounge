@@ -17,6 +17,8 @@
     {
       nixosConfigurations = weblounge.hosts;
 
+      packages = weblounge.vmPackages;
+
       checks = lib.foldl' lib.recursiveUpdate { } [
         weblounge.toplevelChecks
         {
