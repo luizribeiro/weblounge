@@ -14,6 +14,12 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     start_all()
 
+    with subtest("nginx serves the landing page"):
+        credenza.wait_for_unit("nginx.service")
+        credenza.wait_for_open_port(80)
+        client.wait_for_unit("multi-user.target")
+        client.succeed("curl -sf http://credenza/ | grep -q 'Hello from weblounge'")
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()
