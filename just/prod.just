@@ -6,8 +6,10 @@ toplevel := ".config.system.build.toplevel"
 build host="credenza":
   nix build --no-link -L .#nixosConfigurations.{{host}}{{toplevel}}
 
-# Deploy the current tree to a production host over SSH
+# Deploy the current tree to a production host over SSH, once DNS has every name it serves
 push host="credenza":
+  just dns check
+  scripts/wait-for-dns .#nixosConfigurations.{{host}}.config
   scripts/push .#nixosConfigurations.{{host}}{{toplevel}} \
     "$(nix eval --raw .#nixosConfigurations.{{host}}.config.networking.fqdn)"
 

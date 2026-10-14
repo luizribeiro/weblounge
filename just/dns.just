@@ -3,6 +3,9 @@ set working-directory := '..'
 # Show how deSEC's zone differs from the one the hosts generate
 preview: (dnscontrol "preview")
 
+# Fail if deSEC's zone differs from the one the hosts generate
+check: (dnscontrol "preview --expect-no-changes")
+
 # Make deSEC's zone match the one the hosts generate
 push: (dnscontrol "push")
 

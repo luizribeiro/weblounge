@@ -6,6 +6,7 @@ pkgs.mkShell ({
     bacon
     cargo
     clippy
+    dig
     dnscontrol
     esbuild
     just

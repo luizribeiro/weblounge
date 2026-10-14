@@ -145,6 +145,11 @@ just prod install root@IP  # first install on a fresh server (wipes its disk)
 just prod push             # deploy to credenza.weblounge.org
 ```
 
+`just prod push` refuses to deploy while deSEC's zone differs from the one
+the hosts generate (`just dns push` first), and waits until every
+nameserver answers the names it orders certificates for. After switching,
+it fails if any unit failed or is waiting to retry.
+
 IRC clients connect to `irc.weblounge.org:6697` over TLS.
 
 Concierge's admin commands run on the server, as the service itself:
