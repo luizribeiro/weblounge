@@ -4,6 +4,7 @@
 
 use std::{
     collections::{HashMap, VecDeque},
+    hash::Hash,
     net::{IpAddr, SocketAddr},
     sync::Mutex,
     time::{Duration, Instant},
@@ -61,31 +62,87 @@ enum Key {
     Address(IpAddr),
 }
 
+/// When each key was last seen, over a sliding window, for keys seen
+/// recently.
+struct Recent<K> {
+    window: Duration,
+    times: Mutex<HashMap<K, VecDeque<Instant>>>,
+}
+
+impl<K: Eq + Hash> Recent<K> {
+    fn new(window: Duration) -> Self {
+        Self {
+            window,
+            times: Mutex::default(),
+        }
+    }
+
+    /// Whether `key` was seen fewer than `limit` times in the window.
+    fn under(&self, key: &K, limit: usize, now: Instant) -> bool {
+        let mut times = self.lock();
+        times
+            .get_mut(key)
+            .is_none_or(|times| self.prune(times, now).len() < limit)
+    }
+
+    fn record(&self, key: K, now: Instant) {
+        let mut times = self.lock();
+        if times.len() > PRUNE_ABOVE {
+            times.retain(|_, times| !self.prune(times, now).is_empty());
+        }
+        times.entry(key).or_default().push_back(now);
+    }
+
+    fn forget(&self, key: &K) {
+        self.lock().remove(key);
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.lock().len()
+    }
+
+    /// Drops the times that left the window and returns the rest.
+    fn prune<'a>(&self, times: &'a mut VecDeque<Instant>, now: Instant) -> &'a VecDeque<Instant> {
+        while times
+            .front()
+            .is_some_and(|&time| now.duration_since(time) >= self.window)
+        {
+            times.pop_front();
+        }
+        times
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<K, VecDeque<Instant>>> {
+        self.times
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
 /// Failed sign-in attempts in the last [`WINDOW`], by account and by client
 /// address.
-#[derive(Default)]
 pub struct Limiter {
-    failures: Mutex<HashMap<Key, VecDeque<Instant>>>,
+    failures: Recent<Key>,
+}
+
+impl Default for Limiter {
+    fn default() -> Self {
+        Self {
+            failures: Recent::new(WINDOW),
+        }
+    }
 }
 
 impl Limiter {
     /// Whether another attempt at `account` from `address` may go ahead.
     pub fn allows(&self, account: &str, address: Option<IpAddr>, now: Instant) -> bool {
-        let mut failures = self.lock();
-        keys(account, address).all(|(key, limit)| {
-            failures
-                .get_mut(&key)
-                .is_none_or(|times| recent(times, now).len() < limit)
-        })
+        keys(account, address).all(|(key, limit)| self.failures.under(&key, limit, now))
     }
 
     pub fn record_failure(&self, account: &str, address: Option<IpAddr>, now: Instant) {
-        let mut failures = self.lock();
-        if failures.len() > PRUNE_ABOVE {
-            failures.retain(|_, times| !recent(times, now).is_empty());
-        }
         for (key, _) in keys(account, address) {
-            failures.entry(key).or_default().push_back(now);
+            self.failures.record(key, now);
         }
     }
 
@@ -93,13 +150,7 @@ impl Limiter {
     /// address's stay, so signing in to one account can't buy more guesses
     /// at others.
     pub fn record_success(&self, account: &str) {
-        self.lock().remove(&account_key(account));
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Key, VecDeque<Instant>>> {
-        self.failures
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.failures.forget(&account_key(account));
     }
 }
 
@@ -112,17 +163,6 @@ fn keys(account: &str, address: Option<IpAddr>) -> impl Iterator<Item = (Key, us
     [(account_key(account), PER_ACCOUNT)]
         .into_iter()
         .chain(address)
-}
-
-/// Drops the failures older than [`WINDOW`] and returns the rest.
-fn recent(times: &mut VecDeque<Instant>, now: Instant) -> &VecDeque<Instant> {
-    while times
-        .front()
-        .is_some_and(|&time| now.duration_since(time) >= WINDOW)
-    {
-        times.pop_front();
-    }
-    times
 }
 
 #[cfg(test)]
@@ -212,6 +252,6 @@ mod tests {
             fail(&limiter, &format!("guess{n}"), None, 1, start);
         }
         fail(&limiter, "alice", HOME, 1, start + WINDOW);
-        assert_eq!(limiter.lock().len(), 2);
+        assert_eq!(limiter.failures.len(), 2);
     }
 }
