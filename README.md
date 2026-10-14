@@ -36,11 +36,12 @@ show up on the next manual reload.
 `just vm start` boots credenza's real configuration in a QEMU VM on your
 machine, with ports forwarded from localhost:
 
-| Service | Address              |
-| ------- | -------------------- |
-| SSH     | `just vm ssh`        |
-| HTTP    | http://localhost:10080 |
+| Service | Address                               |
+| ------- | ------------------------------------- |
+| SSH     | `just vm ssh`                         |
+| HTTP    | http://localhost:10080                |
 | HTTPS   | https://localhost:10443 (self-signed) |
+| IRC     | localhost:16697, TLS (self-signed)    |
 
 The VM's console is attached to your terminal (Ctrl-A X quits QEMU). From
 another terminal:
