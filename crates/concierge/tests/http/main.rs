@@ -54,19 +54,20 @@ struct Site {
 
 impl Site {
     async fn start() -> Self {
-        Self::start_with_ergo(None).await
+        Self::start_with(|_| {}).await
     }
 
-    /// A site that talks to `ergo` instead of its fake, if given one.
-    async fn start_with_ergo(ergo: Option<ergo_api::Client>) -> Self {
+    /// A site whose app `change` adjusts, for example to talk to another Ergo
+    /// than its fake.
+    async fn start_with(change: impl FnOnce(&mut App)) -> Self {
         let fake = FakeErgo::start().await;
         let state = tempfile::tempdir().unwrap();
         let db = Db::open(&state.path().join("concierge.db")).await.unwrap();
         let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/assets");
-        let router = app::router(App {
+        let mut app = App {
             assets: Assets::load(&fixtures).unwrap(),
             db: db.clone(),
-            ergo: ergo.unwrap_or_else(|| fake.client()),
+            ergo: fake.client(),
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),
             lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
@@ -77,9 +78,10 @@ impl Site {
             },
             introspection_secret: INTROSPECTION_SECRET.into(),
             irc_server: irc_server(),
-        });
+        };
+        change(&mut app);
         Self {
-            router,
+            router: app::router(app),
             db,
             ergo: fake,
             state,

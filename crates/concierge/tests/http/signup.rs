@@ -182,7 +182,7 @@ async fn when_ergo_fails_nothing_is_created_and_the_invite_still_works() {
 #[tokio::test]
 async fn when_ergo_is_unreachable_the_invite_still_works() {
     let unreachable = ergo_api::Client::new("http://127.0.0.1:9".parse().unwrap(), "token");
-    let site = Site::start_with_ergo(Some(unreachable)).await;
+    let site = Site::start_with(|app| app.ergo = unreachable).await;
     site.add_invite(CODE, None).await;
     assert_eq!(site.post(INVITE, &bob(), None).await.status(), 503);
     assert!(invite_is_open(&site).await);
@@ -219,7 +219,8 @@ async fn with_ergo_that_runs(sql: &'static str) -> Site {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, ergo).await });
-    let site = Site::start_with_ergo(Some(ergo_api::Client::new(url.parse().unwrap(), "t"))).await;
+    let ergo = ergo_api::Client::new(url.parse().unwrap(), "t");
+    let site = Site::start_with(|app| app.ergo = ergo).await;
     database.set(site.database_path()).unwrap();
     site.add_invite(CODE, None).await;
     site
