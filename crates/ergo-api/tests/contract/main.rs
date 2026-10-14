@@ -1,9 +1,13 @@
-//! One suite for every backend that answers like Ergo's API.
+//! One suite, run against the real `ergo` binary and against [`FakeErgo`],
+//! so the fake can't drift from what it stands in for.
+
+mod real_ergo;
 
 use ergo_api::{
     AccountSummary, Client, Error, ErrorCode, Passphrase, Preference, Registration, ReplayJoins,
     Settings, SettingsChanges, Url, fake::FakeErgo,
 };
+use real_ergo::RealErgo;
 
 trait Backend: Sized {
     async fn start() -> Self;
@@ -65,6 +69,10 @@ macro_rules! run_against {
 
 mod fake {
     with_every_case!(run_against!(ergo_api::fake::FakeErgo));
+}
+
+mod real {
+    with_every_case!(run_against!(super::RealErgo));
 }
 
 fn passphrase(passphrase: &str) -> Passphrase {

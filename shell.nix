@@ -1,6 +1,6 @@
 { pkgs, gitHooks }:
 
-pkgs.mkShell {
+pkgs.mkShell ({
   inherit (gitHooks) shellHook;
   packages = gitHooks.enabledPackages ++ (with pkgs; [
     bacon
@@ -16,4 +16,4 @@ pkgs.mkShell {
     typescript
   ]);
   RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
-}
+} // pkgs.weblounge.concierge.ergoContractTestEnv)
