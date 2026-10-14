@@ -3,7 +3,8 @@
 //!
 //! Times are Unix seconds.
 
-const DAY: i64 = 24 * 60 * 60;
+const HOUR: i64 = 60 * 60;
+const DAY: i64 = 24 * HOUR;
 
 /// How many people a member can bring in: open invites and redeemed ones
 /// count, expired and revoked ones don't. Admins can raise it per member.
@@ -68,8 +69,27 @@ pub enum Refusal {
     QuotaUsed { quota: i64 },
 }
 
+/// How many more invites `inviter`, who created `invites`, may create now;
+/// `None` for admins, who have no quota.
+pub fn remaining<'a>(
+    inviter: &Inviter,
+    invites: impl IntoIterator<Item = &'a Invite>,
+    now: i64,
+) -> Option<i64> {
+    if inviter.removed {
+        return Some(0);
+    }
+    if inviter.is_admin {
+        return None;
+    }
+    let used = invites
+        .into_iter()
+        .filter(|invite| !matches!(invite.status(now), Status::Expired | Status::Revoked))
+        .count();
+    Some((inviter.invite_quota - used as i64).max(0))
+}
+
 /// Whether `inviter`, who created `invites`, may create another one now.
-/// Admins are exempt from the quota.
 pub fn may_invite<'a>(
     inviter: &Inviter,
     invites: impl IntoIterator<Item = &'a Invite>,
@@ -78,19 +98,24 @@ pub fn may_invite<'a>(
     if inviter.removed {
         return Err(Refusal::Removed);
     }
-    if inviter.is_admin {
-        return Ok(());
-    }
-    let used = invites
-        .into_iter()
-        .filter(|invite| !matches!(invite.status(now), Status::Expired | Status::Revoked))
-        .count();
-    if used as i64 >= inviter.invite_quota {
-        return Err(Refusal::QuotaUsed {
+    match remaining(inviter, invites, now) {
+        Some(0) => Err(Refusal::QuotaUsed {
             quota: inviter.invite_quota,
-        });
+        }),
+        _ => Ok(()),
     }
-    Ok(())
+}
+
+/// How long until `expires_at`, in words: "6 days", "1 day", "5 hours".
+pub fn time_left(expires_at: i64, now: i64) -> String {
+    let left = (expires_at - now).max(0);
+    let (n, unit) = if left >= DAY {
+        (left / DAY, "day")
+    } else {
+        ((left / HOUR).max(1), "hour")
+    };
+    let plural = if n == 1 { "" } else { "s" };
+    format!("{n} {unit}{plural}")
 }
 
 #[cfg(test)]
@@ -209,6 +234,31 @@ mod tests {
         };
         let invites: Vec<_> = (0..5).map(|_| redeemed(JOINED)).collect();
         assert_eq!(may_invite(&inviter, &invites, JOINED + DAY), Ok(()));
+    }
+
+    #[test]
+    fn counts_what_is_left_of_the_quota() {
+        let now = JOINED + 10 * DAY;
+        let invites = [redeemed(JOINED), open(now), revoked(now), open(JOINED)];
+        assert_eq!(remaining(&member(), &invites, now), Some(3));
+        let admin = Inviter {
+            is_admin: true,
+            ..member()
+        };
+        assert_eq!(remaining(&admin, &invites, now), None);
+        let lowered = Inviter {
+            invite_quota: 1,
+            ..member()
+        };
+        assert_eq!(remaining(&lowered, &invites, now), Some(0));
+    }
+
+    #[test]
+    fn says_how_long_an_invite_has_left() {
+        assert_eq!(time_left(expires_at(JOINED), JOINED), "7 days");
+        assert_eq!(time_left(JOINED + DAY + HOUR, JOINED), "1 day");
+        assert_eq!(time_left(JOINED + 5 * HOUR + 59, JOINED), "5 hours");
+        assert_eq!(time_left(JOINED + 60, JOINED), "1 hour");
     }
 
     #[test]
