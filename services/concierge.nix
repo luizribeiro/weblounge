@@ -118,6 +118,9 @@ in
     services.nginx.virtualHosts.${hostName} = {
       enableACME = true;
       forceSSL = true;
+      # Signup and password forms fetch the password rules and nick
+      # availability as members type.
+      extraConfig = config.weblounge.nginx.securityHeaders { connect-src = "'self'"; };
       locations."/" = {
         proxyPass = "http://${cfg.listen}";
         # Concierge trusts X-Real-IP for its sign-in limits, so nginx sets it

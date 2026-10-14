@@ -146,6 +146,10 @@ vmTest ''
               same_origin = not re.match(r"[a-z]+:|//", url)
               assert same_origin and csp_sources(policy, directive) == ["'self'"], (name, directive, url, policy)
 
+  with subtest("concierge's pages fetch from their own origin alone, for the checks they make as you type"):
+      policy = headers_of(members, "/signin")["content-security-policy"]
+      assert csp_sources(policy, "connect-src") == ["'self'"], policy
+
   outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
 
   def sign_in(account, password, *headers):
