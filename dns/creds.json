@@ -1,0 +1,6 @@
+{
+  "desec": {
+    "TYPE": "DESEC",
+    "auth-token": "$DESEC_TOKEN"
+  }
+}

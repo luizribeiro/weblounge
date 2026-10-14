@@ -21,6 +21,7 @@
       devSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forEachSystem = f: lib.genAttrs devSystems
         (system: f (nixpkgs.legacyPackages.${system}.extend weblounge.overlay));
+      dnsconfig = pkgs: pkgs.callPackage ./dns { inherit (weblounge) zone; };
       gitHooks = forEachSystem (pkgs: import ./git-hooks.nix { inherit git-hooks pkgs; });
     in
     {
@@ -34,7 +35,10 @@
       };
 
       packages = lib.recursiveUpdate weblounge.vmPackages
-        (forEachSystem (pkgs: { inherit (pkgs.weblounge) web concierge; }));
+        (forEachSystem (pkgs: {
+          inherit (pkgs.weblounge) web concierge;
+          dnsconfig = dnsconfig pkgs;
+        }));
 
       checks = lib.foldl' lib.recursiveUpdate { } [
         weblounge.toplevelChecks
@@ -42,6 +46,8 @@
         (forEachSystem (pkgs: {
           # Building it runs its go test.
           bot-template-package = pkgs.callPackage ./templates/bot/package.nix { };
+          # Building it runs dnscontrol check on the zone.
+          dnsconfig = dnsconfig pkgs;
         } // lib.mapAttrs' (name: lib.nameValuePair "concierge-${name}") pkgs.weblounge.concierge.checks))
         weblounge.testChecks
       ];
