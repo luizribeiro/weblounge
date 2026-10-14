@@ -82,6 +82,12 @@ vmTest {
             "oauth2": {"url": f"https://{members}", "client_id": "gamja"},
         }, config
 
+    with subtest("gamja wears the network's favicon"):
+        assert '<link rel="icon" type="image/svg+xml" href="favicon.svg">' in page, page
+        icon = https("irc.weblounge.org", "/favicon.svg", "-f", "-w", "\n%{content_type}")
+        svg, content_type = icon.rsplit("\n", 1)
+        assert content_type == "image/svg+xml" and 'id="mark"' in svg, icon
+
     with subtest("gamja's CSP lets it reach Ergo's WebSocket and concierge, and nothing else"):
         headers = https("irc.weblounge.org", "/", "-fI").lower()
         [policy] = re.findall(r"^content-security-policy: (.*)$", headers, re.M)
