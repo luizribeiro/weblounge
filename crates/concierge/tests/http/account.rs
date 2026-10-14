@@ -120,3 +120,27 @@ async fn guests_cannot_change_settings() {
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("someone@example.org"));
 }
+
+#[tokio::test]
+async fn sections_come_in_the_order_phones_stack_them() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    let positions: Vec<_> = [
+        ">Open chat<",
+        ">Connect a client<",
+        ">Invites<",
+        ">Account settings<",
+        ">IRC settings<",
+        r#"<a href="/tree">Invite tree</a>"#,
+        r#"<a href="/certificates">Client certificates</a>"#,
+    ]
+    .iter()
+    .map(|heading| {
+        page.find(heading)
+            .unwrap_or_else(|| panic!("{heading}: {page}"))
+    })
+    .collect();
+    assert!(positions.is_sorted(), "{positions:?}");
+}

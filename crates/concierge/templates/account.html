@@ -7,8 +7,8 @@
       <p class="eyebrow">Account</p>
       <h1>{{ nick }}</h1>
       {%- call components::open_chat(webchat) %}{% endcall %}
-      <div class="account-grid">
-        <section class="card" aria-labelledby="connect-title">
+      <div class="account-grid account-home">
+        <section class="card connect" aria-labelledby="connect-title">
           <h2 class="eyebrow" id="connect-title">Connect a client</h2>
           {%- call components::connection(irc, Some(nick), "The one you sign in with here.") %}{% endcall %}
         </section>
@@ -54,9 +54,8 @@
             {%- endfor %}
           </ul>
           {%- endif %}
-          <p class="links"><a href="/tree">Invite tree</a></p>
         </section>
-        <section class="card" id="account-settings" aria-labelledby="settings-title">
+        <section class="card account-settings" id="account-settings" aria-labelledby="settings-title">
           <h2 class="eyebrow" id="settings-title">Account settings</h2>
           {%- if flash.saved.is_some() %}
           <p class="notice" role="status">Saved.</p>
@@ -94,7 +93,7 @@
             <button class="button button-primary" type="submit">Change password</button>
           </form>
         </section>
-        <section class="card" id="irc-settings" aria-labelledby="irc-settings-title">
+        <section class="card irc-settings" id="irc-settings" aria-labelledby="irc-settings-title">
           <h2 class="eyebrow" id="irc-settings-title">IRC settings</h2>
           {%- if flash.irc.is_some() %}
           <p class="notice" role="status">IRC settings saved.</p>
@@ -120,6 +119,13 @@
           <p class="alert" role="alert">{{ error }}</p>
           {%- endmatch %}
         </section>
+        <nav class="card more" aria-labelledby="more-title">
+          <h2 class="eyebrow" id="more-title">More</h2>
+          <ul class="more-links">
+            <li><a href="/tree">Invite tree</a> <span class="muted">who invited whom</span></li>
+            <li><a href="/certificates">Client certificates</a> <span class="muted">log in without a password</span></li>
+          </ul>
+        </nav>
       </div>
       {%- call components::guides(clients) %}{% endcall %}
 {%- endblock %}

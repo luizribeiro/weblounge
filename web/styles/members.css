@@ -403,3 +403,61 @@
     }
   }
 }
+
+.account-home {
+  @media (min-width: 52rem) {
+    grid-template-areas:
+      "connect invites"
+      "account irc"
+      "account more";
+    grid-template-rows: auto auto 1fr;
+
+    & .connect {
+      grid-area: connect;
+    }
+
+    & .invites {
+      grid-area: invites;
+    }
+
+    & .account-settings {
+      grid-area: account;
+    }
+
+    & .irc-settings {
+      grid-area: irc;
+    }
+
+    & .more {
+      grid-area: more;
+    }
+  }
+}
+
+.more-links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  & li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 0.75rem;
+    min-height: 44px;
+    border-top: 1px solid var(--line);
+
+    &:first-child {
+      border-top: 0;
+    }
+  }
+
+  & a {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+
+  & .muted {
+    font-size: 0.875rem;
+  }
+}
