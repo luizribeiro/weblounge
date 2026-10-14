@@ -18,10 +18,12 @@ macro_rules! endpoint {
 mod client;
 mod endpoints;
 mod error;
+mod names;
 #[cfg(test)]
 mod stub;
 
 pub use client::{Client, Endpoint};
 pub use endpoints::*;
 pub use error::{Error, ErrorCode, Result};
+pub use names::{AccountName, InvalidPassphrase, Passphrase};
 pub use reqwest::{StatusCode, Url};
