@@ -1,12 +1,10 @@
-//! Who may invite, how many, and how long an invite stays open. The
-//! defaults follow lobste.rs: new members wait before they can invite.
+//! Who may invite, how many, and how long an invite stays open. Members
+//! invite from the day they join, up to a quota.
 //!
 //! Times are Unix seconds.
 
 const DAY: i64 = 24 * 60 * 60;
 
-/// How long a new member waits before they can invite anyone.
-pub const WAITING_PERIOD: i64 = 70 * DAY;
 /// How many people a member can bring in: open invites and redeemed ones
 /// count, expired and revoked ones don't. Admins can raise it per member.
 pub const DEFAULT_QUOTA: i64 = 5;
@@ -19,7 +17,6 @@ pub fn expires_at(created_at: i64) -> i64 {
 
 /// The member who wants to invite someone.
 pub struct Inviter {
-    pub joined_at: i64,
     pub invite_quota: i64,
     pub is_admin: bool,
     pub removed: bool,
@@ -56,12 +53,11 @@ impl Invite {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     Removed,
-    TooNew { until: i64 },
     QuotaUsed { quota: i64 },
 }
 
 /// Whether `inviter`, who created `invites`, may create another one now.
-/// Admins are exempt from the waiting period and the quota.
+/// Admins are exempt from the quota.
 pub fn may_invite<'a>(
     inviter: &Inviter,
     invites: impl IntoIterator<Item = &'a Invite>,
@@ -72,10 +68,6 @@ pub fn may_invite<'a>(
     }
     if inviter.is_admin {
         return Ok(());
-    }
-    let until = inviter.joined_at + WAITING_PERIOD;
-    if now < until {
-        return Err(Refusal::TooNew { until });
     }
     let used = invites
         .into_iter()
@@ -94,11 +86,9 @@ mod tests {
     use super::*;
 
     const JOINED: i64 = 1_760_000_000;
-    const SETTLED: i64 = JOINED + WAITING_PERIOD;
 
     fn member() -> Inviter {
         Inviter {
-            joined_at: JOINED,
             invite_quota: DEFAULT_QUOTA,
             is_admin: false,
             removed: false,
@@ -129,34 +119,30 @@ mod tests {
 
     #[test]
     fn an_invite_is_open_until_it_expires() {
-        let invite = open(SETTLED);
-        assert_eq!(invite.status(SETTLED), Status::Open);
-        assert_eq!(invite.status(SETTLED + LIFETIME - 1), Status::Open);
-        assert_eq!(invite.status(SETTLED + LIFETIME), Status::Expired);
+        let invite = open(JOINED);
+        assert_eq!(invite.status(JOINED), Status::Open);
+        assert_eq!(invite.status(JOINED + LIFETIME - 1), Status::Open);
+        assert_eq!(invite.status(JOINED + LIFETIME), Status::Expired);
     }
 
     #[test]
     fn redeemed_and_revoked_invites_stay_so_after_expiring() {
-        let later = SETTLED + 2 * LIFETIME;
-        assert_eq!(redeemed(SETTLED).status(later), Status::Redeemed);
-        assert_eq!(revoked(SETTLED).status(later), Status::Revoked);
+        let later = JOINED + 2 * LIFETIME;
+        assert_eq!(redeemed(JOINED).status(later), Status::Redeemed);
+        assert_eq!(revoked(JOINED).status(later), Status::Revoked);
     }
 
     #[test]
-    fn new_members_wait_before_inviting() {
-        assert_eq!(
-            may_invite(&member(), [], SETTLED - 1),
-            Err(Refusal::TooNew { until: SETTLED })
-        );
-        assert_eq!(may_invite(&member(), [], SETTLED), Ok(()));
+    fn members_invite_from_the_day_they_join() {
+        assert_eq!(may_invite(&member(), [], JOINED), Ok(()));
     }
 
     #[test]
     fn open_and_redeemed_invites_use_up_the_quota() {
-        let now = SETTLED + 10 * DAY;
+        let now = JOINED + 10 * DAY;
         let invites = [
-            redeemed(SETTLED),
-            redeemed(SETTLED),
+            redeemed(JOINED),
+            redeemed(JOINED),
             open(now - DAY),
             open(now - DAY),
         ];
@@ -172,11 +158,11 @@ mod tests {
 
     #[test]
     fn expired_and_revoked_invites_give_their_place_back() {
-        let now = SETTLED + 10 * DAY;
+        let now = JOINED + 10 * DAY;
         let invites = [
-            open(SETTLED),
+            open(JOINED),
             revoked(now - DAY),
-            open(SETTLED + DAY),
+            open(JOINED + DAY),
             revoked(now - DAY),
             revoked(now - DAY),
         ];
@@ -189,12 +175,12 @@ mod tests {
             invite_quota: 6,
             ..member()
         };
-        let invites: Vec<_> = (0..5).map(|_| redeemed(SETTLED)).collect();
-        assert_eq!(may_invite(&inviter, &invites, SETTLED + DAY), Ok(()));
+        let invites: Vec<_> = (0..5).map(|_| redeemed(JOINED)).collect();
+        assert_eq!(may_invite(&inviter, &invites, JOINED + DAY), Ok(()));
     }
 
     #[test]
-    fn admins_invite_from_day_one_without_a_quota() {
+    fn admins_invite_without_a_quota() {
         let admin = Inviter {
             is_admin: true,
             invite_quota: 0,
@@ -212,7 +198,7 @@ mod tests {
             ..member()
         };
         assert_eq!(
-            may_invite(&removed, [], SETTLED + DAY),
+            may_invite(&removed, [], JOINED + DAY),
             Err(Refusal::Removed)
         );
     }
