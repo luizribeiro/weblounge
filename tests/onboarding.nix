@@ -33,6 +33,7 @@ vmTest ''
       assert " 200" in headers.splitlines()[0], headers
       assert "cache-control: no-store" in headers.lower(), headers
       assert "<h1>You're in, erin.</h1>" in page, page
+      assert '<a class="button button-primary" href="https://irc.weblounge.org/">Open chat</a>' in page, page
       assert "<code>irc.weblounge.org</code>" in page and "<code>6697</code>" in page, page
       assert erin["password"] not in page
       home = erins_browser.get("/", "-f")
