@@ -1,5 +1,8 @@
 { config, lib, ... }:
 
+let
+  inherit (config.weblounge) httpsPort;
+in
 {
   options.weblounge = {
     domain = lib.mkOption {
@@ -16,6 +19,12 @@
       type = lib.types.port;
       default = 6697;
       description = "The port IRC clients reach Ergo's TLS listener on, as members are told to connect.";
+    };
+    origin = lib.mkOption {
+      type = lib.types.functionTo lib.types.str;
+      readOnly = true;
+      default = host: "https://${host}" + lib.optionalString (httpsPort != 443) ":${toString httpsPort}";
+      description = "The origin browsers see for a host name, with the HTTPS port when it isn't 443.";
     };
   };
 

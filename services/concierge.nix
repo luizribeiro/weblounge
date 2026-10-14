@@ -2,9 +2,8 @@
 
 let
   cfg = config.weblounge.concierge;
-  inherit (config.weblounge) domain httpsPort;
-  hostName = "members.${domain}";
-  publicUrl = "https://${hostName}" + lib.optionalString (httpsPort != 443) ":${toString httpsPort}";
+  hostName = "members.${config.weblounge.domain}";
+  publicUrl = config.weblounge.origin hostName;
   concierge = lib.getExe pkgs.weblounge.concierge;
 
   # concierge-admin runs with the rest of the unit's serviceConfig, so admin
