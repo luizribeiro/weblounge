@@ -40,12 +40,22 @@ and esbuild gives every asset a hashed name that concierge looks up in the
 build's manifest.
 
 ```sh
-just concierge dev   # run it on http://localhost:8080
+just concierge dev                            # run it on http://localhost:8080
+just concierge dev-admin invite create --root # an admin command against it
 ```
 
 bacon restarts concierge whenever its code, a template or a stylesheet
-changes, and the open page reloads once it's back. `cargo test` runs its
-tests; `just check` adds clippy and rustfmt.
+changes, and the open page reloads once it's back. Next to it runs a local
+Ergo on the same base config production builds on, its API on
+`127.0.0.1:8089` and its log in `target/dev/ergo.log`. Concierge's database,
+Ergo's datastore and the dev secrets all live in `target/dev`; delete it to
+start over. `cargo test` runs the tests; `just check` adds clippy and
+rustfmt.
+
+Concierge keeps its data in SQLite through sqlx, which checks every query
+at compile time against the metadata in `crates/concierge/.sqlx`. After
+changing a query or adding a migration to `crates/concierge/migrations`,
+run `just concierge prepare` and commit what it writes.
 
 ## Running a server locally
 
@@ -94,7 +104,19 @@ IRC clients connect to `irc.weblounge.org:6697` over TLS.
 
 Concierge's admin commands run on the server, as the service itself:
 `concierge-admin status` over SSH, or `just prod concierge status` from your
-machine.
+machine. They print plain lines a script can read:
+
+| Command                                   | What it does                                                    |
+| ----------------------------------------- | --------------------------------------------------------------- |
+| `status`                                  | Configuration, secrets, database and whether Ergo answers       |
+| `invite create --root [--note …]`         | Prints the link of a new invite nobody vouches for              |
+| `member adopt <account> [--admin]`        | Makes an existing Ergo account a member at the root of the tree |
+| `member reset-password <account>`         | Sets a new generated password, ends sessions, prints it once    |
+| `member delete <account>`                 | Removes a member's data, keeping their place in the tree        |
+| `member reconcile`                        | Lists Ergo accounts without members, and the other way round    |
+
+Ergo's API can't delete accounts, so after `member delete` an oper still
+runs `/NS ERASE <account>`.
 
 ## Layout
 
@@ -106,7 +128,7 @@ machine.
 | `tests/`    | NixOS VM tests, run by `just check`                             |
 | `services/` | Opt-in configuration, one file per service a host can run       |
 | `pkgs/`     | Our own packages, exposed to hosts as `pkgs.weblounge.*`        |
-| `crates/`   | Rust code: concierge                                            |
+| `crates/`   | Rust code: concierge, and ergo-api, its client for Ergo's API   |
 | `web/`      | Sources of everything the browser loads                         |
 | `just/`     | `just vm …`, `just prod …`, `just web …` and `just concierge …` |
 | `scripts/`  | Helpers the recipes call                                        |
