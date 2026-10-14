@@ -89,14 +89,18 @@ pub struct Invite {
 }
 
 impl Invite {
-    pub fn status(&self, now: i64) -> invite_rules::Status {
+    /// What the invite rules need to know about it.
+    pub fn rules(&self) -> invite_rules::Invite {
         invite_rules::Invite {
             expires_at: self.expires_at,
             claimed_at: self.claimed_at,
             redeemed_at: self.redeemed_at,
             revoked_at: self.revoked_at,
         }
-        .status(now)
+    }
+
+    pub fn status(&self, now: i64) -> invite_rules::Status {
+        self.rules().status(now)
     }
 }
 
@@ -106,6 +110,14 @@ pub struct Claim {
     pub code: String,
     pub claimed_at: i64,
     pub created_by: Option<String>,
+}
+
+/// Someone a member invited.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invitee {
+    pub account: String,
+    pub joined_at: i64,
+    pub removed: bool,
 }
 
 /// What came of [`Db::redeem_invite`].
@@ -365,6 +377,51 @@ impl Db {
         )
         .fetch_optional(&self.pool)
         .await
+    }
+
+    /// The invites `account` created, newest first.
+    pub async fn invites_created_by(&self, account: &str) -> sqlx::Result<Vec<Invite>> {
+        sqlx::query_as!(
+            Invite,
+            r#"SELECT code AS "code!", created_by, note, created_at, expires_at, claimed_at,
+                      redeemed_by, redeemed_at, revoked_at
+               FROM invites WHERE created_by = ? ORDER BY created_at DESC, code"#,
+            account
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// The people `account` invited, in the order they joined.
+    pub async fn invitees(&self, account: &str) -> sqlx::Result<Vec<Invitee>> {
+        sqlx::query_as!(
+            Invitee,
+            r#"SELECT account AS "account!", joined_at, removed_at IS NOT NULL AS "removed!: bool"
+               FROM members WHERE invited_by = ? ORDER BY joined_at, account"#,
+            account
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Revokes the unused invite `code`, if `created_by` made it; answers
+    /// whether it did.
+    pub async fn revoke_invite(
+        &self,
+        code: &str,
+        created_by: &str,
+        now: i64,
+    ) -> sqlx::Result<bool> {
+        let revoked = sqlx::query!(
+            "UPDATE invites SET revoked_at = ?
+             WHERE code = ? AND created_by = ? AND redeemed_at IS NULL AND revoked_at IS NULL",
+            now,
+            code,
+            created_by,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(revoked.rows_affected() == 1)
     }
 
     /// Holds the invite `code` for one redemption, if it's open now.
@@ -721,6 +778,53 @@ pub(crate) mod tests {
                 .is_err()
         );
         assert_eq!(db.invite("open").await.unwrap().unwrap().redeemed_at, None);
+    }
+
+    #[tokio::test]
+    async fn members_revoke_only_their_own_unused_invites() {
+        let (db, _dir) = with_open_invite().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, joined_at, invite_quota) VALUES ('mallory', 0, 5)",
+        )
+        .await
+        .unwrap();
+        assert!(!db.revoke_invite("open", "mallory", CREATED).await.unwrap());
+        assert!(db.revoke_invite("open", "alice", CREATED).await.unwrap());
+        assert!(!db.revoke_invite("open", "alice", CREATED).await.unwrap());
+        let invite = db.invite("open").await.unwrap().unwrap();
+        assert_eq!(invite.status(CREATED), invite_rules::Status::Revoked);
+    }
+
+    #[tokio::test]
+    async fn lists_a_members_invites_and_the_people_they_brought() {
+        let (db, _dir) = with_open_invite().await;
+        let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
+        db.redeem_invite(&claim, &newcomer("bob", CREATED + 5))
+            .await
+            .unwrap();
+        db.insert_invite(&NewInvite {
+            code: "newer",
+            created_by: Some("alice"),
+            note: None,
+            created_at: CREATED + 10,
+            expires_at: invite_rules::expires_at(CREATED + 10),
+        })
+        .await
+        .unwrap();
+
+        let codes: Vec<_> = db.invites_created_by("alice").await.unwrap();
+        let codes: Vec<_> = codes.iter().map(|invite| invite.code.as_str()).collect();
+        assert_eq!(codes, ["newer", "open"]);
+        assert_eq!(
+            db.invitees("alice").await.unwrap(),
+            [Invitee {
+                account: "bob".into(),
+                joined_at: CREATED + 5,
+                removed: false,
+            }]
+        );
+        assert!(db.invitees("bob").await.unwrap().is_empty());
     }
 
     #[tokio::test]
