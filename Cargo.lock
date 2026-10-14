@@ -287,9 +287,11 @@ name = "ergo-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "ergo-api",
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
 ]

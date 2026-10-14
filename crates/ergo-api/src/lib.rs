@@ -20,6 +20,8 @@ macro_rules! endpoint {
 mod client;
 mod endpoints;
 mod error;
+#[cfg(feature = "fake")]
+pub mod fake;
 mod methods;
 mod names;
 #[cfg(test)]
