@@ -49,6 +49,7 @@ pub fn router(app: App) -> Router {
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
         .route("/clients/{slug}", get(routes::clients::show))
+        .route("/invite/{code}", get(routes::invite::show))
         .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
     let router = Router::new()
         .merge(pages)

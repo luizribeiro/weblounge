@@ -93,6 +93,7 @@
 
 .hint a {
   overflow-wrap: anywhere;
+  text-decoration: underline;
 }
 
 .lede {
@@ -157,5 +158,74 @@
   & .button {
     gap: 0.5rem;
     font-weight: 400;
+  }
+}
+
+.invite-layout {
+  display: grid;
+  gap: 2rem;
+  align-items: start;
+
+  & > * {
+    min-width: 0;
+  }
+
+  @media (min-width: 52rem) {
+    grid-template-columns: 1fr minmax(0, 28rem);
+    gap: 4rem;
+  }
+}
+
+.invite-intro {
+  padding-top: clamp(0rem, 4vw, 2rem);
+}
+
+.message {
+  max-width: 40rem;
+}
+
+.password-input {
+  display: flex;
+  gap: 0.5rem;
+
+  & input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  & .button {
+    min-height: 48px;
+  }
+}
+
+.checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: -0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--muted);
+
+  & li::before {
+    content: "·";
+    display: inline-block;
+    width: 1em;
+    font-family: var(--mono);
+  }
+
+  & li[data-met="true"] {
+    color: var(--fg);
+
+    &::before {
+      content: "✓";
+      color: var(--accent);
+    }
+  }
+
+  & li[data-met="false"]::before {
+    content: "✗";
+    color: var(--danger);
   }
 }

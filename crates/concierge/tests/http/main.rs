@@ -3,6 +3,7 @@
 
 mod account;
 mod clients;
+mod invite;
 mod pages;
 mod security;
 mod signin;
@@ -19,8 +20,8 @@ use concierge::{
     app::{self, App},
     assets::Assets,
     config::IrcServer,
-    db::{self, Db, NewMember},
-    invite_rules::DEFAULT_QUOTA,
+    db::{self, Db, NewInvite, NewMember},
+    invite_rules::{self, DEFAULT_QUOTA},
     rate_limit::Limiter,
     session::{self, Token},
 };
@@ -121,6 +122,30 @@ impl Site {
             is_admin: false,
         };
         self.db.insert_member(&member).await.unwrap();
+    }
+
+    /// Runs SQL the site has no query for, to set up a test.
+    async fn execute(&self, sql: &str) {
+        let url = format!(
+            "sqlite://{}",
+            self._state.path().join("concierge.db").display()
+        );
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+        pool.close().await;
+    }
+
+    /// An open invite from `created_by`, or a root invite.
+    async fn add_invite(&self, code: &str, created_by: Option<&str>) {
+        let now = db::now();
+        let invite = NewInvite {
+            code,
+            created_by,
+            note: None,
+            created_at: now,
+            expires_at: invite_rules::expires_at(now),
+        };
+        self.db.insert_invite(&invite).await.unwrap();
     }
 
     async fn sign_in_form(&self, nick: &str, password: &str) -> Response {
