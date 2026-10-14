@@ -20,6 +20,16 @@ let
     Referrer-Policy = "same-origin";
     Content-Security-Policy = contentSecurityPolicy;
   };
+
+  # Invite codes are secrets: a request for /invite/<code>, or from a page
+  # under it, is logged without the code.
+  withoutInviteCodes = variable: logged: ''
+    map ${variable} ${logged} {
+      "~^/invite/" "/invite/[redacted]";
+      "~*invite" "[redacted]";
+      default ${variable};
+    }
+  '';
 in
 {
   networking.firewall.allowedTCPPorts = [ 80 443 ];
@@ -33,9 +43,10 @@ in
     recommendedProxySettings = true;
     recommendedTlsSettings = true;
     # We promise members that no IP addresses are kept anywhere.
-    commonHttpConfig = ''
-      log_format anonymous '[$time_local] $host "$request" $status $body_bytes_sent '
-                           '"$http_referer" "$http_user_agent"';
+    commonHttpConfig = withoutInviteCodes "$request_uri" "$logged_uri"
+      + withoutInviteCodes "$http_referer" "$logged_referer" + ''
+      log_format anonymous '[$time_local] $host "$request_method $logged_uri $server_protocol" '
+                           '$status $body_bytes_sent "$logged_referer" "$http_user_agent"';
       access_log /var/log/nginx/access.log anonymous;
     '' + lib.concatStrings (lib.mapAttrsToList
       (name: value: "add_header ${name} \"${value}\" always;\n")

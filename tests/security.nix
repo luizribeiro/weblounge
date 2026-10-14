@@ -168,4 +168,20 @@ vmTest ''
           assert sign_in_from_our_pages(f"guess{n}", "guess", *forged) == "401 ", n
       limited = sign_in_from_our_pages("someone", "guess", "X-Real-IP: 192.0.2.1", "X-Forwarded-For: 192.0.2.1")
       assert limited == "429 ", limited
+
+  def mint_invite():
+      link = credenza.succeed("su - luiz -c 'concierge-admin invite create --root'").strip()
+      return link.removeprefix(f"https://{members}")
+
+  with subtest("nginx logs invite links, and pages that link from one, without the code"):
+      path = mint_invite()
+      code = path.rsplit("/", 1)[1]
+      https(members, path, "-f", "-o", "/dev/null")
+      https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}{path}")
+      https(members, f"/signin?next=%2Finvite%2F{code}", "-f", "-o", "/dev/null")
+      access_log = credenza.succeed("cat /var/log/nginx/access.log")
+      assert re.search(r'"GET /invite/\[redacted\] HTTP/[\d.]+" 200', access_log), access_log
+      assert code not in access_log, access_log
+      credenza.succeed("journalctl --sync")
+      credenza.fail(f"journalctl | grep -qF {code}")
 ''
