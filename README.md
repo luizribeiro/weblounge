@@ -59,7 +59,9 @@ just prod push             # deploy to credenza.weblounge.org
 | `modules/`  | Configuration shared by every host                          |
 | `lib/`      | Host discovery and per-host flake outputs                   |
 | `tests/`    | NixOS VM tests, run by `just check`                         |
-| `site/`     | The static weblounge.org site                               |
+| `services/` | Opt-in configuration, one file per service a host can run   |
+| `pkgs/`     | Our own packages, exposed to hosts as `pkgs.weblounge.*`    |
+| `web/`      | Sources of everything the browser loads                     |
 | `just/`     | `just vm …` and `just prod …` subcommands                   |
 | `scripts/`  | Helpers the recipes call                                    |
 
