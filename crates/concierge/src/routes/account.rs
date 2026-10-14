@@ -9,7 +9,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{Layout, internal_error, invites::Invites, render_with};
+use super::{Layout, internal_error, invites::Invites, presence::Presence, render_with};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
@@ -33,6 +33,9 @@ struct Account<'a> {
     flash: Flash,
     settings: SettingsForm<'a>,
     password: PasswordForm,
+    /// The IRC settings, or why they can't be shown.
+    presence: Result<Presence, &'static str>,
+    presence_error: Option<&'static str>,
     email_max_length: usize,
     email_pattern: &'a str,
 }
@@ -44,6 +47,7 @@ pub struct Flash {
     saved: Option<String>,
     invited: Option<String>,
     password: Option<String>,
+    irc: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -73,12 +77,20 @@ pub struct Forms<'a> {
     flash: Flash,
     settings: Option<SettingsForm<'a>>,
     password: PasswordForm,
+    presence_error: Option<&'static str>,
 }
 
 impl Forms<'_> {
     pub fn password(password: PasswordForm) -> Self {
         Self {
             password,
+            ..Self::default()
+        }
+    }
+
+    pub fn presence_error(error: &'static str) -> Self {
+        Self {
+            presence_error: Some(error),
             ..Self::default()
         }
     }
@@ -129,6 +141,13 @@ pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         Ok(invites) => invites,
         Err(error) => return internal_error("Listing invites", error),
     };
+    let presence = match app.ergo.settings(member.account.as_str()).await {
+        Ok(settings) => Ok(Presence::from(&settings)),
+        Err(error) => {
+            eprintln!("Reading IRC settings failed: {error}");
+            Err("Can't reach the chat server.")
+        }
+    };
     let settings = forms.settings.unwrap_or_else(|| SettingsForm {
         email: member.email.as_deref().unwrap_or(""),
         news: member.news_opt_in,
@@ -147,6 +166,8 @@ pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         flash: forms.flash,
         settings,
         password: forms.password,
+        presence_error: forms.presence_error.filter(|_| presence.is_ok()),
+        presence,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
     };

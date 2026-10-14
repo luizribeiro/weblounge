@@ -59,6 +59,10 @@ pub fn router(app: App) -> Router {
             "/password",
             post(routes::password::change).layer(map_response(routes::no_store)),
         )
+        .route(
+            "/irc-settings",
+            post(routes::presence::update).layer(map_response(routes::no_store)),
+        )
         .route("/invites", post(routes::invites::create))
         .route("/invites/revoke", post(routes::invites::revoke))
         .route(

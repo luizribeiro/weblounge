@@ -12,6 +12,7 @@ use axum::{
 use serde::Deserialize;
 
 use super::{
+    ERGO_UNAVAILABLE,
     account::{self, Forms, PasswordForm},
     internal_error,
 };
@@ -23,7 +24,6 @@ use crate::{
 };
 
 const WRONG: &str = "Wrong password.";
-const UNAVAILABLE: &str = "Can't reach the chat server. Nothing changed; try again in a minute.";
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -72,12 +72,20 @@ pub async fn change(
         }
         Err(error) => {
             eprintln!("Checking a password failed: {error}");
-            return refuse(StatusCode::SERVICE_UNAVAILABLE, current_error(UNAVAILABLE)).await;
+            return refuse(
+                StatusCode::SERVICE_UNAVAILABLE,
+                current_error(ERGO_UNAVAILABLE),
+            )
+            .await;
         }
     }
     if let Err(error) = app.ergo.set_password(account, &new).await {
         eprintln!("Changing a password failed: {error}");
-        return refuse(StatusCode::SERVICE_UNAVAILABLE, current_error(UNAVAILABLE)).await;
+        return refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            current_error(ERGO_UNAVAILABLE),
+        )
+        .await;
     }
     match app.db.end_other_sessions(account, &me.token_hash).await {
         Ok(_) => Redirect::to("/?password#account-settings").into_response(),

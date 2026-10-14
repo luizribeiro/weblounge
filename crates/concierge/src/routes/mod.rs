@@ -6,6 +6,7 @@ pub mod invites;
 pub mod oauth;
 pub mod pages;
 pub mod password;
+pub mod presence;
 pub mod signin;
 
 use std::fmt::Display;
@@ -17,6 +18,10 @@ use axum::{
 };
 
 use crate::{app::App, assets::Assets, auth::Visitor};
+
+/// What pages say when Ergo's API doesn't answer as it should.
+pub const ERGO_UNAVAILABLE: &str =
+    "Can't reach the chat server. Nothing changed; try again in a minute.";
 
 /// What the shared layout around every page needs: the assets it links and
 /// who to greet in the header.
