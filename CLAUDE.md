@@ -22,6 +22,8 @@ workflow and layout.
   definition the server owns.
 - Keep VM-only settings under `virtualisation.vmVariant` in
   `modules/vm.nix` so production configs never see them.
+- Commit subjects: imperative, at most 72 characters (aim for 50–70);
+  details and rationale go in the body.
 - Name new servers after furniture (sideboard, armoire, ottoman, chaise…).
 
 ## Gotchas
