@@ -89,6 +89,60 @@ async fn the_email_field_checks_the_servers_rule() {
 }
 
 #[tokio::test]
+async fn members_without_bots_see_nothing_about_them() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.add_member("luiz").await;
+    site.execute(
+        "INSERT INTO bots (account, owner, created_at) VALUES ('bender', 'luiz', 0);
+         INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('dalek', 'alice', 0, 1)",
+    )
+    .await;
+    let cookie = site.sign_in("alice").await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
+    assert!(!page.contains(r#"id="bots""#), "{page}");
+    assert!(
+        !page.contains("bender") && !page.contains("dalek"),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn lists_the_members_live_bots_and_their_notes() {
+    let site = Site::start().await;
+    site.add_member("luiz").await;
+    site.add_member("alice").await;
+    site.execute(
+        "INSERT INTO bots (account, owner, note, created_at)
+         VALUES ('bender', 'luiz', 'answers !ping', 0),
+                ('Marvin', 'luiz', 'posts the <weather> & tides', 0),
+                ('hal', 'luiz', NULL, 0),
+                ('eliza', 'alice', 'talks back', 0);
+         INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('dalek', 'luiz', 0, 1)",
+    )
+    .await;
+    let cookie = site.sign_in("luiz").await;
+
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
+
+    let card = page.split(r#"id="bots""#).nth(1).expect("a Bots card");
+    let items: Vec<_> = card
+        .split("<li>")
+        .skip(1)
+        .map(|item| item.split("</li>").next().unwrap())
+        .collect();
+    assert_eq!(
+        items,
+        [
+            r#"<strong>bender</strong> <span class="muted">· answers !ping</span>"#,
+            "<strong>hal</strong>",
+            r#"<strong>Marvin</strong> <span class="muted">· posts the &#60;weather&#62; &#38; tides</span>"#,
+        ]
+    );
+    assert!(!page.contains("dalek") && !page.contains("eliza"), "{page}");
+}
+
+#[tokio::test]
 async fn guests_cannot_change_settings() {
     let site = Site::start().await;
     site.add_member("alice").await;

@@ -1,5 +1,5 @@
 //! The Account tab: the member's password, email, news setting and how
-//! Ergo treats them while no client is open.
+//! Ergo treats them while no client is open, and the bots they own.
 
 use askama::Template;
 use axum::{
@@ -14,7 +14,7 @@ use super::{Flash, Layout, Tab, internal_error, presence::Presence, render_with}
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
-    db::Member,
+    db::{Bot, Member},
     email::{self, Email},
     password_rules::FieldErrors,
 };
@@ -33,6 +33,7 @@ struct Account<'a> {
     presence: Result<Presence, &'static str>,
     defaults: Presence,
     irc_error: Option<&'static str>,
+    bots: Vec<Bot>,
 }
 
 #[derive(Deserialize, Default)]
@@ -134,6 +135,10 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
             Err("Can't reach the chat server.")
         }
     };
+    let bots = match app.db.bots(Some(&member.account)).await {
+        Ok(bots) => bots,
+        Err(error) => return internal_error("Listing a member's bots", error),
+    };
     let page = Account {
         layout: Layout::new(app, Some(&member.account)).on(Tab::Account),
         nick: &member.account,
@@ -145,6 +150,7 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         irc_error: forms.irc_error.filter(|_| presence.is_ok()),
         presence,
         defaults: app.presence_defaults,
+        bots,
     };
     render_with(status, &page)
 }
