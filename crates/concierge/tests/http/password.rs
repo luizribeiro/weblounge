@@ -44,7 +44,7 @@ async fn the_form_lets_password_managers_update_the_saved_password() {
         "{page}"
     );
     assert!(
-        page.contains(r#"<input type="text" value="alice" autocomplete="username" hidden>"#),
+        page.contains(r#"<input class="visually-hidden" type="text" value="alice" autocomplete="username" readonly tabindex="-1" aria-hidden="true">"#),
         "{page}"
     );
     assert!(
