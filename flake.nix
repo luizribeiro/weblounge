@@ -37,18 +37,7 @@
         (forEachSystem (pkgs: {
           web-typecheck = pkgs.weblounge.web.typecheck;
         } // lib.mapAttrs' (name: lib.nameValuePair "concierge-${name}") pkgs.weblounge.concierge.checks))
-        {
-          x86_64-linux = lib.mapAttrs
-            (_: test: import test {
-              inherit weblounge;
-              pkgs = nixpkgs.legacyPackages.x86_64-linux;
-            })
-            {
-              credenza = ./tests/credenza.nix;
-              loopback-listeners = ./tests/loopback-listeners.nix;
-              public-names = ./tests/public-names.nix;
-            };
-        }
+        weblounge.testChecks
       ];
 
       formatter = forEachSystem (pkgs: pkgs.nixpkgs-fmt);

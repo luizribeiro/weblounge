@@ -27,10 +27,19 @@ let
     (lib.mapAttrsToList
       (name: host: { ${systemOf host} = mkOutput name host; })
       self.nixosConfigurations);
-in
-{
-  inherit overlay hosts hostModules;
 
+  weblounge = { inherit overlay hosts hostModules; };
+
+  testNames = map (lib.removeSuffix ".nix") (lib.attrNames (lib.filterAttrs
+    (file: type: type == "regular" && lib.hasSuffix ".nix" file && file != "lib.nix")
+    (builtins.readDir ../tests)));
+
+  checkOf = pkgs: name: import ../tests/${name}.nix {
+    inherit pkgs weblounge;
+    vmTest = import ../tests/lib.nix { inherit pkgs weblounge name; };
+  };
+in
+weblounge // {
   vmPackages = perHostOutput (name: host: {
     "${name}-vm" = host.config.virtualisation.vmVariant.system.build.vm;
   });
@@ -38,4 +47,7 @@ in
   toplevelChecks = perHostOutput (name: host: {
     "toplevel-${name}" = host.config.system.build.toplevel;
   });
+
+  testChecks.x86_64-linux = lib.genAttrs testNames
+    (checkOf nixpkgs.legacyPackages.x86_64-linux);
 }

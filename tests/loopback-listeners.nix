@@ -1,4 +1,4 @@
-{ pkgs, weblounge }:
+{ pkgs, weblounge, ... }:
 
 let
   inherit (pkgs) lib;
