@@ -1,15 +1,12 @@
 use clap::Parser;
-use concierge::{app, assets::Assets, config::Config, db::Db, status};
+use concierge::{
+    admin::{self, Command},
+    app,
+    assets::Assets,
+    config::Config,
+    db::Db,
+};
 use tokio::net::TcpListener;
-
-/// The members' site of weblounge.org, and the admin commands behind it.
-#[derive(Parser)]
-enum Command {
-    /// Serve the site on CONCIERGE_LISTEN.
-    Serve,
-    /// Show the configuration, state, secrets, database and Ergo this process sees.
-    Status,
-}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -17,9 +14,9 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     match command {
         Command::Serve => serve(config).await,
-        Command::Status => status::report(&config)
+        Command::Admin(command) => admin::run(command, &config)
             .await
-            .map(|report| print!("{report}")),
+            .map(|output| print!("{output}")),
     }
 }
 

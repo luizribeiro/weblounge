@@ -8,7 +8,7 @@ use crate::Fixture;
 async fn reports_the_url_state_key_database_and_ergo() {
     let fixture = Fixture::start().await;
 
-    let report = report(&fixture.config).await.unwrap();
+    let report = fixture.run(&["status"]).await.unwrap();
 
     let state = fixture.state_dir();
     assert_eq!(
@@ -30,7 +30,7 @@ async fn reports_the_url_state_key_database_and_ergo() {
 #[tokio::test]
 async fn leaves_only_the_database_in_the_state_directory() {
     let fixture = Fixture::start().await;
-    report(&fixture.config).await.unwrap();
+    fixture.run(&["status"]).await.unwrap();
     let mut files: Vec<_> = fs::read_dir(fixture.state_dir())
         .unwrap()
         .map(|entry| entry.unwrap().file_name().into_string().unwrap())
@@ -64,7 +64,7 @@ async fn reports_an_ergo_that_does_not_answer() {
 async fn fails_without_the_ergo_api_token() {
     let fixture = Fixture::start().await;
     fs::remove_file(fixture.config.credentials_dir.join("ergo-api-token")).unwrap();
-    let error = report(&fixture.config).await.unwrap_err();
+    let error = fixture.run(&["status"]).await.unwrap_err();
     assert!(error.to_string().contains("ergo-api-token"), "{error}");
 }
 
@@ -72,6 +72,6 @@ async fn fails_without_the_ergo_api_token() {
 async fn fails_on_a_state_directory_it_cannot_write() {
     let fixture = Fixture::start().await;
     fs::set_permissions(fixture.state_dir(), fs::Permissions::from_mode(0o500)).unwrap();
-    let error = report(&fixture.config).await.unwrap_err();
+    let error = fixture.run(&["status"]).await.unwrap_err();
     assert!(error.to_string().contains("is not writable"), "{error}");
 }

@@ -91,6 +91,10 @@ impl Config {
         })
     }
 
+    pub fn invite_url(&self, code: &str) -> String {
+        format!("{}/invite/{code}", self.public_url)
+    }
+
     pub fn database_path(&self) -> PathBuf {
         self.state_dir.join(DATABASE)
     }
@@ -190,6 +194,15 @@ mod tests {
         assert_eq!(
             public_url("https://members.weblounge.localhost:10443/"),
             Ok("https://members.weblounge.localhost:10443".into())
+        );
+    }
+
+    #[test]
+    fn builds_invite_links_on_the_public_url() {
+        let config = parse_with(&[]).unwrap();
+        assert_eq!(
+            config.invite_url("q7Hx2mZp9vLcT4wRfBa-_w"),
+            "https://members.weblounge.org/invite/q7Hx2mZp9vLcT4wRfBa-_w"
         );
     }
 

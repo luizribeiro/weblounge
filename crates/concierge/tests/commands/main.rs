@@ -1,11 +1,17 @@
 //! Concierge's commands, run against a temporary state directory and
 //! credentials and a fake Ergo.
 
+mod invite;
 mod status;
 
 use std::{fs, path::Path};
 
-use concierge::config::{Config, ERGO_API_TOKEN_CREDENTIAL, SESSION_KEY_CREDENTIAL};
+use clap::Parser;
+use concierge::{
+    admin::{self, Command},
+    config::{Config, ERGO_API_TOKEN_CREDENTIAL, SESSION_KEY_CREDENTIAL},
+    db::Db,
+};
 use ergo_api::fake::FakeErgo;
 use tempfile::TempDir;
 
@@ -38,6 +44,19 @@ impl Fixture {
             _state: state,
             _credentials: credentials,
         }
+    }
+
+    /// Runs `concierge <args>` and answers with what it prints.
+    async fn run(&self, args: &[&str]) -> anyhow::Result<String> {
+        let Command::Admin(command) = Command::try_parse_from(["concierge"].iter().chain(args))?
+        else {
+            panic!("{args:?} is not an admin command");
+        };
+        admin::run(command, &self.config).await
+    }
+
+    async fn db(&self) -> Db {
+        Db::open(&self.config.database_path()).await.unwrap()
     }
 
     fn state_dir(&self) -> &Path {

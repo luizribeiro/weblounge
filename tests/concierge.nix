@@ -3,6 +3,12 @@
 vmTest ''
   import re
 
+  def concierge_admin_command(*args):
+      return f"su - luiz -c {shlex.quote(shlex.join(['concierge-admin', *args]))}"
+
+  def concierge_admin(*args):
+      return credenza.succeed(concierge_admin_command(*args))
+
   with subtest("members.weblounge.org serves concierge's page in the shared styles"):
       credenza.wait_for_unit("nginx.service")
       credenza.wait_for_unit("concierge.service")
@@ -35,7 +41,7 @@ vmTest ''
       service_uid = credenza.succeed("ps -o uid= -p $(systemctl show -P MainPID concierge)").strip()
       assert service_uid != "0", service_uid
       credenza.wait_for_open_port(8089)
-      status = credenza.succeed("su - luiz -c 'concierge-admin status'")
+      status = concierge_admin("status")
       assert status == (
           "public url: https://members.weblounge.org\n"
           f"state directory: /var/lib/concierge (writable by uid {service_uid})\n"
@@ -43,9 +49,13 @@ vmTest ''
           "database: /var/lib/concierge/concierge.db (migration 20261014120000, 0 members)\n"
           "ergo: http://127.0.0.1:8089/ answers, version 2.19.1\n"
       ), (service_uid, status)
-      credenza.fail("su - luiz -c 'concierge-admin no-such-command'")
+      credenza.fail(concierge_admin_command("no-such-command"))
 
   with subtest("concierge's database lives in its state directory, private to the service"):
       modes = credenza.succeed("stat -L -c %a /var/lib/private /var/lib/concierge /var/lib/concierge/concierge.db").split()
       assert modes == ["700", "700", "600"], modes
+
+  with subtest("concierge-admin invite create --root prints a link to members.weblounge.org"):
+      link = concierge_admin("invite", "create", "--root", "--note", "for the founders")
+      assert re.fullmatch(r"https://members\.weblounge\.org/invite/[A-Za-z0-9_-]{22}\n", link), link
 ''

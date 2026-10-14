@@ -1,4 +1,7 @@
-use std::{path::Path, time::Duration};
+use std::{
+    path::Path,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::Context;
 use sqlx::{
@@ -9,6 +12,39 @@ use sqlx::{
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The current time as the database stores times, in Unix seconds.
+pub fn now() -> i64 {
+    let since_epoch = SystemTime::UNIX_EPOCH
+        .elapsed()
+        .expect("the clock is past 1970");
+    since_epoch
+        .as_secs()
+        .try_into()
+        .expect("the clock is before 2262")
+}
+
+pub struct NewInvite<'a> {
+    pub code: &'a str,
+    /// `None` for a root invite.
+    pub created_by: Option<&'a str>,
+    pub note: Option<&'a str>,
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invite {
+    pub code: String,
+    pub created_by: Option<String>,
+    pub note: Option<String>,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub claimed_at: Option<i64>,
+    pub redeemed_by: Option<String>,
+    pub redeemed_at: Option<i64>,
+    pub revoked_at: Option<i64>,
+}
 
 /// Concierge's SQLite database, migrated to the schema this build knows.
 #[derive(Clone)]
@@ -44,6 +80,33 @@ impl Db {
             r#"SELECT MAX(version) AS "version?" FROM _sqlx_migrations WHERE success"#
         )
         .fetch_one(&self.pool)
+        .await
+    }
+
+    pub async fn insert_invite(&self, invite: &NewInvite<'_>) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT INTO invites (code, created_by, note, created_at, expires_at)
+             VALUES (?, ?, ?, ?, ?)",
+            invite.code,
+            invite.created_by,
+            invite.note,
+            invite.created_at,
+            invite.expires_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    pub async fn invite(&self, code: &str) -> sqlx::Result<Option<Invite>> {
+        sqlx::query_as!(
+            Invite,
+            r#"SELECT code AS "code!", created_by, note, created_at, expires_at, claimed_at,
+                      redeemed_by, redeemed_at, revoked_at
+               FROM invites WHERE code = ?"#,
+            code
+        )
+        .fetch_optional(&self.pool)
         .await
     }
 
