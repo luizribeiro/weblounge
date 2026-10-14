@@ -38,6 +38,13 @@ async fn the_network_default_shows_as_on_under_opt_out() {
 }
 
 #[tokio::test]
+async fn the_old_irc_tab_leads_to_the_settings_on_the_account_tab() {
+    let response = Site::start().await.get("/irc", None).await;
+    assert_eq!(response.status(), 308);
+    assert_eq!(location(&response), "/account#irc-settings");
+}
+
+#[tokio::test]
 async fn under_opt_in_the_default_shows_as_off_and_switching_on_pins_it() {
     let opt_in = Presence {
         always_on: false,

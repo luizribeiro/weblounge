@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     middleware::{self, map_response},
-    response::IntoResponse,
+    response::{IntoResponse, Redirect},
     routing::{get, post},
 };
 use ergo_api::Client;
@@ -67,7 +67,7 @@ pub fn router(app: App) -> Router {
         )
         .route(
             "/irc",
-            get(routes::irc::show).layer(map_response(routes::no_store)),
+            get(|| async { Redirect::permanent("/account#irc-settings") }),
         )
         .route(
             "/irc-settings",

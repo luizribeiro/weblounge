@@ -1,11 +1,10 @@
 use crate::{Site, body_text, location};
 
 /// Each tab's path and label, in the row under the header.
-const TABS: [(&str, &str); 4] = [
+const TABS: [(&str, &str); 3] = [
     ("/", "Home"),
     ("/invites", "Invites"),
     ("/account", "Account"),
-    ("/irc", "IRC"),
 ];
 
 fn tab_links(page: &str) -> Vec<(String, String)> {

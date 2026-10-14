@@ -5,7 +5,6 @@ pub mod clients;
 pub mod home;
 pub mod invite;
 pub mod invites;
-pub mod irc;
 pub mod oauth;
 pub mod pages;
 pub mod password;
@@ -63,18 +62,16 @@ pub enum Tab {
     Home,
     Invites,
     Account,
-    Irc,
 }
 
 impl Tab {
-    pub const ALL: [Self; 4] = [Self::Home, Self::Invites, Self::Account, Self::Irc];
+    pub const ALL: [Self; 3] = [Self::Home, Self::Invites, Self::Account];
 
     pub fn path(self) -> &'static str {
         match self {
             Self::Home => "/",
             Self::Invites => "/invites",
             Self::Account => "/account",
-            Self::Irc => "/irc",
         }
     }
 
@@ -83,7 +80,6 @@ impl Tab {
             Self::Home => "Home",
             Self::Invites => "Invites",
             Self::Account => "Account",
-            Self::Irc => "IRC",
         }
     }
 }
