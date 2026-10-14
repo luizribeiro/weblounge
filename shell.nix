@@ -13,6 +13,7 @@ pkgs.mkShell ({
     esbuild
     just
     nil
+    nix-unit
     nixos-anywhere
     rust-analyzer
     rustc

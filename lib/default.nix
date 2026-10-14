@@ -47,13 +47,31 @@ let
 
   tests = lib.mapAttrs (_: import) (filesIn ".nix" ../tests) // vmTests;
 
-  checkOf = pkgs: name: test: test {
-    inherit pkgs weblounge;
-    vmTest = import ../tests/e2e/lib/lib.nix {
-      inherit pkgs weblounge name;
-      script = ../tests/e2e/${name}.py;
-    };
-  };
+  testPkgs = nixpkgs.legacyPackages.x86_64-linux;
+
+  # Each test is a derivation, or a set of nix-unit tests for evalCheck.
+  results = lib.mapAttrs
+    (name: test: test {
+      pkgs = testPkgs;
+      inherit weblounge;
+      vmTest = import ../tests/e2e/lib/lib.nix {
+        pkgs = testPkgs;
+        inherit weblounge name;
+        script = ../tests/e2e/${name}.py;
+      };
+    })
+    tests;
+
+  # nixpkgs' runTests reads nix-unit's format, without nix-unit's need to
+  # run Nix inside the build sandbox.
+  evalCheck = name: unitTests:
+    let
+      failures = lib.debug.runTests unitTests;
+    in
+    testPkgs.runCommand name { } (
+      if failures == [ ] then "touch $out"
+      else "echo ${lib.escapeShellArg (lib.generators.toPretty { } failures)} >&2; echo 'just nix-unit shows diffs.' >&2; exit 1"
+    );
 in
 weblounge // {
   vmPackages = perHostOutput (name: host: {
@@ -65,6 +83,8 @@ weblounge // {
   });
 
   testChecks.x86_64-linux = lib.mapAttrs
-    (checkOf nixpkgs.legacyPackages.x86_64-linux)
-    tests;
+    (name: result: if lib.isDerivation result then result else evalCheck name result)
+    results;
+
+  unitTests = lib.filterAttrs (_: result: !lib.isDerivation result) results;
 }

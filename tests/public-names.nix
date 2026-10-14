@@ -4,16 +4,19 @@ let
   inherit (pkgs) lib;
   inherit (weblounge.hosts.credenza) config;
 
+  envOf = host: prefix: lib.findFirst (lib.hasPrefix prefix) null
+    host.systemd.services.concierge.serviceConfig.Environment;
+
   namesOf = host: {
     virtualHosts = lib.mapAttrs (_: vhost: vhost.serverAliases) host.services.nginx.virtualHosts;
-    conciergeUrl = lib.findFirst (lib.hasPrefix "CONCIERGE_PUBLIC_URL=") null
-      host.systemd.services.concierge.serviceConfig.Environment;
-    joinUrl = lib.findFirst (lib.hasPrefix "CONCIERGE_JOIN_URL=") null
-      host.systemd.services.concierge.serviceConfig.Environment;
+    conciergeUrl = envOf host "CONCIERGE_PUBLIC_URL=";
+    joinUrl = envOf host "CONCIERGE_JOIN_URL=";
   };
-
-  expected = {
-    production = {
+in
+{
+  testProductionServesWebloungeOrg = {
+    expr = namesOf config;
+    expected = {
       virtualHosts = {
         "weblounge.org" = [ "www.weblounge.org" "credenza.weblounge.org" ];
         "irc.weblounge.org" = [ ];
@@ -23,7 +26,11 @@ let
       conciergeUrl = "CONCIERGE_PUBLIC_URL=https://members.weblounge.org";
       joinUrl = "CONCIERGE_JOIN_URL=https://join.weblounge.org";
     };
-    vm = {
+  };
+
+  testVmServesWebloungeLocalhost = {
+    expr = namesOf config.virtualisation.vmVariant;
+    expected = {
       virtualHosts = {
         "weblounge.localhost" = [ "www.weblounge.localhost" "credenza.weblounge.localhost" ];
         "irc.weblounge.localhost" = [ ];
@@ -34,13 +41,4 @@ let
       joinUrl = "CONCIERGE_JOIN_URL=https://join.weblounge.localhost:10443";
     };
   };
-
-  actual = {
-    production = namesOf config;
-    vm = namesOf config.virtualisation.vmVariant;
-  };
-in
-pkgs.runCommand "public-names" { } (
-  if actual == expected then "touch $out"
-  else "echo ${lib.escapeShellArg "expected ${builtins.toJSON expected}, got ${builtins.toJSON actual}"} >&2; exit 1"
-)
+}

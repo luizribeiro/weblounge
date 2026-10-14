@@ -11,6 +11,10 @@ default:
 check *args:
   nix flake check -L {{args}}
 
+# The eval tests in tests/, with diffs of what failed
+nix-unit:
+  nix-unit --flake .#tests
+
 lint:
   pre-commit run --all-files
 

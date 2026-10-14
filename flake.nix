@@ -53,6 +53,9 @@
         weblounge.testChecks
       ];
 
+      # `just nix-unit` runs them, with diffs of what failed.
+      tests = weblounge.unitTests;
+
       formatter = forEachSystem (pkgs: pkgs.nixpkgs-fmt);
 
       devShells = forEachSystem (pkgs: {
