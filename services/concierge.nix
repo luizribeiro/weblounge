@@ -48,6 +48,17 @@ in
     weblounge.secrets.ergo-api-token.loadedBy = [ "concierge" ];
     weblounge.secrets.oauth-introspection-secret.loadedBy = [ "concierge" ];
 
+    # Ergo logs the web client in with SASL OAUTHBEARER, asking concierge
+    # whose token it is. The secret comes from the environment; the empty
+    # one here replaces default.yaml's published example.
+    weblounge.ergo.settings.accounts.oauth2 = {
+      enabled = true;
+      autocreate = false;
+      introspection-url = "http://${cfg.listen}/oauth/introspect";
+      client-id = "ergo";
+      client-secret = "";
+    };
+
     systemd.services.concierge = {
       description = "Concierge, the members' site";
       wantedBy = [ "multi-user.target" ];

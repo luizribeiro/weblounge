@@ -7,6 +7,7 @@ let
   serverName = "irc.${domain}";
   port = 6697;
   credentials = "/run/credentials/ergochat.service";
+  oauth2 = cfg.settings.accounts.oauth2.enabled or false;
 
 in
 {
@@ -104,16 +105,20 @@ in
     };
 
     weblounge.secrets.ergo-api-token.loadedBy = [ "ergochat" ];
+    weblounge.secrets.oauth-introspection-secret.loadedBy = lib.mkIf oauth2 [ "ergochat" ];
 
     systemd.services.ergochat = {
       wants = [ "acme-${serverName}.service" ];
       after = [ "acme-${serverName}.service" ];
       serviceConfig = {
-        # Ergo reads its API token only from its config file or environment.
-        ExecStart = lib.mkForce (pkgs.writeShellScript "ergo-start" ''
+        # Ergo reads its secrets only from its config file or environment.
+        ExecStart = lib.mkForce (pkgs.writeShellScript "ergo-start" (''
           export ERGO__API__BEARER_TOKENS="[\"$(< "$CREDENTIALS_DIRECTORY/ergo-api-token")\"]"
+        '' + lib.optionalString oauth2 ''
+          export ERGO__ACCOUNTS__OAUTH2__CLIENT_SECRET="$(< "$CREDENTIALS_DIRECTORY/oauth-introspection-secret")"
+        '' + ''
           exec ${lib.getExe pkgs.ergochat} run --conf /etc/ergo.yaml
-        '');
+        ''));
         SyslogIdentifier = "ergo";
         # Ergo's RELOADING=1 carries no MONOTONIC_USEC, which notify-reload
         # waits for until it times out.

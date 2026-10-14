@@ -77,18 +77,29 @@ vmTest ''
       assert_loopback_only(8097, "/")
       assert_loopback_only(8080, "/healthz")
 
+  with subtest("concierge's introspection answers Ergo's secret alone"):
+      introspect = "curl -s -o /dev/null -w '%{{http_code}}' -d token=x -u {} http://127.0.0.1:8080/oauth/introspect"
+      secret = credenza.succeed("cat /var/lib/weblounge-secrets/oauth-introspection-secret").strip()
+      for credentials in ["ergo:wrong", "ergo:4TA0I7mJ3fUUcW05KJiODg", f"gamja:{secret}"]:
+          assert credenza.succeed(introspect.format(shlex.quote(credentials))) == "401", credentials
+      assert credenza.succeed(introspect.format(shlex.quote(f"ergo:{secret}"))) == "200"
+
   with subtest("ergo's API refuses any token but the generated one"):
       for token in ["not-the-token", "example"]:
           _, status = ergo_api("status", token=token)
           assert status == "401", (token, status)
 
-  with subtest("the API token and session key stay out of the Nix store, readable by root alone"):
+  with subtest("the generated secrets stay out of the Nix store, readable by root alone"):
       secrets = "/var/lib/weblounge-secrets"
-      modes = credenza.succeed(f"stat -c '%a %U' {secrets} {secrets}/ergo-api-token {secrets}/session-key")
-      assert modes == "700 root\n600 root\n600 root\n", modes
+      names = ["ergo-api-token", "session-key", "oauth-introspection-secret"]
+      modes = credenza.succeed(f"cd {secrets} && stat -c '%a %U' . {' '.join(names)}")
+      assert modes == "700 root\n" + "600 root\n" * len(names), modes
+      ergo_config = "systemctl cat ergochat; cat /etc/ergo.yaml $(systemctl show -P ExecStart ergochat | grep -o '/nix/store/[^ ;]*')"
+      concierge_config = "systemctl cat concierge; cat $(readlink -f $(command -v concierge-admin))"
       for secret, config in [
-          ("ergo-api-token", "systemctl cat ergochat; cat /etc/ergo.yaml"),
-          ("session-key", "systemctl cat concierge; cat $(readlink -f $(command -v concierge-admin))"),
+          ("ergo-api-token", ergo_config),
+          ("session-key", concierge_config),
+          ("oauth-introspection-secret", f"{ergo_config}; {concierge_config}"),
       ]:
           credenza.fail(f"{{ {config}; }} | grep -qF $(cat {secrets}/{secret})")
 

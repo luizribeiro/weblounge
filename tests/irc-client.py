@@ -1,5 +1,6 @@
-"""Connect to an IRC server over TLS, optionally logging in with SASL PLAIN,
-send COMMANDS once welcomed, and print every line the server sends."""
+"""Connect to an IRC server over TLS, optionally logging in with SASL PLAIN
+or OAUTHBEARER, send COMMANDS once welcomed, and print every line the
+server sends."""
 
 import argparse
 import base64
@@ -55,13 +56,12 @@ class Connection:
         return None
 
 
-def authenticate(conn, account, password):
+def authenticate(conn, mechanism, payload):
     conn.send("CAP REQ :sasl")
-    conn.send("AUTHENTICATE PLAIN")
-    payload = f"{account}\0{account}\0{password}".encode()
-    conn.send("AUTHENTICATE " + base64.b64encode(payload).decode())
+    conn.send(f"AUTHENTICATE {mechanism}")
+    conn.send("AUTHENTICATE " + base64.b64encode(payload.encode()).decode())
     if conn.read_until("903", "904") != "903":
-        raise SystemExit(f"SASL login as {account} failed")
+        raise SystemExit(f"SASL {mechanism} login failed")
 
 
 def main():
@@ -69,6 +69,7 @@ def main():
     parser.add_argument("host")
     parser.add_argument("--account")
     parser.add_argument("--password")
+    parser.add_argument("--token", help="an OAuth 2.0 bearer token")
     parser.add_argument("commands", nargs="*")
     args = parser.parse_args()
     if args.account and not args.password:
@@ -77,7 +78,11 @@ def main():
     conn = Connection(connect(args.host, 6697))
     conn.send("CAP LS 302")
     if args.account:
-        authenticate(conn, args.account, args.password)
+        plain = f"{args.account}\0{args.account}\0{args.password}"
+        authenticate(conn, "PLAIN", plain)
+    elif args.token:
+        bearer = f"n,,\x01auth=Bearer {args.token}\x01\x01"
+        authenticate(conn, "OAUTHBEARER", bearer)
     conn.send("CAP END")
     conn.send(f"NICK {args.account or 'visitor'}")
     conn.send("USER guest 0 * :weblounge test client")
