@@ -10,9 +10,21 @@
       forEachSystem = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
     in
     {
-      packages = forEachSystem (pkgs: {
-        default = pkgs.callPackage ./package.nix { };
-      });
+      packages = forEachSystem (pkgs:
+        let bot = pkgs.callPackage ./package.nix { };
+        in {
+          default = bot;
+        } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          image = pkgs.dockerTools.buildLayeredImage {
+            name = "bot";
+            tag = "latest";
+            config = {
+              Entrypoint = [ (lib.getExe bot) ];
+              Env = [ "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt" ];
+              User = "65534:65534";
+            };
+          };
+        });
 
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell { packages = [ pkgs.go pkgs.gopls ]; };
