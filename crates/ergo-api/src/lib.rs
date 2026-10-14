@@ -22,6 +22,8 @@ mod endpoints;
 mod error;
 #[cfg(feature = "fake")]
 pub mod fake;
+#[cfg(feature = "local")]
+pub mod local;
 mod methods;
 mod names;
 #[cfg(test)]

@@ -7,6 +7,8 @@ publish = false
 [features]
 # An in-memory stand-in for Ergo's API, for tests.
 fake = ["dep:axum", "dep:tokio"]
+# The real ergo binary on loopback, for contract tests and the dev loop.
+local = []
 
 [dependencies]
 axum = { version = "0.8.9", optional = true }
@@ -18,6 +20,6 @@ tokio = { version = "1.53.3", features = ["net", "rt"], optional = true }
 
 [dev-dependencies]
 # The unit tests' stub server needs axum and tokio too.
-ergo-api = { path = ".", features = ["fake"] }
+ergo-api = { path = ".", features = ["fake", "local"] }
 tempfile = "3.27.0"
 tokio = { version = "1.53.3", features = ["macros", "net", "rt", "time"] }
