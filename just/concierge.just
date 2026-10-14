@@ -25,6 +25,8 @@ dev:
   done
   trap 'kill $(jobs -p) 2>/dev/null' EXIT
   cargo build --quiet --package ergo-api --features local --bin local-ergo
+  ERGO__ACCOUNTS__MULTICLIENT__ALWAYS_ON="$CONCIERGE_ALWAYS_ON_DEFAULT" \
+  ERGO__ACCOUNTS__MULTICLIENT__AUTO_AWAY="$CONCIERGE_AUTO_AWAY_DEFAULT" \
   target/debug/local-ergo "{{dev_dir}}/ergo" {{ergo_api}} "$CREDENTIALS_DIRECTORY/ergo-api-token" \
     > "{{dev_dir}}/ergo.log" 2>&1 &
   ergo=$!

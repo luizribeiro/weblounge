@@ -1,4 +1,4 @@
-{ pkgs, gitHooks }:
+{ pkgs, gitHooks, multiclient }:
 
 pkgs.mkShell ({
   inherit (gitHooks) shellHook;
@@ -17,4 +17,7 @@ pkgs.mkShell ({
     typescript
   ]);
   RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
+  # `just concierge dev` gives its Ergo these too, so both follow the network.
+  CONCIERGE_ALWAYS_ON_DEFAULT = multiclient.always-on;
+  CONCIERGE_AUTO_AWAY_DEFAULT = multiclient.auto-away;
 } // pkgs.weblounge.concierge.ergoContractTestEnv)
