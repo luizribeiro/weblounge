@@ -16,6 +16,8 @@
   nix = {
     settings = {
       experimental-features = [ "nix-command" "flakes" ];
+      # The daemon runs as root; services have no business talking to it.
+      allowed-users = [ "@wheel" ];
       trusted-users = [ "@wheel" ];
       auto-optimise-store = true;
     };

@@ -132,6 +132,11 @@ with subtest("the generated secrets stay out of the Nix store, readable by root 
     ]:
         credenza.fail(f"{{ {config}; }} | grep -qF $(cat {secrets}/{secret})")
 
+with subtest("admins alone can talk to the nix daemon, not services"):
+    nix = "/run/current-system/sw/bin/nix store info"
+    credenza.succeed(f"su - luiz -c '{nix}'")
+    credenza.fail(f"systemd-run --wait --pipe --quiet -p DynamicUser=yes {nix}")
+
 with subtest("default.yaml's example oper and WebIRC gateway, with published credentials, are left out"):
     credenza.fail("grep -qE '^opers:|webirc' /etc/ergo.yaml")
 
