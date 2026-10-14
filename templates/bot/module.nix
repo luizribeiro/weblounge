@@ -3,6 +3,8 @@
 let
   inherit (lib) mkOption types;
 
+  enabled = lib.filterAttrs (_: bot: bot.enable) config.services.weblounge-bot;
+
   botOptions = { name, ... }: {
     options = {
       enable = lib.mkEnableOption "the IRC bot ${name}";
@@ -90,6 +92,8 @@ let
       ProtectKernelTunables = true;
       ProtectProc = "invisible";
       ProtectSystem = "strict";
+      # No AF_UNIX: the bot is built without cgo, so Go resolves names
+      # itself over DNS rather than asking systemd-resolved through NSS.
       RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
       RestrictNamespaces = true;
       RestrictRealtime = true;
@@ -106,6 +110,5 @@ in
     description = "IRC bots on weblounge.org, each with an account of its own.";
   };
 
-  config.systemd.services = lib.mapAttrs' service
-    (lib.filterAttrs (_: bot: bot.enable) config.services.weblounge-bot);
+  config.systemd.services = lib.mapAttrs' service enabled;
 }
