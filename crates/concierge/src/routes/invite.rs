@@ -159,7 +159,6 @@ pub async fn redeem(
         Ok(()) => {}
         Err(Failure::Taken) => return refuse(taken()),
         Err(Failure::Unreachable) => return unreachable(&app, &visitor),
-        Err(Failure::Lost) => return gone(&app, &visitor),
         Err(Failure::Unfinished) => return unfinished(&app, &visitor),
     }
     let nick = account.nick.as_str();
@@ -177,9 +176,8 @@ pub async fn redeem(
 enum Failure {
     Taken,
     Unreachable,
-    /// The invite was revoked, or its claim taken over, meanwhile.
-    Lost,
-    /// Ergo has the account, but recording the member failed.
+    /// Ergo has the account, but no member was recorded: the invite was
+    /// revoked or its claim taken over meanwhile, or the database failed.
     Unfinished,
 }
 
@@ -224,7 +222,7 @@ async fn create_account(
                  meanwhile; member reconcile lists it",
                 member.account
             );
-            Err(Failure::Lost)
+            Err(Failure::Unfinished)
         }
         Err(error) => {
             eprintln!(

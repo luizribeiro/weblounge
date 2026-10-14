@@ -225,12 +225,17 @@ async fn with_ergo_that_runs(sql: &'static str) -> Site {
 }
 
 #[tokio::test]
-async fn an_invite_revoked_while_ergo_works_adds_no_member() {
+async fn an_invite_revoked_while_ergo_works_adds_no_member_and_says_so() {
     let site = with_ergo_that_runs("UPDATE invites SET revoked_at = 1").await;
 
     let response = site.post(INVITE, &bob(), None).await;
 
-    assert_eq!(response.status(), 404);
+    assert_eq!(response.status(), 500);
+    assert!(
+        body_text(response)
+            .await
+            .contains("setup didn&#39;t finish")
+    );
     assert_eq!(site.db.member("bob").await.unwrap(), None);
 }
 
