@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Sign in{% endblock %}
+
+{% block content %}
+      <section class="card narrow" aria-labelledby="signin-title">
+        <p class="eyebrow">Members</p>
+        <h1 id="signin-title">Sign in.</h1>
+        {%- if let Some(error) = error %}
+        <p class="alert" role="alert">{{ error }}</p>
+        {%- endif %}
+        <form class="form" method="post" action="/signin">
+          {%- if let Some(next) = next %}
+          <input type="hidden" name="next" value="{{ next }}">
+          {%- endif %}
+          <div class="field">
+            <label for="nick">Nick</label>
+            <input id="nick" name="nick" value="{{ nick }}" required maxlength="{{ nick_max_length }}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"{% if nick.is_empty() %} autofocus{% endif %}>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required autocomplete="current-password"{% if !nick.is_empty() %} autofocus{% endif %}>
+            <p class="hint">Your IRC password.</p>
+          </div>
+          <button class="button button-primary" type="submit">Sign in</button>
+        </form>
+      </section>
+{%- endblock %}

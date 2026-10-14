@@ -9,12 +9,12 @@ vmTest ''
   def concierge_admin(*args):
       return credenza.succeed(concierge_admin_command(*args))
 
-  with subtest("members.weblounge.org serves concierge's page in the shared styles"):
+  with subtest("members.weblounge.org serves concierge's sign-in page in the shared styles"):
       credenza.wait_for_unit("nginx.service")
       credenza.wait_for_unit("concierge.service")
       credenza.wait_for_open_port(8080)
-      page = https("members.weblounge.org", "/", "-f")
-      assert "Members' entrance." in page, page
+      page = https("members.weblounge.org", "/signin", "-f")
+      assert "Sign in." in page, page
       stylesheet = re.search(r'href="(/assets/members-[A-Z0-9]+\.css)"', page)
       assert stylesheet, page
       css = https("members.weblounge.org", stylesheet[1], "-f")
@@ -85,7 +85,43 @@ vmTest ''
       session = irc(account="Dana", password=password)
       assert " 903 " in session, session
 
-  with subtest("the printed password never reaches the journal"):
+  members = "members.weblounge.org"
+  from_our_pages = ["-H", f"Origin: https://{members}"]
+  cookie_jar = ["-b", "/tmp/cookies", "-c", "/tmp/cookies"]
+  outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
+
+  def members_get(path, *flags):
+      return https(members, path, *cookie_jar, *flags)
+
+  def members_post(path, *fields):
+      data = [arg for field in fields for arg in ["--data-urlencode", field]] or ["--data", ""]
+      return https(members, path, *cookie_jar, *from_our_pages, *outcome, *data)
+
+  def sign_in(account, password):
+      return members_post("/signin", f"nick={account}", f"password={password}")
+
+  with subtest("an adopted member signs in to the website with their IRC password"):
+      signed_in = sign_in("dana", password)
+      assert signed_in == f"303 https://{members}/", signed_in
+      home = members_get("/", "-f")
+      assert '<span class="session-nick">Dana</span>' in home, home
+
+  with subtest("signing out ends the session"):
+      signed_out = members_post("/signout")
+      assert signed_out == f"303 https://{members}/signin", signed_out
+      after = members_get("/", *outcome)
+      assert after == f"303 https://{members}/signin", after
+
+  with subtest("concierge-admin member reset-password ends the member's website sessions"):
+      assert sign_in("dana", password).startswith("303 ")
+      assert members_get("/", *outcome).startswith("200 ")
+      new_password = concierge_admin("member", "reset-password", "dana").strip()
+      after = members_get("/", *outcome)
+      assert after == f"303 https://{members}/signin", after
+      assert sign_in("dana", new_password).startswith("303 ")
+
+  with subtest("the passwords never reach the journal"):
       credenza.succeed("journalctl --sync")
-      credenza.fail(f"journalctl | grep -qF {password}")
+      for secret in [password, new_password]:
+          credenza.fail(f"journalctl | grep -qF {secret}")
 ''

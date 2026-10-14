@@ -4,7 +4,7 @@ use askama::Template;
 use axum::{extract::State, response::Response};
 
 use super::{Layout, render};
-use crate::app::AppState;
+use crate::{app::AppState, auth::Visitor};
 
 #[derive(Template)]
 #[template(path = "rules.html")]
@@ -18,18 +18,20 @@ struct Privacy<'a> {
     layout: Layout<'a>,
 }
 
-pub async fn rules(State(app): State<AppState>) -> Response {
+pub async fn rules(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&Rules {
         layout: Layout {
             assets: &app.assets,
+            nick: visitor.nick(),
         },
     })
 }
 
-pub async fn privacy(State(app): State<AppState>) -> Response {
+pub async fn privacy(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&Privacy {
         layout: Layout {
             assets: &app.assets,
+            nick: visitor.nick(),
         },
     })
 }

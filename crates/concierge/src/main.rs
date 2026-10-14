@@ -4,7 +4,8 @@ use concierge::{
     app::{self, App},
     assets::Assets,
     config::Config,
-    db::Db,
+    db::{self, Db},
+    session,
 };
 use tokio::net::TcpListener;
 
@@ -21,11 +22,13 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn serve(config: Config) -> anyhow::Result<()> {
-    config.read_session_key()?;
-    config.ergo_client()?;
-    Db::open(&config.database_path()).await?;
+    let db = Db::open(&config.database_path()).await?;
+    db.end_expired_sessions(db::now()).await?;
     let app = App {
         assets: Assets::load(&config.assets_dir)?,
+        db,
+        ergo: config.ergo_client()?,
+        sessions: session::Hasher::new(&config.read_session_key()?),
         public_url: config.public_url.clone(),
     };
     let listener = TcpListener::bind(config.listen).await?;

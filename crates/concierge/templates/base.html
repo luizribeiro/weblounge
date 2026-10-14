@@ -19,6 +19,17 @@
           <use href="{{ layout.assets.url("wordmark.svg")? }}#wordmark"/>
         </svg>
       </a>
+      <nav class="session" aria-label="Session">
+        {%- if let Some(nick) = layout.nick %}
+        <span class="session-nick">{{ nick }}</span>
+        <span class="session-divider" aria-hidden="true">·</span>
+        <form method="post" action="/signout">
+          <button class="link-button" type="submit">Sign out</button>
+        </form>
+        {%- else %}
+        <a href="/signin">Sign in</a>
+        {%- endif %}
+      </nav>
     </header>
     <main class="page">
       {%- block content %}{% endblock %}

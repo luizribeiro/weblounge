@@ -7,9 +7,10 @@ vmTest ''
   mallory = {"account": "mallory", "password": "an-insider-gone-bad"}
   tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
   sites = ["weblounge.org", "members.weblounge.org", "irc.weblounge.org"]
-  directives_pages_need = {
-      "weblounge.org": {"script-src", "style-src", "img-src"},
-      "members.weblounge.org": {"style-src", "img-src"},
+  members = "members.weblounge.org"
+  pages_and_directives_they_need = {
+      "weblounge.org": ("/", {"script-src", "style-src", "img-src"}),
+      members: ("/signin", {"style-src", "img-src"}),
   }
 
   def assert_loopback_only(port, path):
@@ -115,16 +116,32 @@ vmTest ''
               assert "frame-ancestors 'none'" in headers.get("content-security-policy", ""), (name, path, headers)
 
   with subtest("the landing page and concierge's load all they need under their CSP, and nothing inline"):
-      for name, directives in directives_pages_need.items():
-          policy = headers_of(name, "/")["content-security-policy"]
-          needs = PageNeeds(https(name, "/", "-f"))
+      for name, (path, directives) in pages_and_directives_they_need.items():
+          policy = headers_of(name, path)["content-security-policy"]
+          needs = PageNeeds(https(name, path, "-f"))
           assert needs.inline == [], (name, needs.inline)
           assert {directive for directive, _ in needs.fetches} == directives, (name, needs.fetches)
           for directive, url in needs.fetches:
               assert re.match(r"/[^/]", url) and csp_sources(policy, directive) == ["'self'"], (name, directive, url, policy)
 
+  outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
+
+  with subtest("signed-out visitors to members' pages are sent to sign in"):
+      assert https(members, "/", *outcome) == f"303 https://{members}/signin"
+      assert https(members, "/?saved", *outcome) == f"303 https://{members}/signin?next=%2F%3Fsaved"
+
+  with subtest("the session cookie is host-only, Secure, HttpOnly and SameSite=Lax"):
+      credenza.succeed("su - luiz -c 'concierge-admin member adopt mallory'")
+      response = https(members, "/signin", "-D", "-", "-o", "/dev/null", "-H", f"Origin: https://{members}",
+                       "--data-urlencode", "nick=mallory", "--data-urlencode", f"password={mallory['password']}")
+      [cookie] = [line for line in response.splitlines() if line.lower().startswith("set-cookie:")]
+      attributes = {part.strip().split("=")[0].lower() for part in cookie.split(";")[1:]}
+      assert cookie.split(":", 1)[1].strip().startswith("__Host-session="), cookie
+      assert {"path", "httponly", "secure", "samesite"} <= attributes and "domain" not in attributes, cookie
+      assert "SameSite=Lax" in cookie and "Path=/;" in cookie, cookie
+
   with subtest("a POST from another origin, or from nowhere, is refused"):
       for headers in [["-H", "Origin: https://evil.example"], ["-H", "Referer: https://evil.example/"], []]:
-          status = https("members.weblounge.org", "/", "-o", "/dev/null", "-w", "%{http_code}", "--data", "", *headers)
+          status = https(members, "/signin", "-o", "/dev/null", "-w", "%{http_code}", "--data", "", *headers)
           assert status == "403", (headers, status)
 ''
