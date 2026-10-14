@@ -11,7 +11,7 @@ const DAY: i64 = 24 * HOUR;
 /// redeemed or expires.
 pub const MAX_OPEN: i64 = 3;
 /// How long an invite link stays open.
-pub const LIFETIME: i64 = 7 * DAY;
+pub const LIFETIME: i64 = DAY;
 /// How long a redemption holds its invite. Far longer than a redemption
 /// takes (Ergo's API times out after 10 seconds), so an older claim was
 /// abandoned by a process that died midway.
@@ -99,9 +99,9 @@ pub fn may_invite<'a>(
     }
 }
 
-/// A duration of `seconds`, in words: "6 days", "1 day", "5 hours".
+/// A duration of `seconds`, in words: "6 days", "24 hours", "1 hour".
 pub fn in_words(seconds: i64) -> String {
-    let (n, unit) = if seconds >= DAY {
+    let (n, unit) = if seconds >= 2 * DAY {
         (seconds / DAY, "day")
     } else {
         ((seconds / HOUR).max(1), "hour")
@@ -208,8 +208,9 @@ mod tests {
 
     #[test]
     fn says_durations_in_words() {
-        assert_eq!(in_words(LIFETIME), "7 days");
-        assert_eq!(in_words(DAY + HOUR), "1 day");
+        assert_eq!(in_words(LIFETIME), "24 hours");
+        assert_eq!(in_words(7 * DAY + HOUR), "7 days");
+        assert_eq!(in_words(DAY + HOUR), "25 hours");
         assert_eq!(in_words(5 * HOUR + 59), "5 hours");
         assert_eq!(in_words(60), "1 hour");
     }

@@ -315,12 +315,16 @@ fn message(
 /// The one answer for every link that can't be redeemed, whatever the
 /// reason, so a link gives nothing away.
 fn gone(app: &App, visitor: &Visitor) -> Response {
+    let why = format!(
+        "Invites work once and expire after {}. Ask for a new one.",
+        invite_rules::in_words(invite_rules::LIFETIME)
+    );
     message(
         app,
         visitor,
         StatusCode::NOT_FOUND,
         "This invite link doesn't work.",
-        &["Invites are single-use and expire after a week. Ask for a new one."],
+        &[&why],
     )
 }
 

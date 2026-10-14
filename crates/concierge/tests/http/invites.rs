@@ -40,7 +40,7 @@ async fn a_new_invite_shows_its_link_and_qr_code_once() {
     assert!(link.starts_with(&format!("{PUBLIC_URL}/invite/")), "{link}");
     assert!(page.contains(&format!(r#"data-copy="{link}""#)), "{page}");
     assert!(page.contains(&concierge::qr::svg(&link)), "{page}");
-    assert!(page.contains("works once, for 7 days"), "{page}");
+    assert!(page.contains("works once, for 24 hours"), "{page}");
 
     let tab = invites_tab(&site, &cookie).await;
     assert!(invite_links(&tab).is_empty(), "{tab}");

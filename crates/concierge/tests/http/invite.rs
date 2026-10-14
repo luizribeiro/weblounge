@@ -76,6 +76,7 @@ async fn every_unusable_link_gets_the_same_404() {
         "{}",
         pages[0]
     );
+    assert!(pages[0].contains("expire after 24 hours"), "{}", pages[0]);
     assert!(!pages[0].contains("alice"), "{}", pages[0]);
 }
 
