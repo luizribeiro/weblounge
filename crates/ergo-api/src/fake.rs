@@ -50,7 +50,8 @@ type Shared = Arc<Mutex<FakeState>>;
 #[derive(Default)]
 struct FakeState {
     accounts: BTreeMap<String, FakeAccount>,
-    failures: VecDeque<Failure>,
+    /// What to do with the next calls; `None` lets one through.
+    failures: VecDeque<Option<Failure>>,
 }
 
 struct FakeAccount {
@@ -101,7 +102,13 @@ impl FakeErgo {
 
     /// Makes the next call fail; queued failures apply in order.
     pub fn fail_next(&self, failure: Failure) {
-        lock(&self.state).failures.push_back(failure);
+        lock(&self.state).failures.push_back(Some(failure));
+    }
+
+    /// Lets the next call through, so a failure queued after it hits the
+    /// call after that.
+    pub fn pass_next(&self) {
+        lock(&self.state).failures.push_back(None);
     }
 
     /// Shuts the server down, once its port no longer accepts connections.
@@ -131,7 +138,7 @@ async fn gatekeeper(State(state): State<Shared>, request: Request, next: Next) -
     if !authorized {
         return unauthorized();
     }
-    let failure = lock(&state).failures.pop_front();
+    let failure = lock(&state).failures.pop_front().flatten();
     match failure {
         Some(Failure::Unauthorized) => unauthorized(),
         Some(Failure::UnknownError) => refused(ErrorCode::UnknownError, Some("simulated failure")),
@@ -343,6 +350,19 @@ mod tests {
         assert_eq!(error.code(), Some(&ErrorCode::UnknownError));
         let error = client.status().await.unwrap_err();
         assert!(matches!(error, Error::Unauthorized(_)), "{error:?}");
+        client.status().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_failure_queued_after_a_pass_hits_the_call_after_next() {
+        let ergo = FakeErgo::start().await;
+        let client = ergo.client();
+        ergo.pass_next();
+        ergo.fail_next(Failure::UnknownError);
+
+        client.status().await.unwrap();
+        let error = client.status().await.unwrap_err();
+        assert_eq!(error.code(), Some(&ErrorCode::UnknownError));
         client.status().await.unwrap();
     }
 
