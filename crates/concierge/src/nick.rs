@@ -14,6 +14,20 @@ const RESERVED: [&str; 8] = [
 /// The rule in words, for forms to show next to the field.
 pub const RULE: &str = "Up to 32 letters, digits, hyphens and underscores, starting with a letter.";
 
+/// The rule as an HTML `pattern` attribute, so forms check it before
+/// submitting; only the reserved names are left to the server. Browsers
+/// compile patterns with the `v` flag, which wants `-` escaped in a class.
+pub fn html_pattern() -> String {
+    let specials: String = SPECIALS
+        .iter()
+        .map(|&c| match c {
+            '-' => r"\-".to_owned(),
+            c => c.to_string(),
+        })
+        .collect();
+    format!("[A-Za-z][A-Za-z0-9{specials}]{{0,{}}}", MAX_LENGTH - 1)
+}
+
 /// A nick that follows [`RULE`], which is stricter than what Ergo accepts:
 /// it fits in URLs, shells and every IRC client without escaping.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +177,46 @@ mod tests {
             assert_eq!(Nick::parse(nick), Err(InvalidNick::Reserved), "{nick}");
         }
         assert!(Nick::parse("NickServer").is_ok());
+    }
+
+    #[test]
+    fn the_html_pattern_accepts_exactly_what_parse_accepts_but_reserved_names() {
+        let pattern = regex::Regex::new(&format!("^(?:{})$", html_pattern())).unwrap();
+        let lengths = [MAX_LENGTH, MAX_LENGTH + 1].map(|n| "x".repeat(n));
+        let samples = [
+            "alice",
+            "Bob",
+            "c",
+            "dave_2",
+            "e-mc2",
+            "Zed__",
+            "",
+            "2pac",
+            "_alice",
+            "-bob",
+            "al ice",
+            "alice!",
+            "a.b",
+            "a|away",
+            "[m]",
+            r"a\b",
+            "zoë",
+            "#lounge",
+            &lengths[0],
+            &lengths[1],
+        ];
+        for nick in samples {
+            assert_eq!(
+                pattern.is_match(nick),
+                Nick::parse(nick).is_ok(),
+                "{nick:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_html_pattern_escapes_hyphens_for_the_v_flag() {
+        assert_eq!(html_pattern(), r"[A-Za-z][A-Za-z0-9\-_]{0,31}");
     }
 
     #[test]

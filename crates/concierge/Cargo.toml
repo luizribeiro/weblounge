@@ -20,5 +20,6 @@ tower-livereload = "0.10.3"
 [dev-dependencies]
 ergo-api = { path = "../ergo-api", features = ["fake"] }
 http-body-util = "0.1.5"
+regex = "1.13.1"
 tempfile = "3.27.0"
 tower = { version = "0.5.3", features = ["util"] }
