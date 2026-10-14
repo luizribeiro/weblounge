@@ -13,9 +13,11 @@ workflow and layout.
   `<host>-vm` package automatically; don't wire them up by hand.
 - Behaviour changes to a host should come with a subtest in `tests/e2e/`,
   in the file for that area (`host`, `landing`, `ergo`, `concierge`,
-  `security`). Every `tests/*.nix` and `tests/e2e/*.nix` becomes a flake
-  check automatically; VM tests are `{ vmTest, ... }: vmTest ''…''` and
-  share `tests/e2e/lib/helpers.py`.
+  `security`). Every `tests/e2e/*.py` is a VM test and `tests/*.nix` a
+  flake check, automatically. A VM test imports what the driver and
+  `tests/e2e/lib/helpers.py` give it under `if TYPE_CHECKING:`, for ruff
+  and ty; a `<name>.nix` beside it adds browsers or node config. Eval
+  tests in `tests/` are nix-unit test sets; `just nix-unit` runs them.
 - Web pages must work on phones and desktops (fluid layouts, 44px touch
   targets, 16px inputs); check both widths with a headless browser before
   committing UI changes.
@@ -32,3 +34,5 @@ workflow and layout.
 - `ssh-ng://localhost` is treated as the local store by `nix copy`; the VM
   recipes use `127.0.0.1` for that reason.
 - `sshd -T` prints keywords in CamelCase; lowercase before matching.
+- VM test scripts are plain Python, so Nix can't interpolate into them;
+  programs production lacks come from `tools` in `tests/e2e/lib/lib.nix`.
