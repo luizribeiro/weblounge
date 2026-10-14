@@ -110,5 +110,14 @@ in
     description = "IRC bots on weblounge.org, each with an account of its own.";
   };
 
-  config.systemd.services = lib.mapAttrs' service enabled;
+  config = {
+    assertions = lib.mapAttrsToList
+      (name: bot: {
+        assertion = !lib.hasPrefix builtins.storeDir bot.passwordFile;
+        message = "services.weblounge-bot.${name}.passwordFile is in the Nix store, which anyone on the machine can read.";
+      })
+      enabled;
+
+    systemd.services = lib.mapAttrs' service enabled;
+  };
 }
