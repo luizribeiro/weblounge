@@ -59,6 +59,28 @@ at compile time against the metadata in `crates/concierge/.sqlx`. After
 changing a query or adding a migration to `crates/concierge/migrations`,
 run `just concierge prepare` and commit what it writes.
 
+## The web client
+
+`https://irc.weblounge.org` serves [gamja](https://codeberg.org/emersion/gamja)
+from nixpkgs, with a small patch (`pkgs/gamja-oauth2.patch`) that makes it
+send a state and a PKCE challenge. A member signed in on the members' site
+lands in #lounge without typing anything:
+
+1. gamja's `config.json`, generated in `services/webchat.nix`, sends it to
+   concierge's `/oauth/authorize`. Concierge, a small OAuth 2.0 server,
+   issues a one-minute, single-use code to the signed-in member, or has
+   them sign in first.
+2. gamja trades the code and its PKCE verifier at `/oauth/token` for an
+   access token that lasts as long as the member's session; signing out
+   or a password reset ends it.
+3. gamja connects to `wss://irc.weblounge.org/socket`, which nginx proxies
+   to Ergo's WebSocket listener on `127.0.0.1:8097`, and logs in with SASL
+   OAUTHBEARER. Ergo asks concierge's `/oauth/introspect` on loopback whose
+   token it is, authenticating with the generated
+   `oauth-introspection-secret`, and never creates an account for it.
+
+In the VM it's at https://irc.weblounge.localhost:10443.
+
 ## Running a server locally
 
 `just vm start` boots credenza's real configuration in a QEMU VM on your
@@ -70,6 +92,7 @@ machine, with ports forwarded from localhost:
 | HTTP    | http://weblounge.localhost:10080                 |
 | HTTPS   | https://weblounge.localhost:10443 (self-signed)  |
 | Members | https://members.weblounge.localhost:10443        |
+| Chat    | https://irc.weblounge.localhost:10443            |
 | IRC     | irc.weblounge.localhost:16697, TLS (self-signed) |
 
 The VM's names live under `weblounge.localhost`, which browsers resolve to
