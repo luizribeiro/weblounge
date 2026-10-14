@@ -92,7 +92,7 @@ vmTest ''
       credenza.succeed("systemctl restart ergochat")
       credenza.wait_for_open_port(6697)
       credenza.wait_until_succeeds(
-          f"systemctl start ergo-history-vacuum && ! grep -rqaF {shlex.quote(said_in_channel)} /var/lib/private/ergo", timeout=60
+          f"systemctl start ergochat-vacuum && ! grep -rqaF {shlex.quote(said_in_channel)} /var/lib/private/ergo", timeout=60
       )
       found = files_containing(said_in_channel)
       assert found == [], found
