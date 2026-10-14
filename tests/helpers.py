@@ -35,6 +35,36 @@ def https(name, path="/", *flags):
     ))
 
 
+members = "members.weblounge.org"
+outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
+
+
+def concierge_admin_command(*args):
+    return f"su - luiz -c {shlex.quote(shlex.join(['concierge-admin', *args]))}"
+
+
+def concierge_admin(*args):
+    return credenza.succeed(concierge_admin_command(*args))
+
+
+class Browser:
+    """Someone visiting members.weblounge.org from the client, with their own cookies."""
+
+    def __init__(self, name):
+        self.cookies = ["-b", f"/tmp/cookies-{name}", "-c", f"/tmp/cookies-{name}"]
+
+    def get(self, path, *flags):
+        return https(members, path, *self.cookies, *flags)
+
+    def post(self, path, *fields, flags=outcome):
+        """Posts a form the way concierge's own pages do."""
+        data = [arg for field in fields for arg in ["--data-urlencode", field]] or ["--data", ""]
+        return https(members, path, *self.cookies, "-H", f"Origin: https://{members}", *flags, *data)
+
+    def sign_in(self, account, password):
+        return self.post("/signin", f"nick={account}", f"password={password}")
+
+
 def assert_client_address_absent(logs):
     addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
     patterns = shlex.join(arg for address in addresses for arg in ["-e", address])

@@ -3,12 +3,6 @@
 vmTest ''
   import re
 
-  def concierge_admin_command(*args):
-      return f"su - luiz -c {shlex.quote(shlex.join(['concierge-admin', *args]))}"
-
-  def concierge_admin(*args):
-      return credenza.succeed(concierge_admin_command(*args))
-
   with subtest("members.weblounge.org serves concierge's sign-in page in the shared styles"):
       credenza.wait_for_unit("nginx.service")
       credenza.wait_for_unit("concierge.service")
@@ -85,48 +79,35 @@ vmTest ''
       session = irc(account="Dana", password=password)
       assert " 903 " in session, session
 
-  members = "members.weblounge.org"
-  from_our_pages = ["-H", f"Origin: https://{members}"]
-  cookie_jar = ["-b", "/tmp/cookies", "-c", "/tmp/cookies"]
-  outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
-
-  def members_get(path, *flags):
-      return https(members, path, *cookie_jar, *flags)
-
-  def members_post(path, *fields):
-      data = [arg for field in fields for arg in ["--data-urlencode", field]] or ["--data", ""]
-      return https(members, path, *cookie_jar, *from_our_pages, *outcome, *data)
-
-  def sign_in(account, password):
-      return members_post("/signin", f"nick={account}", f"password={password}")
+  browser = Browser("dana")
 
   with subtest("an adopted member signs in to the website with their IRC password"):
-      signed_in = sign_in("dana", password)
+      signed_in = browser.sign_in("dana", password)
       assert signed_in == f"303 https://{members}/", signed_in
-      home = members_get("/", "-f")
+      home = browser.get("/", "-f")
       assert "<h1>Dana</h1>" in home, home
       assert "<code>irc.weblounge.org</code>" in home and "<code>6697</code>" in home, home
 
   with subtest("a member changes their email and news setting on the account home"):
-      saved = members_post("/settings", "email=dana@example.org", "news=on")
+      saved = browser.post("/settings", "email=dana@example.org", "news=on")
       assert saved == f"303 https://{members}/?saved", saved
-      home = members_get("/?saved", "-f")
+      home = browser.get("/?saved", "-f")
       assert "Saved." in home and 'value="dana@example.org"' in home, home
       assert 'type="checkbox" checked' in home, home
 
   with subtest("signing out ends the session"):
-      signed_out = members_post("/signout")
+      signed_out = browser.post("/signout")
       assert signed_out == f"303 https://{members}/signin", signed_out
-      after = members_get("/", *outcome)
+      after = browser.get("/", *outcome)
       assert after == f"303 https://{members}/signin", after
 
   with subtest("concierge-admin member reset-password ends the member's website sessions"):
-      assert sign_in("dana", password).startswith("303 ")
-      assert members_get("/", *outcome).startswith("200 ")
+      assert browser.sign_in("dana", password).startswith("303 ")
+      assert browser.get("/", *outcome).startswith("200 ")
       new_password = concierge_admin("member", "reset-password", "dana").strip()
-      after = members_get("/", *outcome)
+      after = browser.get("/", *outcome)
       assert after == f"303 https://{members}/signin", after
-      assert sign_in("dana", new_password).startswith("303 ")
+      assert browser.sign_in("dana", new_password).startswith("303 ")
 
   with subtest("the passwords never reach the journal"):
       credenza.succeed("journalctl --sync")
