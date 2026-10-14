@@ -93,6 +93,7 @@ mod delete {
             "removed alice (sessions ended: 1, invites revoked: 1)\n\
              Ergo's API can't delete accounts: an oper must run /NS ERASE alice\n"
         );
+        assert!(!fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
         let db = fixture.db().await;
         let alice = db.member("alice").await.unwrap().unwrap();
         assert!(alice.removed_at.is_some());
@@ -152,6 +153,22 @@ mod delete {
         let db = fixture.db().await;
         assert_eq!(db.member("alice").await.unwrap().unwrap().removed_at, None);
         assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn keeps_the_member_when_ergo_fails_to_lock_them_out() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.sign_in("alice", b"alice-laptop").await;
+        fixture.ergo.fail_next(Failure::UnknownError);
+
+        let error = fixture.run(&["member", "delete", "alice"]).await;
+
+        assert!(error.is_err());
+        assert!(fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
+        let db = fixture.db().await;
+        assert_eq!(db.member("alice").await.unwrap().unwrap().removed_at, None);
+        assert_eq!(db.end_sessions("alice").await.unwrap(), 1);
     }
 
     #[tokio::test]

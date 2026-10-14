@@ -156,7 +156,7 @@ machine. They print plain lines a script can read:
 | `status`                                        | Configuration, secrets, database and whether Ergo answers        |
 | `invite create --root [--admin]`                | Prints a root invite's link; `--admin` makes its redeemer admin  |
 | `member reset-password <account>`               | Sets a new generated password, ends sessions, prints it once     |
-| `member delete <account>`                       | Removes a member's data and bots; their place in the tree stays  |
+| `member delete <account>`                       | Locks a member out, removes data and bots; their place stays     |
 | `member reconcile`                              | Lists accounts Ergo and concierge disagree on, bots included     |
 | `bot create <owner> <name> [--note …]`          | Registers a member's bot, prints its generated password once     |
 | `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
