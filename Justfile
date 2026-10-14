@@ -6,7 +6,7 @@ mod concierge 'just/concierge.just'
 default:
   @just --list --list-submodules
 
-# Everything CI and the pre-push hook run: builds, VM tests, lint
+# Everything CI runs: builds, VM tests, lint
 check *args:
   nix flake check -L {{args}}
 

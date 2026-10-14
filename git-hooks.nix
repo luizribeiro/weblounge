@@ -9,6 +9,7 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
       enable = true;
       # A diff's blank context lines are a single space.
       excludes = [ "\\.patch$" ];
+      stages = [ "pre-commit" ];
     };
 
     nixpkgs-fmt.enable = true;
@@ -35,15 +36,6 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
       enable = true;
       types_or = [ "ts" "css" "json" ];
       settings.flags = "--no-errors-on-unmatched";
-    };
-
-    flake-check = {
-      enable = true;
-      name = "nix flake check";
-      entry = "${pkgs.just}/bin/just check";
-      pass_filenames = false;
-      always_run = true;
-      stages = [ "pre-push" ];
     };
   };
 }
