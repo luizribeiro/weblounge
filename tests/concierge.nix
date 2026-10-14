@@ -1,6 +1,8 @@
 { vmTest, ... }:
 
 vmTest {
+  browsers.account-browser = ./account-browser.py;
+
   script = ''
     import html
     import re
@@ -122,6 +124,10 @@ vmTest {
         assert '<input name="always_on" type="checkbox">' in tab, tab
         assert '<input name="auto_away" type="checkbox" checked>' in tab, tab
         assert "Both on by default." in tab, tab
+
+    with subtest("in a browser, the Account tab's Save buttons turn on only for changes"):
+        result = client.succeed(f"account-browser dana {shlex.quote(password)} 2>&1")
+        assert "save buttons follow changes" in result, result
 
     with subtest("the invite tree lists a new member under whoever invited them"):
         assert browser.post("/invites") == f"303 https://{members}/invites?invited"

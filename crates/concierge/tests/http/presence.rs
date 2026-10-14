@@ -31,7 +31,9 @@ fn checked(page: &str, input: &str) -> bool {
 async fn the_network_default_shows_as_on_under_opt_out() {
     let (site, cookie) = signed_in_alice().await;
     let page = body_text(site.get("/account", Some(&cookie)).await).await;
-    assert!(page.contains(r#"<form class="form" method="post" action="/irc-settings">"#));
+    assert!(page.contains(
+        r#"<form class="form" method="post" action="/irc-settings" data-save-when-changed>"#
+    ));
     assert!(checked(&page, ALWAYS_ON), "{page}");
     assert!(checked(&page, AUTO_AWAY), "{page}");
     assert!(page.contains("Both on by default."), "{page}");

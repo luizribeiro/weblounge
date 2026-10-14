@@ -1,6 +1,7 @@
 import { animateChair } from "./chair/animate";
 import "./password";
 import "./signup";
+import "./unsaved";
 
 const FEEDBACK_MS = 1500;
 

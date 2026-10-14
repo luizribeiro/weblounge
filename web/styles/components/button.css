@@ -13,8 +13,13 @@
   font-weight: 500;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--soft);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 }
 
@@ -23,7 +28,7 @@
   background: var(--fg);
   color: var(--bg);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--fg);
     opacity: 0.88;
   }

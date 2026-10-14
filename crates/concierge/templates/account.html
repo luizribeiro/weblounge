@@ -28,7 +28,7 @@
         {%- if flash.saved.is_some() %}
         <p class="notice" role="status">Saved.</p>
         {%- endif %}
-        <form class="form" method="post" action="/settings">
+        <form class="form" method="post" action="/settings" data-save-when-changed>
           <div class="field">
             <label for="email">Email</label>
             <input id="email" name="email" type="email" value="{{ settings.email }}" required maxlength="{{ email_max_length }}" pattern="{{ email_pattern }}" autocomplete="email" aria-describedby="email-hint"{% if settings.email_error.is_some() %} aria-invalid="true"{% endif %}>
@@ -55,7 +55,7 @@
         {%- endif %}
         {%- match presence %}
         {%- when Ok(presence) %}
-        <form class="form" method="post" action="/irc-settings">
+        <form class="form" method="post" action="/irc-settings" data-save-when-changed>
           <label class="check">
             <input name="always_on" type="checkbox"{% if presence.always_on %} checked{% endif %}>
             <span>Always on <span class="hint">· stay in channels and keep history with no client open</span></span>

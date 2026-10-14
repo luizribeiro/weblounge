@@ -7,6 +7,10 @@ async fn shows_the_email_and_news_settings() {
     let cookie = site.sign_in("alice").await;
     let page = body_text(site.get("/account", Some(&cookie)).await).await;
     assert!(
+        page.contains(r#"action="/settings" data-save-when-changed>"#),
+        "{page}"
+    );
+    assert!(
         page.contains(r#"type="email" value="someone@example.org" required maxlength="254""#),
         "{page}"
     );
