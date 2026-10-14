@@ -11,7 +11,7 @@ vmTest ''
   pages_and_directives_they_need = {
       "weblounge.org": ("/", {"script-src", "style-src", "img-src"}),
       members: ("/signin", {"script-src", "style-src", "img-src"}),
-      "irc.weblounge.org": ("/", {"script-src", "style-src", "manifest-src"}),
+      "irc.weblounge.org": ("/", {"script-src", "style-src", "img-src", "manifest-src"}),
   }
 
   def assert_loopback_only(port, path):
