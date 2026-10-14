@@ -1,6 +1,6 @@
-"""Headless Chromium on the client, signed in on members.weblounge.org, for
-the tests' Playwright scripts. Fails on any console error, which is where
-CSP violations go."""
+"""Headless Chromium on the client, on members.weblounge.org, for the tests'
+Playwright scripts. Fails on any console error, which is where CSP
+violations go."""
 
 from contextlib import contextmanager
 
@@ -11,7 +11,7 @@ TIMEOUT_MS = 30_000
 
 
 @contextmanager
-def signed_in(nick, password):
+def browsing():
     errors = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
@@ -22,13 +22,18 @@ def signed_in(nick, password):
         expect.set_options(timeout=TIMEOUT_MS)
         page.on("console", lambda message: message.type == "error"
                 and errors.append(message.text))
+        yield page
+        browser.close()
+    if errors:
+        raise SystemExit("console errors:\n" + "\n".join(errors))
 
+
+@contextmanager
+def signed_in(nick, password):
+    with browsing() as page:
         page.goto(f"{MEMBERS}/signin")
         page.fill("#nick", nick)
         page.fill("#password", password)
         page.click("button[type=submit]")
         page.wait_for_url(f"{MEMBERS}/")
         yield page
-        browser.close()
-    if errors:
-        raise SystemExit("console errors:\n" + "\n".join(errors))

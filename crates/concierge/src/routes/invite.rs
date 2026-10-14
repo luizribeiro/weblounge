@@ -297,7 +297,7 @@ fn welcome(
 }
 
 /// The invite `code`, if anyone could redeem it right now.
-async fn open_invite(app: &App, code: &str) -> sqlx::Result<Option<Invite>> {
+pub(super) async fn open_invite(app: &App, code: &str) -> sqlx::Result<Option<Invite>> {
     let invite = app.db.invite(code).await?;
     Ok(invite.filter(|invite| invite.status(db::now()) == invite_rules::Status::Open))
 }
@@ -327,7 +327,7 @@ fn message(
 
 /// The one answer for every code that can't be redeemed, whatever the
 /// reason, so a code gives nothing away.
-fn unusable_code() -> String {
+pub(super) fn unusable_code() -> String {
     format!(
         "This invite doesn't work. Invites work once and expire after {}; ask for a new one.",
         invite_rules::in_words(invite_rules::LIFETIME)

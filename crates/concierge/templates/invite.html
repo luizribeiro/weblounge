@@ -8,9 +8,9 @@
         <section class="invite-intro">
           <p class="eyebrow">Invitation</p>
           {%- if let Some(inviter) = inviter %}
-          <h1>{{ inviter }} saved you a seat.</h1>
+          <h1 data-invite-heading>{{ inviter }} saved you a seat.</h1>
           {%- else %}
-          <h1>You're invited.</h1>
+          <h1 data-invite-heading>You're invited.</h1>
           {%- endif %}
           <p class="lede">A small IRC network for friends. Use the browser or any client. Home is #lounge.</p>
         </section>
@@ -19,7 +19,7 @@
           <form class="form" method="post" action="/invite" data-signup>
             <div class="field" data-invite-code>
               <label for="code">Invite code</label>
-              <input id="code" name="code" value="{{ form.code }}" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="code-hint"{% if form.code_error.is_some() %} aria-invalid="true"{% endif %}>
+              <input id="code" name="code" value="{{ form.code }}" required autocomplete="off" data-lookup="/signup/invite" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="code-hint"{% if form.code_error.is_some() %} aria-invalid="true"{% endif %}>
               {%- if let Some(error) = form.code_error %}
               <p class="field-error" id="code-hint">{{ error }}</p>
               {%- else %}

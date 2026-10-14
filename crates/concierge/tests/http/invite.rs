@@ -31,7 +31,7 @@ async fn the_signup_page_asks_for_the_code_and_the_account() {
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["cache-control"], "no-store");
     let page = body_text(response).await;
-    assert!(page.contains("<h1>You're invited.</h1>"), "{page}");
+    assert!(page.contains("<h1 data-invite-heading>You're invited.</h1>"), "{page}");
     assert!(page.contains(r#"action="/invite""#), "{page}");
     for field in [
         r#"name="code" value="" required autocomplete="off""#,
@@ -59,7 +59,7 @@ async fn a_mistake_keeps_the_code_and_names_whoever_sent_it() {
 
     assert_eq!(response.status(), 422);
     let page = body_text(response).await;
-    assert!(page.contains("<h1>Alice saved you a seat.</h1>"), "{page}");
+    assert!(page.contains("<h1 data-invite-heading>Alice saved you a seat.</h1>"), "{page}");
     assert!(
         page.contains(&format!(r#"name="code" value="{CODE}""#)),
         "{page}"

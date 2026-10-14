@@ -103,6 +103,60 @@ async fn an_address_gets_a_limited_number_of_lookups() {
     assert_eq!(lookup(&site, "bob", "198.51.100.9").await.0, 200);
 }
 
+async fn invite_lookup(site: &Site, code: &str, origin: &str) -> (u16, String) {
+    let headers = [
+        (header::ORIGIN.as_str(), origin),
+        ("x-real-ip", "192.0.2.7"),
+    ];
+    let response = site
+        .post_with("/signup/invite", &[("code", code)], None, &headers)
+        .await;
+    (response.status().as_u16(), body_text(response).await)
+}
+
+#[tokio::test]
+async fn says_who_sent_an_open_invite_and_why_others_wont_work() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.add_invite("q7Hx2mZp9vLcT4wRfBa-_w", Some("alice")).await;
+    site.add_invite("rootRootRootRootRoot-_", None).await;
+    site.add_invite("usedUsedUsedUsedUsed-_", Some("alice")).await;
+    site.execute("UPDATE invites SET revoked_at = 1 WHERE code = 'usedUsedUsedUsedUsed-_'")
+        .await;
+    let from_alice = r#"{"status":"open","inviter":"alice"}"#;
+    let unusable = r#"{"status":"unusable","error":"This invite doesn't work. Invites work once and expire after 24 hours; ask for a new one."}"#;
+    for (code, answer) in [
+        ("q7Hx2mZp9vLcT4wRfBa-_w", from_alice),
+        (
+            "https://members.weblounge.org/invite#q7Hx2mZp9vLcT4wRfBa-_w",
+            from_alice,
+        ),
+        ("rootRootRootRootRoot-_", r#"{"status":"open","inviter":null}"#),
+        ("usedUsedUsedUsedUsed-_", unusable),
+        ("unknown", unusable),
+        ("", unusable),
+    ] {
+        assert_eq!(
+            invite_lookup(&site, code, PUBLIC_URL).await,
+            (200, answer.to_owned()),
+            "{code}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn invite_lookups_share_the_limit_and_refuse_other_origins() {
+    let site = Site::start().await;
+    for _ in 0..LOOKUPS_PER_ADDRESS {
+        lookup(&site, "bob", "192.0.2.7").await;
+    }
+    assert_eq!(invite_lookup(&site, "x", PUBLIC_URL).await.0, 429);
+    assert_eq!(
+        invite_lookup(&site, "x", "https://evil.example").await.0,
+        403
+    );
+}
+
 #[tokio::test]
 async fn lookups_from_other_origins_are_refused() {
     let site = Site::start().await;
