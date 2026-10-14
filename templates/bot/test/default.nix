@@ -122,9 +122,16 @@ pkgs.testers.runNixOSTest {
         _, text = answer(session, "${asker.account}")
         assert text == "pong", session
 
-    with subtest("the bot runs as an unprivileged user that can't read the password file"):
+    with subtest("the bot comes back after the server restarts, and answers again"):
+        ircd.succeed("systemctl restart ergochat")
+        ircd.wait_for_open_port(6697)
+        bot.wait_until_succeeds("journalctl -u weblounge-bot-${bot.nick} | grep -c 'connected to ircd:6697' | grep -qx 2", timeout=90)
+        tags, text = answer(ping("#bots"), "#bots")
+        assert "bot" in tags and text == "${asker.account}: pong", (tags, text)
+
+    with subtest("the bot runs as an unprivileged user and keeps its password out of the journal"):
         uid = bot.succeed("stat -c %u /proc/$(systemctl show -P MainPID weblounge-bot-${bot.nick})").strip()
         assert uid != "0", uid
-        bot.fail(f"setpriv --reuid={uid} --regid={uid} --clear-groups cat /run/keys/bot-password")
+        bot.fail("journalctl | grep -qF ${bot.password}")
   '';
 }

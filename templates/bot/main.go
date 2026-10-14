@@ -35,6 +35,7 @@ func main() {
 		Log:           log.Default(),
 	}
 	irc.AddConnectCallback(func(ircmsg.Message) {
+		log.Printf("connected to %s as %s", cfg.server, irc.CurrentNick())
 		irc.Send("MODE", irc.CurrentNick(), "+B")
 		for _, channel := range cfg.channels {
 			irc.Join(channel)
@@ -47,7 +48,6 @@ func main() {
 	if err := irc.Connect(); err != nil {
 		log.Fatalf("connecting to %s: %v", cfg.server, err)
 	}
-	log.Printf("connected to %s as %s", cfg.server, irc.CurrentNick())
 
 	// Installed only once connected: a Quit during Connect would leave Loop
 	// waiting on a connection nothing closes.

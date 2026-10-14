@@ -53,7 +53,7 @@ def main():
                 if args.target.startswith("#"):
                     send(f"JOIN {args.target}")
                 send(f"PRIVMSG {args.target} :!ping")
-            elif command == "PRIVMSG" and line.endswith(" :!ping"):
+            elif line.endswith(f" PRIVMSG {args.target} :!ping"):
                 pinged = pinged or source.startswith(f":{args.account}!")
             elif command == "PRIVMSG" and source.startswith(f":{args.bot}!"):
                 if pinged:
