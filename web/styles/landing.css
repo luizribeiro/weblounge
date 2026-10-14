@@ -1,0 +1,66 @@
+@import "./tokens.css";
+@import "./base.css";
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+/* Proportions follow the stacked lockup: the wordmark is 1.164× the chair's
+   box and sits 0.049× below it. */
+main {
+  --w: min(520px, 72vw, 62vh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The chair keeps room above the drawing for pulled nodes; this evens out
+     the visible logo's position. */
+  margin-bottom: calc(var(--w) * 0.0528);
+}
+
+#chair {
+  display: block;
+  width: var(--w);
+  height: auto;
+  -webkit-user-select: none;
+  user-select: none;
+  isolation: isolate;
+
+  & .node-target {
+    fill: transparent;
+    pointer-events: all;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  &[data-grabbing],
+  &[data-grabbing] * {
+    /* biome-ignore lint/complexity/noImportantStyles: mid-drag, the grabbing cursor must beat every descendant's own cursor */
+    cursor: grabbing !important;
+  }
+}
+
+.packets {
+  fill: var(--accent);
+
+  @media (prefers-reduced-motion: reduce) {
+    display: none;
+  }
+}
+
+h1 {
+  margin: calc(var(--w) * 0.049) 0 0;
+  line-height: 0;
+
+  & svg {
+    display: block;
+    width: calc(var(--w) * 1.164);
+    height: auto;
+  }
+}

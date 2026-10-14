@@ -3,6 +3,8 @@
 let
   inherit (nixpkgs) lib;
 
+  overlay = import ../pkgs;
+
   hostNames = builtins.attrNames
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir ../hosts));
 
@@ -24,7 +26,7 @@ let
       self.nixosConfigurations);
 in
 {
-  inherit hosts hostModules;
+  inherit overlay hosts hostModules;
 
   vmPackages = perHostOutput (name: host: {
     "${name}-vm" = host.config.virtualisation.vmVariant.system.build.vm;

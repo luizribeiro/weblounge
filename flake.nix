@@ -19,17 +19,21 @@
       weblounge = import ./lib inputs;
       devSystems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
       forEachSystem = f: lib.genAttrs devSystems
-        (system: f nixpkgs.legacyPackages.${system});
+        (system: f (nixpkgs.legacyPackages.${system}.extend weblounge.overlay));
       gitHooks = forEachSystem (pkgs: import ./git-hooks.nix { inherit git-hooks pkgs; });
     in
     {
       nixosConfigurations = weblounge.hosts;
 
-      packages = weblounge.vmPackages;
+      overlays.default = weblounge.overlay;
+
+      packages = lib.recursiveUpdate weblounge.vmPackages
+        (forEachSystem (pkgs: { inherit (pkgs.weblounge) web; }));
 
       checks = lib.foldl' lib.recursiveUpdate { } [
         weblounge.toplevelChecks
         (lib.mapAttrs (_: hooks: { git-hooks = hooks; }) gitHooks)
+        (forEachSystem (pkgs: { web-typecheck = pkgs.weblounge.web.typecheck; }))
         {
           x86_64-linux.credenza = import ./tests/credenza.nix {
             inherit weblounge;
