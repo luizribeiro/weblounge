@@ -6,12 +6,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest, tools
-    from helpers import Account, Browser, add_member, concierge_sql, ergo_api, https, invite_code, irc
+    from helpers import Account, Browser, add_member, concierge_sql, ergo_api, https, invite_code, irc, members, outcome
 
 mallory: Account = {"account": "mallory", "password": "an-insider-gone-bad"}
 tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
 sites = ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]
-members = "members.weblounge.org"
 pages_and_directives_they_need = {
     "weblounge.org": ("/", {"script-src", "style-src", "img-src"}),
     members: ("/signin", {"script-src", "style-src", "img-src"}),
@@ -170,8 +169,6 @@ with subtest("the landing page, concierge and gamja load all they need under the
 with subtest("concierge's pages fetch from their own origin alone, for the checks they make as you type"):
     policy = headers_of(members, "/signin")["content-security-policy"]
     assert csp_sources(policy, "connect-src") == ["'self'"], policy
-
-outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
 
 
 def sign_in(account, password, *headers):
