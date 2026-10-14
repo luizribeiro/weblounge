@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, os::unix::fs::MetadataExt, path::Path};
 
 use anyhow::Context;
 
@@ -9,20 +9,24 @@ const PROBE: &str = ".concierge-status-probe";
 /// What an admin needs to see that this process runs with the service's
 /// configuration, state and secrets.
 pub fn report(config: &Config) -> anyhow::Result<String> {
-    check_writable(&config.state_dir)?;
+    let uid = writer_uid(&config.state_dir)?;
     let key = config.read_session_key()?;
     Ok(format!(
-        "public url: {}\nstate directory: {} (writable)\nsession key: {} bytes\n",
+        "public url: {}\nstate directory: {} (writable by uid {uid})\nsession key: {} bytes\n",
         config.public_url,
         config.state_dir.display(),
         key.len()
     ))
 }
 
-fn check_writable(dir: &Path) -> anyhow::Result<()> {
+/// The owner of a file this process writes, which tells an admin whose
+/// identity it runs under.
+fn writer_uid(dir: &Path) -> anyhow::Result<u32> {
     let probe = dir.join(PROBE);
-    fs::write(&probe, b"")
-        .and_then(|()| fs::remove_file(&probe))
+    let written = fs::write(&probe, b"").and_then(|()| fs::metadata(&probe));
+    let removed = fs::remove_file(&probe);
+    written
+        .and_then(|metadata| removed.map(|()| metadata.uid()))
         .with_context(|| format!("state directory {} is not writable", dir.display()))
 }
 
@@ -57,9 +61,10 @@ mod tests {
             report,
             format!(
                 "public url: https://members.weblounge.localhost:10443\n\
-                 state directory: {} (writable)\n\
+                 state directory: {} (writable by uid {})\n\
                  session key: 64 bytes\n",
-                state.path().display()
+                state.path().display(),
+                fs::metadata(state.path()).unwrap().uid()
             )
         );
         assert_eq!(fs::read_dir(state.path()).unwrap().count(), 0);

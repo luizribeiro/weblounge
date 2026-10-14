@@ -224,6 +224,21 @@ pkgs.testers.runNixOSTest {
     with subtest("concierge listens on credenza's loopback only"):
         assert_loopback_only(8080, "/healthz")
 
+    with subtest("concierge-admin runs concierge as the service does, with its state and session key"):
+        service_uid = credenza.succeed("ps -o uid= -p $(systemctl show -P MainPID concierge)").strip()
+        assert service_uid != "0", service_uid
+        status = credenza.succeed("su - luiz -c 'concierge-admin status'")
+        assert status == (
+            "public url: https://members.weblounge.org\n"
+            f"state directory: /var/lib/concierge (writable by uid {service_uid})\n"
+            "session key: 64 bytes\n"
+        ), (service_uid, status)
+        credenza.fail("su - luiz -c 'concierge-admin no-such-command'")
+
+    with subtest("the session key stays out of the Nix store"):
+        key = credenza.succeed("cat /var/lib/weblounge-secrets/session-key").strip()
+        credenza.fail(f"{{ systemctl cat concierge; cat $(readlink -f $(command -v concierge-admin)); }} | grep -qF {key}")
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()

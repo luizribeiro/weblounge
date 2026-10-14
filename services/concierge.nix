@@ -5,6 +5,33 @@ let
   inherit (config.weblounge) domain httpsPort;
   hostName = "members.${domain}";
   publicUrl = "https://${hostName}" + lib.optionalString (httpsPort != 443) ":${toString httpsPort}";
+  concierge = lib.getExe pkgs.weblounge.concierge;
+
+  # concierge-admin runs with the rest of the unit's serviceConfig, so admin
+  # commands see exactly the identity, state and secrets the service does.
+  serviceOnly = {
+    ExecStart = "${concierge} serve";
+    Restart = "on-failure";
+  };
+
+  sharedProperties = removeAttrs config.systemd.services.concierge.serviceConfig
+    (lib.attrNames serviceOnly);
+
+  systemdValue = value: if lib.isBool value then lib.boolToYesNo value else toString value;
+
+  propertyFlags = lib.concatLists (lib.mapAttrsToList
+    (name: values: map (value: "--property=${name}=${systemdValue value}") (lib.toList values))
+    sharedProperties);
+
+  admin = pkgs.writeShellApplication {
+    name = "concierge-admin";
+    text = ''
+      exec ${config.security.wrapperDir}/sudo ${config.systemd.package}/bin/systemd-run \
+        --quiet --pipe --wait --collect --service-type=exec \
+        ${lib.escapeShellArgs propertyFlags} \
+        ${concierge} "$@"
+    '';
+  };
 in
 {
   imports = [ ./loopback.nix ./nginx.nix ./secrets.nix ];
@@ -24,10 +51,7 @@ in
       description = "Concierge, the members' site";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
-      serviceConfig = {
-        ExecStart = "${lib.getExe pkgs.weblounge.concierge} serve";
-        Restart = "on-failure";
-
+      serviceConfig = serviceOnly // {
         User = "concierge";
         DynamicUser = true;
         StateDirectory = "concierge";
@@ -66,6 +90,8 @@ in
         SystemCallFilter = [ "@system-service" "~@privileged" ];
       };
     };
+
+    environment.systemPackages = [ admin ];
 
     services.nginx.virtualHosts.${hostName} = {
       enableACME = true;
