@@ -229,3 +229,24 @@
     color: var(--danger);
   }
 }
+
+.pick {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+
+  &:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  & h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+
+  & p {
+    margin: 0;
+  }
+}

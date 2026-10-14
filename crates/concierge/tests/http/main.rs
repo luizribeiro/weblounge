@@ -7,6 +7,7 @@ mod invite;
 mod pages;
 mod security;
 mod signin;
+mod signup;
 
 use std::path::Path;
 
@@ -38,19 +39,24 @@ struct Site {
     router: Router,
     db: Db,
     ergo: FakeErgo,
-    _state: TempDir,
+    state: TempDir,
 }
 
 impl Site {
     async fn start() -> Self {
-        let ergo = FakeErgo::start().await;
+        Self::start_with_ergo(None).await
+    }
+
+    /// A site that talks to `ergo` instead of its fake, if given one.
+    async fn start_with_ergo(ergo: Option<ergo_api::Client>) -> Self {
+        let fake = FakeErgo::start().await;
         let state = tempfile::tempdir().unwrap();
         let db = Db::open(&state.path().join("concierge.db")).await.unwrap();
         let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/assets");
         let router = app::router(App {
             assets: Assets::load(&fixtures).unwrap(),
             db: db.clone(),
-            ergo: ergo.client(),
+            ergo: ergo.unwrap_or_else(|| fake.client()),
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),
             public_url: PUBLIC_URL.into(),
@@ -59,8 +65,8 @@ impl Site {
         Self {
             router,
             db,
-            ergo,
-            _state: state,
+            ergo: fake,
+            state,
         }
     }
 
@@ -126,13 +132,11 @@ impl Site {
 
     /// Runs SQL the site has no query for, to set up a test.
     async fn execute(&self, sql: &str) {
-        let url = format!(
-            "sqlite://{}",
-            self._state.path().join("concierge.db").display()
-        );
-        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
-        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
-        pool.close().await;
+        execute(&self.database_path(), sql).await;
+    }
+
+    fn database_path(&self) -> std::path::PathBuf {
+        self.state.path().join("concierge.db")
     }
 
     /// An open invite from `created_by`, or a root invite.
@@ -172,6 +176,13 @@ impl Site {
         let session = self.db.session(&hash, db::now()).await.unwrap();
         session.map(|session| session.expires_at)
     }
+}
+
+async fn execute(database: &Path, sql: &str) {
+    let url = format!("sqlite://{}", database.display());
+    let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+    sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+    pool.close().await;
 }
 
 fn irc_server() -> IrcServer {

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}Welcome{% endblock %}
+
+{% block content %}
+      <p class="eyebrow">Account created</p>
+      <h1>You're in, {{ nick }}.</h1>
+      <p class="lede">Make yourself at home in #lounge.</p>
+      <div class="account-grid">
+        <section class="card" aria-labelledby="connect-title">
+          <h2 class="eyebrow" id="connect-title">Use your own client</h2>
+          {%- call components::connection(irc, Some(nick), "The one you just set.") %}{% endcall %}
+        </section>
+        <section class="card" aria-labelledby="picks-title">
+          <h2 class="eyebrow" id="picks-title">{% if recommended.len() == 1 %}Our pick for you{% else %}Our picks{% endif %}</h2>
+          {%- for client in recommended %}
+          <div class="pick">
+            <h3><a href="{{ client.guide_url() }}">{{ client.name }}</a></h3>
+            <p class="muted">{{ client.runs_on }} · {{ client.price }}</p>
+            <p class="links">
+              {%- for link in client.links %}
+              <a href="{{ link.url }}">{{ link.label }}</a>
+              {%- endfor %}
+              <a href="{{ client.guide_url() }}">Setup guide</a>
+            </p>
+          </div>
+          {%- endfor %}
+        </section>
+      </div>
+      {%- call components::guides(clients) %}{% endcall %}
+{%- endblock %}
