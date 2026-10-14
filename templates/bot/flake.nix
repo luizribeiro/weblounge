@@ -26,6 +26,12 @@
           };
         });
 
+      nixosModules.default = ./module.nix;
+
+      checks = lib.genAttrs (lib.filter (lib.hasSuffix "-linux") systems) (system: {
+        vm = import ./test { pkgs = nixpkgs.legacyPackages.${system}; };
+      });
+
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell { packages = [ pkgs.go pkgs.gopls ]; };
       });
