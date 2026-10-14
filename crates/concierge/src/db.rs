@@ -679,6 +679,19 @@ impl Db {
         .await
     }
 
+    /// Whether a member or a bot holds `account`, in any case. Removed
+    /// members and deleted bots keep their names, even once Ergo has erased
+    /// their accounts and would hand the names out again.
+    pub async fn name_held(&self, account: &str) -> sqlx::Result<bool> {
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM members WHERE account = ?1)
+                   OR EXISTS (SELECT 1 FROM bots WHERE account = ?1) AS "held!: bool""#,
+            account
+        )
+        .fetch_one(&self.pool)
+        .await
+    }
+
     pub async fn insert_bot(&self, bot: &NewBot<'_>) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)",
@@ -1405,6 +1418,24 @@ pub(crate) mod tests {
         assert!(error.to_string().contains("FOREIGN KEY"), "{error}");
         let error = db.insert_bot(&bot("Dalek", "alice")).await.unwrap_err();
         assert!(error.to_string().contains("UNIQUE"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn members_and_bots_hold_their_names_in_any_case_even_once_gone() {
+        let (db, _dir) = with_bots().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, joined_at, invite_quota, removed_at)
+             VALUES ('Gone', 0, 0, 1)",
+        )
+        .await
+        .unwrap();
+        for name in ["luiz", "ALICE", "gone", "Bender", "marvin", "dalek"] {
+            assert!(db.name_held(name).await.unwrap(), "{name}");
+        }
+        for name in ["bob", "bend", "luiz_"] {
+            assert!(!db.name_held(name).await.unwrap(), "{name}");
+        }
     }
 
     #[tokio::test]

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (SELECT 1 FROM members WHERE account = ?1)\n                   OR EXISTS (SELECT 1 FROM bots WHERE account = ?1) AS \"held!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "held!: bool",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f1aaeb18f216ea5697f6beb284f1e2e26b79112ecc7f79653a14b4946ffbd289"
+}

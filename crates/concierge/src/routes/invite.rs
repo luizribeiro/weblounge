@@ -132,12 +132,10 @@ pub async fn redeem(
         nick_error: Some(format!("{} is taken.", account.nick)),
         ..form_for(&signup)
     };
-    // A removed member's placeholder keeps their name, even once Ergo
-    // has erased their account and would hand the name out again.
-    match app.db.member(account.nick.as_str()).await {
-        Ok(None) => {}
-        Ok(Some(_)) => return refuse(taken()),
-        Err(error) => return internal_error("Looking up a member", error),
+    match app.db.name_held(account.nick.as_str()).await {
+        Ok(false) => {}
+        Ok(true) => return refuse(taken()),
+        Err(error) => return internal_error("Looking up a name", error),
     }
     let now = db::now();
     let claim = match app.db.claim_invite(&code, now).await {

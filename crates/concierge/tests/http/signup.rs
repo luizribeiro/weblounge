@@ -162,6 +162,22 @@ async fn a_removed_members_name_stays_taken_after_ergo_erased_it() {
 }
 
 #[tokio::test]
+async fn a_deleted_bots_name_stays_taken_after_ergo_erased_it() {
+    let site = with_invite_from_alice().await;
+    site.execute(
+        "INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('bob', 'alice', 0, 1)",
+    )
+    .await;
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_eq!(response.status(), 422);
+    assert!(body_text(response).await.contains("Bob is taken."));
+    assert!(site.ergo.client().info("bob").await.unwrap().is_none());
+    assert!(invite_is_open(&site).await);
+}
+
+#[tokio::test]
 async fn when_ergo_fails_nothing_is_created_and_the_invite_still_works() {
     let site = with_invite_from_alice().await;
     site.ergo.fail_next(Failure::UnknownError);
