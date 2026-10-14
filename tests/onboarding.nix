@@ -37,7 +37,7 @@ vmTest ''
       assert "<code>irc.weblounge.org</code>" in page and "<code>6697</code>" in page, page
       assert erin["password"] not in page
       home = erins_browser.get("/", "-f")
-      assert "<h1>erin</h1>" in home, home
+      assert "Pull up a chair, erin." in home, home
 
   with subtest("the used invite link stops working"):
       assert erins_browser.get(path, *outcome) == "404 "

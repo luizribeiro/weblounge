@@ -4,20 +4,9 @@
 {% block title %}Home{% endblock %}
 
 {% block content %}
-      <p class="eyebrow">Account</p>
-      <h1>{{ nick }}</h1>
-      {%- call components::open_chat(webchat) %}{% endcall %}
-      <div class="account-grid">
-        <section class="card connect" aria-labelledby="connect-title">
-          <h2 class="eyebrow" id="connect-title">Connect a client</h2>
-          {%- call components::connection(irc, Some(nick), "The one you sign in with here.") %}{% endcall %}
-        </section>
-        <nav class="card more" aria-labelledby="more-title">
-          <h2 class="eyebrow" id="more-title">More</h2>
-          <ul class="more-links">
-            <li><a href="/certificates">Client certificates</a> <span class="muted">log in without a password</span></li>
-          </ul>
-        </nav>
-      </div>
-      {%- call components::guides(clients) %}{% endcall %}
+      <section class="home" aria-labelledby="home-title">
+        <h1 id="home-title">Pull up a chair, {{ nick }}.</h1>
+        {%- call components::open_chat(webchat) %}{% endcall %}
+        <p class="links"><a href="/clients">Use another client</a></p>
+      </section>
 {%- endblock %}

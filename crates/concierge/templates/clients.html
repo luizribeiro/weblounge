@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}Clients{% endblock %}
+
+{% block content %}
+      <p class="eyebrow">IRC clients</p>
+      <h1>Bring your own client</h1>
+      <p class="lede">Any IRC client with TLS and SASL works. These are the ones we'd pick.</p>
+      <section class="card tab-card" aria-labelledby="connect-title">
+        <h2 class="eyebrow" id="connect-title">Connection</h2>
+        {%- if nick.is_some() %}
+        {%- call components::connection(irc, nick, "The one you sign in with here.") %}{% endcall %}
+        {%- else %}
+        {%- call components::connection(irc, nick, "Yours.") %}{% endcall %}
+        {%- endif %}
+      </section>
+      <section class="faq" aria-labelledby="guides-title">
+        <h2 id="guides-title">Setup guides</h2>
+        <ul class="client-list">
+          {%- for client in clients %}
+          <li>
+            <a href="{{ client.guide_url() }}">{{ client.name }}</a>
+            <span class="muted">{{ client.runs_on }} · {{ client.price }}</span>
+          </li>
+          {%- endfor %}
+        </ul>
+      </section>
+      <section class="faq" id="certificates" aria-labelledby="certificates-title">
+        <h2 id="certificates-title">Client certificates</h2>
+        <p class="prose">Log in with SASL EXTERNAL: a key on disk instead of a password in your client's config. Your password keeps working everywhere else.</p>
+        <ol class="steps">
+          <li>
+            <h3>Make a certificate</h3>
+            <p>Self-signed is fine. ECDSA P-256, ten years.</p>
+            {%- call components::snippet(certificates.generate) %}{% endcall %}
+          </li>
+          <li>
+            <h3>Get its fingerprint</h3>
+            <p>SHA-256, lowercase hex, no colons.</p>
+            {%- call components::snippet(certificates.fingerprint) %}{% endcall %}
+          </li>
+          <li>
+            <h3>Attach it to your account</h3>
+            <p>Connected to <code>{{ irc.host }}</code> and logged in as usual. <code>CERT LIST</code> shows what's attached, <code>CERT DEL</code> removes one.</p>
+            {%- call components::snippet(certificates.register) %}{% endcall %}
+          </li>
+          <li>
+            <h3>Switch your client to SASL EXTERNAL</h3>
+            <p><a href="/clients/halloy">Halloy</a> reads the certificate and the key:</p>
+            {%- call components::snippet(certificates.halloy) %}{% endcall %}
+            <p><a href="/clients/weechat">WeeChat</a> wants both in one file:</p>
+            {%- call components::snippet(certificates.weechat_pem) %}{% endcall %}
+            {%- call components::snippet(certificates.weechat) %}{% endcall %}
+            <p><a href="/clients/senpai">senpai</a> can't present a certificate; keep SASL PLAIN with <code>password-cmd</code>. Elsewhere, look for SASL EXTERNAL or CertFP.</p>
+          </li>
+        </ol>
+      </section>
+{%- endblock %}

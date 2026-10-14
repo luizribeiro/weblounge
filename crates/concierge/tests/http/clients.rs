@@ -3,6 +3,31 @@ use concierge::clients::{CLIENTS, NICK_PLACEHOLDER};
 use crate::{Site, body_text};
 
 #[tokio::test]
+async fn the_clients_page_has_the_connection_details_to_copy() {
+    let site = Site::start().await;
+    site.add_member("Alice").await;
+    let cookie = site.sign_in("alice").await;
+
+    let response = site.get("/clients", Some(&cookie)).await;
+
+    assert_eq!(response.status(), 200);
+    let page = body_text(response).await;
+    for value in ["irc.weblounge.org", "6697", "Alice"] {
+        assert!(
+            page.contains(&format!(r#"<code>{value}</code>"#)),
+            "{value}: {page}"
+        );
+        assert!(
+            page.contains(&format!(r#"data-copy="{value}" hidden>Copy</button>"#)),
+            "{value}: {page}"
+        );
+    }
+    assert!(page.contains("· TLS"), "{page}");
+    assert!(page.contains("<code>PLAIN</code>"), "{page}");
+    assert!(page.contains(r#"aria-live="polite""#), "{page}");
+}
+
+#[tokio::test]
 async fn a_member_gets_a_config_with_their_nick_and_no_password() {
     let site = Site::start().await;
     site.add_member("Alice").await;
@@ -67,11 +92,11 @@ async fn phone_clients_get_the_fields_and_no_config() {
 }
 
 #[tokio::test]
-async fn every_guide_and_the_account_home_link_all_the_guides() {
+async fn the_clients_page_and_every_guide_link_all_the_guides() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    for path in ["/", "/clients/senpai"] {
+    for path in ["/clients", "/clients/senpai"] {
         let page = body_text(site.get(path, Some(&cookie)).await).await;
         for client in &CLIENTS {
             let link = format!(r#"href="/clients/{}""#, client.slug);

@@ -1,4 +1,5 @@
-//! A setup guide per recommended IRC client, prefilled for the visitor.
+//! The clients page, connection details and every client at a glance,
+//! and a setup guide per recommended client, prefilled for the visitor.
 
 use askama::Template;
 use axum::{
@@ -7,11 +8,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use super::{Layout, render};
+use super::{Layout, certificates::Certificates, render};
 use crate::{
     app::AppState,
     auth::Visitor,
-    clients::{self, CLIENTS, Client, Snippet},
+    clients::{self, CLIENTS, Client, NICK_PLACEHOLDER, Snippet},
     config::IrcServer,
     oauth::Webchat,
 };
@@ -27,6 +28,27 @@ struct Guide<'a> {
     ircs_link: Option<String>,
     clients: &'a [Client],
     webchat: &'a Webchat,
+}
+
+#[derive(Template)]
+#[template(path = "clients.html")]
+struct Index<'a> {
+    layout: Layout<'a>,
+    nick: Option<&'a str>,
+    irc: &'a IrcServer,
+    clients: &'a [Client],
+    certificates: Certificates,
+}
+
+pub async fn index(State(app): State<AppState>, visitor: Visitor) -> Response {
+    let nick = visitor.nick();
+    render(&Index {
+        layout: Layout::new(&app, nick),
+        nick,
+        irc: &app.irc_server,
+        clients: &CLIENTS,
+        certificates: Certificates::for_nick(nick.unwrap_or(NICK_PLACEHOLDER)),
+    })
 }
 
 pub async fn show(

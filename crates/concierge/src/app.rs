@@ -93,8 +93,8 @@ pub fn router(app: App) -> Router {
         .route("/password-rules.json", get(routes::checks::password_rules))
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
+        .route("/clients", get(routes::clients::index))
         .route("/clients/{slug}", get(routes::clients::show))
-        .route("/certificates", get(routes::certificates::show))
         .route(
             routes::oauth::AUTHORIZE_PATH,
             get(routes::oauth::authorize).layer(map_response(routes::no_store)),

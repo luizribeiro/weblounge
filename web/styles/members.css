@@ -400,8 +400,11 @@
     counter-increment: step;
   }
 
-  & h2 {
-    margin-top: 0;
+  & h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
 
     &::before {
       content: counter(step, decimal-leading-zero) " ";
@@ -412,27 +415,35 @@
   }
 }
 
-.more-links {
+.faq {
+  margin-top: 3rem;
+}
+
+.client-list {
+  max-width: 40rem;
   margin: 0;
   padding: 0;
   list-style: none;
 
   & li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 0.75rem;
-    min-height: 44px;
+    display: grid;
+    padding-bottom: 0.5rem;
     border-top: 1px solid var(--line);
 
-    &:first-child {
-      border-top: 0;
+    @media (min-width: 40rem) {
+      grid-template-columns: 6rem 1fr;
+      align-items: center;
+      padding-bottom: 0;
     }
   }
 
   & a {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    min-height: 44px;
+    font-weight: 500;
     text-decoration: underline;
-    text-underline-offset: 0.2em;
   }
 
   & .muted {

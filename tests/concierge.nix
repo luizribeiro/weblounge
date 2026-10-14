@@ -86,8 +86,9 @@ vmTest ''
       signed_in = browser.sign_in("dana", password)
       assert signed_in == f"303 https://{members}/", signed_in
       home = browser.get("/", "-f")
-      assert "<h1>Dana</h1>" in home, home
-      assert "<code>irc.weblounge.org</code>" in home and "<code>6697</code>" in home, home
+      assert "Pull up a chair, Dana." in home, home
+      clients = browser.get("/clients", "-f")
+      assert "<code>irc.weblounge.org</code>" in clients and "<code>6697</code>" in clients, clients
 
   with subtest("a member changes their email and news setting on the Account tab"):
       saved = browser.post("/settings", "email=dana@example.org", "news=on")
@@ -129,7 +130,7 @@ vmTest ''
       assert re.search(r'aria-current="true">Dana</strong>.*?<ul>\s*<li>\s*<span>ivy</span>', tree, re.S), tree
 
   with subtest("the client certificate guide's commands attach a certificate that SASL EXTERNAL logs in with"):
-      guide = browser.get("/certificates", "-f")
+      guide = browser.get("/clients", "-f")
       generate, fingerprint = [html.unescape(block) for block in re.findall(r"<pre><code>(.*?)</code></pre>", guide, re.S)[:2]]
       assert "/CN=Dana" in generate, generate
       client.succeed(f"mkdir -p /tmp/cert && cd /tmp/cert && {generate}")

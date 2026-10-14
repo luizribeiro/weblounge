@@ -68,7 +68,7 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     assert_eq!(account.unwrap().as_str(), "Bob");
 
     let home = body_text(site.get("/", Some(&cookie)).await).await;
-    assert!(home.contains("<h1>Bob</h1>"), "{home}");
+    assert!(home.contains("Pull up a chair, Bob."), "{home}");
     assert!(!invite_is_open(&site).await);
 }
 

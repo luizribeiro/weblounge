@@ -5,6 +5,7 @@ mod account;
 mod certificates;
 mod checks;
 mod clients;
+mod home;
 mod invite;
 mod invites;
 mod oauth;
