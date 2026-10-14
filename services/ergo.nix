@@ -60,6 +60,10 @@ in
       };
       channels.auto-join = [ "#lounge" ];
       history.retention.allow-individual-delete = true;
+      webpush = {
+        enabled = true;
+        subscriber = "https://weblounge.org";
+      };
       api = {
         enabled = true;
         listener = "127.0.0.1:8089";

@@ -157,6 +157,9 @@ pkgs.testers.runNixOSTest {
         reply = irc("PRIVMSG HistServ :DELETE #lounge no-such-message", **alice)
         assert "NOTICE alice :Could not delete message" in reply, reply
 
+    with subtest("ergo advertises web push for mobile clients"):
+        assert "VAPID=" in session, session
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()
