@@ -1,5 +1,7 @@
 # weblounge
 
+[![check](https://github.com/luizribeiro/weblounge/actions/workflows/check.yml/badge.svg)](https://github.com/luizribeiro/weblounge/actions/workflows/check.yml)
+
 Infrastructure for [weblounge.org](https://weblounge.org), an invite-only IRC
 network at `irc.weblounge.org`. Everything that runs on the servers lives in
 this repository and is deployed from it.
