@@ -2,11 +2,12 @@
 
 let
   httpsPort = 10443;
+  ircPort = 16697;
   forwardedPorts = {
     "10022" = 22;
     "10080" = 80;
     ${toString httpsPort} = 443;
-    "16697" = 6697;
+    ${toString ircPort} = 6697;
   };
 in
 {
@@ -16,6 +17,7 @@ in
     # Browsers resolve *.localhost to loopback, where the ports are forwarded.
     weblounge.domain = "weblounge.localhost";
     weblounge.httpsPort = httpsPort;
+    weblounge.ircPort = ircPort;
 
     virtualisation = {
       cores = 2;

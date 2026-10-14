@@ -23,7 +23,7 @@ in
   options.weblounge.ergo.address = lib.mkOption {
     type = lib.types.str;
     readOnly = true;
-    default = "${serverName}:${toString port}";
+    default = "${serverName}:${toString config.weblounge.ircPort}";
     description = "Where IRC clients connect, over TLS, as host:port.";
   };
 
