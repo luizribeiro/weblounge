@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
+    crane.url = "github:ipetkov/crane";
     disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -28,12 +29,14 @@
       overlays.default = weblounge.overlay;
 
       packages = lib.recursiveUpdate weblounge.vmPackages
-        (forEachSystem (pkgs: { inherit (pkgs.weblounge) web; }));
+        (forEachSystem (pkgs: { inherit (pkgs.weblounge) web concierge; }));
 
       checks = lib.foldl' lib.recursiveUpdate { } [
         weblounge.toplevelChecks
         (lib.mapAttrs (_: hooks: { git-hooks = hooks; }) gitHooks)
-        (forEachSystem (pkgs: { web-typecheck = pkgs.weblounge.web.typecheck; }))
+        (forEachSystem (pkgs: {
+          web-typecheck = pkgs.weblounge.web.typecheck;
+        } // lib.mapAttrs' (name: lib.nameValuePair "concierge-${name}") pkgs.weblounge.concierge.checks))
         {
           x86_64-linux = lib.mapAttrs
             (_: test: import test {
