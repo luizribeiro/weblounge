@@ -61,7 +61,6 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
     let invite = NewInvite {
         code: &code,
         created_by: Some(&me.member.account),
-        note: None,
         created_at: now,
         expires_at: invite_rules::expires_at(now),
     };

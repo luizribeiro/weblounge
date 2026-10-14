@@ -14,19 +14,16 @@ pub enum InviteCommand {
         /// invites can be made.
         #[arg(long, required = true)]
         root: bool,
-        /// A reminder of whom the invite is for.
-        #[arg(long)]
-        note: Option<String>,
     },
 }
 
 pub(super) async fn run(command: InviteCommand, admin: &Admin) -> anyhow::Result<String> {
     match command {
-        InviteCommand::Create { root: _, note } => create_root(admin, note.as_deref()).await,
+        InviteCommand::Create { root: _ } => create_root(admin).await,
     }
 }
 
-async fn create_root(admin: &Admin, note: Option<&str>) -> anyhow::Result<String> {
+async fn create_root(admin: &Admin) -> anyhow::Result<String> {
     let code = invite_code::generate();
     let now = db::now();
     admin
@@ -34,7 +31,6 @@ async fn create_root(admin: &Admin, note: Option<&str>) -> anyhow::Result<String
         .insert_invite(&NewInvite {
             code: &code,
             created_by: None,
-            note,
             created_at: now,
             expires_at: invite_rules::expires_at(now),
         })

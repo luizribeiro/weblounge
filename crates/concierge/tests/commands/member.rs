@@ -141,7 +141,6 @@ mod delete {
         let invite = NewInvite {
             code,
             created_by: Some(created_by),
-            note: Some("for my sister"),
             created_at: now,
             expires_at: now + 3600,
         };
@@ -171,7 +170,6 @@ mod delete {
         assert_eq!(bob.invited_by.as_deref(), Some("alice"));
         let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
         assert!(invite.revoked_at.is_some());
-        assert_eq!(invite.note, None);
         assert_eq!(db.end_sessions("alice").await.unwrap(), 0);
     }
 

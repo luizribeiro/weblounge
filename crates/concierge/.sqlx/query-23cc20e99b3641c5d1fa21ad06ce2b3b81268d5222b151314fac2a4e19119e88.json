@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT code AS \"code!\", created_by, note, created_at, expires_at, claimed_at,\n                      redeemed_by, redeemed_at, revoked_at\n               FROM invites WHERE code = ?",
+  "query": "SELECT code AS \"code!\", created_by, created_at, expires_at, claimed_at,\n                      redeemed_by, redeemed_at, revoked_at\n               FROM invites WHERE created_by = ?",
   "describe": {
     "columns": [
       {
@@ -14,38 +14,33 @@
         "type_info": "Text"
       },
       {
-        "name": "note",
-        "ordinal": 2,
-        "type_info": "Text"
-      },
-      {
         "name": "created_at",
-        "ordinal": 3,
+        "ordinal": 2,
         "type_info": "Integer"
       },
       {
         "name": "expires_at",
-        "ordinal": 4,
+        "ordinal": 3,
         "type_info": "Integer"
       },
       {
         "name": "claimed_at",
-        "ordinal": 5,
+        "ordinal": 4,
         "type_info": "Integer"
       },
       {
         "name": "redeemed_by",
-        "ordinal": 6,
+        "ordinal": 5,
         "type_info": "Text"
       },
       {
         "name": "redeemed_at",
-        "ordinal": 7,
+        "ordinal": 6,
         "type_info": "Integer"
       },
       {
         "name": "revoked_at",
-        "ordinal": 8,
+        "ordinal": 7,
         "type_info": "Integer"
       }
     ],
@@ -55,7 +50,6 @@
     "nullable": [
       false,
       true,
-      true,
       false,
       false,
       true,
@@ -64,5 +58,5 @@
       true
     ]
   },
-  "hash": "9228816f471bb8253383d1c8c6f3d901b26930b27c4a7b27f2349a612a229ee0"
+  "hash": "23cc20e99b3641c5d1fa21ad06ce2b3b81268d5222b151314fac2a4e19119e88"
 }

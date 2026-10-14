@@ -193,7 +193,6 @@ impl Site {
         let invite = NewInvite {
             code,
             created_by,
-            note: None,
             created_at: now,
             expires_at: invite_rules::expires_at(now),
         };

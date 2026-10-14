@@ -6,10 +6,7 @@ use crate::Fixture;
 async fn create_root_prints_a_link_to_a_new_invite_nobody_vouches_for() {
     let fixture = Fixture::start().await;
 
-    let output = fixture
-        .run(&["invite", "create", "--root", "--note", "for the founders"])
-        .await
-        .unwrap();
+    let output = fixture.run(&["invite", "create", "--root"]).await.unwrap();
 
     let code = output
         .strip_prefix(&fixture.config.invite_url(""))
@@ -18,7 +15,6 @@ async fn create_root_prints_a_link_to_a_new_invite_nobody_vouches_for() {
     assert_eq!(code.len(), 22, "{output}");
     let invite = fixture.db().await.invite(code).await.unwrap().unwrap();
     assert_eq!(invite.created_by, None);
-    assert_eq!(invite.note.as_deref(), Some("for the founders"));
     assert_eq!(invite.expires_at, invite.created_at + LIFETIME);
     assert_eq!(
         (invite.claimed_at, invite.redeemed_by, invite.revoked_at),
@@ -32,12 +28,6 @@ async fn every_invite_gets_its_own_code() {
     let first = fixture.run(&["invite", "create", "--root"]).await.unwrap();
     let second = fixture.run(&["invite", "create", "--root"]).await.unwrap();
     assert_ne!(first, second);
-    let code = first
-        .trim_end()
-        .strip_prefix(&fixture.config.invite_url(""))
-        .unwrap();
-    let invite = fixture.db().await.invite(code).await.unwrap().unwrap();
-    assert_eq!(invite.note, None);
 }
 
 #[tokio::test]

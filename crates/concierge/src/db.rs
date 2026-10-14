@@ -104,7 +104,6 @@ pub struct NewInvite<'a> {
     pub code: &'a str,
     /// `None` for a root invite.
     pub created_by: Option<&'a str>,
-    pub note: Option<&'a str>,
     pub created_at: i64,
     pub expires_at: i64,
 }
@@ -113,7 +112,6 @@ pub struct NewInvite<'a> {
 pub struct Invite {
     pub code: String,
     pub created_by: Option<String>,
-    pub note: Option<String>,
     pub created_at: i64,
     pub expires_at: i64,
     pub claimed_at: Option<i64>,
@@ -396,15 +394,6 @@ impl Db {
         )
         .execute(&mut *transaction)
         .await?;
-        // Notes are written about the invitee, so the ones on the invite
-        // that brought the member in are about them too.
-        sqlx::query!(
-            "UPDATE invites SET note = NULL WHERE created_by = ? OR redeemed_by = ?",
-            account,
-            account,
-        )
-        .execute(&mut *transaction)
-        .await?;
         transaction.commit().await?;
         Ok(Removal {
             sessions_ended,
@@ -427,7 +416,7 @@ impl Db {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let invites = sqlx::query_as!(
             Invite,
-            r#"SELECT code AS "code!", created_by, note, created_at, expires_at, claimed_at,
+            r#"SELECT code AS "code!", created_by, created_at, expires_at, claimed_at,
                       redeemed_by, redeemed_at, revoked_at
                FROM invites WHERE created_by = ?"#,
             invite.created_by,
@@ -445,7 +434,7 @@ impl Db {
     pub async fn invite(&self, code: &str) -> sqlx::Result<Option<Invite>> {
         sqlx::query_as!(
             Invite,
-            r#"SELECT code AS "code!", created_by, note, created_at, expires_at, claimed_at,
+            r#"SELECT code AS "code!", created_by, created_at, expires_at, claimed_at,
                       redeemed_by, redeemed_at, revoked_at
                FROM invites WHERE code = ?"#,
             code
@@ -458,7 +447,7 @@ impl Db {
     pub async fn invites_created_by(&self, account: &str) -> sqlx::Result<Vec<Invite>> {
         sqlx::query_as!(
             Invite,
-            r#"SELECT code AS "code!", created_by, note, created_at, expires_at, claimed_at,
+            r#"SELECT code AS "code!", created_by, created_at, expires_at, claimed_at,
                       redeemed_by, redeemed_at, revoked_at
                FROM invites WHERE created_by = ? ORDER BY created_at DESC, code"#,
             account
@@ -764,11 +753,10 @@ async fn insert_invite(
     invite: &NewInvite<'_>,
 ) -> sqlx::Result<()> {
     sqlx::query!(
-        "INSERT INTO invites (code, created_by, note, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO invites (code, created_by, created_at, expires_at)
+         VALUES (?, ?, ?, ?)",
         invite.code,
         invite.created_by,
-        invite.note,
         invite.created_at,
         invite.expires_at,
     )
@@ -995,11 +983,11 @@ pub(crate) mod tests {
                     ('bob', 'bob@example.org', 'alice', 20);
              UPDATE members SET email_verified_at = 11, news_opt_in = TRUE, is_admin = TRUE
              WHERE account = 'alice';
-             INSERT INTO invites (code, created_by, note, created_at, expires_at, redeemed_by, redeemed_at)
-             VALUES ('to-alice', 'root', 'for alice from work', 5, 100, 'alice', 10),
-                    ('to-bob', 'alice', 'for bob', 15, 100, 'bob', 20),
-                    ('stale', 'alice', 'for carol', 15, 100, NULL, NULL),
-                    ('open', 'alice', 'for dave', 150, 300, NULL, NULL);",
+             INSERT INTO invites (code, created_by, created_at, expires_at, redeemed_by, redeemed_at)
+             VALUES ('to-alice', 'root', 5, 100, 'alice', 10),
+                    ('to-bob', 'alice', 15, 100, 'bob', 20),
+                    ('stale', 'alice', 15, 100, NULL, NULL),
+                    ('open', 'alice', 150, 300, NULL, NULL);",
         )
         .await
         .unwrap();
@@ -1028,7 +1016,6 @@ pub(crate) mod tests {
             ("to-bob", Some("bob"), None),
         ] {
             let invite = db.invite(code).await.unwrap().unwrap();
-            assert_eq!(invite.note, None, "{code}");
             assert_eq!(invite.redeemed_by.as_deref(), redeemed_by, "{code}");
             assert_eq!(invite.revoked_at, revoked_at, "{code}");
         }
@@ -1163,7 +1150,6 @@ pub(crate) mod tests {
         db.insert_invite(&NewInvite {
             code: "newer",
             created_by: Some("alice"),
-            note: None,
             created_at: CREATED + 10,
             expires_at: invite_rules::expires_at(CREATED + 10),
         })

@@ -48,7 +48,7 @@ vmTest {
             "public url: https://members.weblounge.org\n"
             f"state directory: /var/lib/concierge (writable by uid {service_uid})\n"
             "session key: 64 bytes\n"
-            "database: /var/lib/concierge/concierge.db (migration 20261017120000, 0 members)\n"
+            "database: /var/lib/concierge/concierge.db (migration 20261018120000, 0 members)\n"
             "ergo: http://127.0.0.1:8089/ answers, version 2.19.1\n"
         ), (service_uid, status)
         credenza.fail(concierge_admin_command("no-such-command"))
@@ -58,7 +58,7 @@ vmTest {
         assert modes == ["700", "700", "600"], modes
 
     with subtest("concierge-admin invite create --root prints a link to members.weblounge.org"):
-        link = concierge_admin("invite", "create", "--root", "--note", "for the founders")
+        link = concierge_admin("invite", "create", "--root")
         assert re.fullmatch(r"https://members\.weblounge\.org/invite/[A-Za-z0-9_-]{22}\n", link), link
 
     with subtest("concierge-admin member adopt imports an account made through Ergo's API"):
@@ -68,7 +68,7 @@ vmTest {
         adopted = concierge_admin("member", "adopt", "dana", "--admin")
         assert adopted == "adopted Dana as an admin\n", adopted
         status = concierge_admin("status")
-        assert "(migration 20261017120000, 1 members)" in status, status
+        assert "(migration 20261018120000, 1 members)" in status, status
 
     with subtest("concierge-admin member reset-password replaces the IRC password and prints the new one"):
         password = concierge_admin("member", "reset-password", "dana").strip()
