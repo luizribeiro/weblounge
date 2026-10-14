@@ -18,6 +18,8 @@ pub type AppState = Arc<Assets>;
 pub fn router(assets: Assets) -> Router {
     let router = Router::new()
         .route("/", get(routes::index::show))
+        .route("/rules", get(routes::pages::rules))
+        .route("/privacy", get(routes::pages::privacy))
         .route("/healthz", get(|| async { "ok" }))
         .route(&format!("{}{{file}}", assets::URL_PREFIX), get(asset))
         .with_state(Arc::new(assets));

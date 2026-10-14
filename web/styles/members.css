@@ -5,3 +5,35 @@
 @import "./components/button.css";
 @import "./components/form.css";
 @import "./components/card.css";
+
+.prose {
+  max-width: 40rem;
+  font-size: 1.125rem;
+}
+
+.rules {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: rule;
+
+  & li {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--line);
+    font-size: clamp(1.25rem, 4vw, 1.5rem);
+    font-weight: 300;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    counter-increment: rule;
+
+    &::before {
+      content: counter(rule, decimal-leading-zero);
+      padding-top: 0.45em;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+  }
+}

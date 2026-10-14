@@ -76,6 +76,39 @@ async fn the_header_draws_the_mark_and_wordmark_from_hashed_files() {
 }
 
 #[tokio::test]
+async fn house_rules_and_privacy_are_public_pages() {
+    for (path, title, says) in [
+        (
+            "/rules",
+            "House rules",
+            "You vouch for the people you invite.",
+        ),
+        ("/privacy", "Privacy", "Members' IP addresses"),
+    ] {
+        let response = get(path).await;
+        assert_eq!(response.status(), 200, "{path}");
+        let page = body_text(response).await;
+        assert!(
+            page.contains(&format!("<title>{title} · weblounge.org</title>")),
+            "{page}"
+        );
+        assert!(page.contains(says), "{page}");
+    }
+}
+
+#[tokio::test]
+async fn every_page_links_the_house_rules_and_privacy_in_its_footer() {
+    for path in ["/", "/rules", "/privacy"] {
+        let page = body_text(get(path).await).await;
+        assert!(
+            page.contains(r#"<a href="/rules">House rules</a>"#),
+            "{path}"
+        );
+        assert!(page.contains(r#"<a href="/privacy">Privacy</a>"#), "{path}");
+    }
+}
+
+#[tokio::test]
 async fn hashed_assets_are_served_immutable() {
     let response = get("/assets/members-N4AQSMXV.css").await;
     assert_eq!(response.status(), 200);

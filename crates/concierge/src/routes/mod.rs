@@ -1,4 +1,5 @@
 pub mod index;
+pub mod pages;
 
 use askama::Template;
 use axum::{
