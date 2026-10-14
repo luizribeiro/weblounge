@@ -2,8 +2,10 @@
 //! prints plain lines a script can read.
 
 mod invite;
+mod member;
 
 use clap::{Parser, Subcommand};
+use ergo_api::Client;
 
 use crate::{config::Config, db::Db, status};
 
@@ -23,6 +25,9 @@ pub enum AdminCommand {
     /// Mint invites.
     #[command(subcommand)]
     Invite(invite::InviteCommand),
+    /// Manage members.
+    #[command(subcommand)]
+    Member(member::MemberCommand),
 }
 
 /// Runs `command` and answers with what it prints.
@@ -30,6 +35,7 @@ pub async fn run(command: AdminCommand, config: &Config) -> anyhow::Result<Strin
     match command {
         AdminCommand::Status => status::report(config).await,
         AdminCommand::Invite(command) => invite::run(command, &Admin::connect(config).await?).await,
+        AdminCommand::Member(command) => member::run(command, &Admin::connect(config).await?).await,
     }
 }
 
@@ -37,6 +43,7 @@ pub async fn run(command: AdminCommand, config: &Config) -> anyhow::Result<Strin
 struct Admin {
     config: Config,
     db: Db,
+    ergo: Client,
 }
 
 impl Admin {
@@ -44,6 +51,7 @@ impl Admin {
         Ok(Self {
             config: config.clone(),
             db: Db::open(&config.database_path()).await?,
+            ergo: config.ergo_client()?,
         })
     }
 }

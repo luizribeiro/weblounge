@@ -24,6 +24,31 @@ pub fn now() -> i64 {
         .expect("the clock is before 2262")
 }
 
+pub struct NewMember<'a> {
+    /// Ergo's canonical spelling of the account name.
+    pub account: &'a str,
+    pub email: Option<&'a str>,
+    /// `None` for a root of the invite tree.
+    pub invited_by: Option<&'a str>,
+    pub joined_at: i64,
+    pub invite_quota: i64,
+    pub is_admin: bool,
+}
+
+/// A member, or the placeholder a removed member leaves in the invite tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Member {
+    pub account: String,
+    pub email: Option<String>,
+    pub email_verified_at: Option<i64>,
+    pub news_opt_in: bool,
+    pub invited_by: Option<String>,
+    pub joined_at: i64,
+    pub invite_quota: i64,
+    pub is_admin: bool,
+    pub removed_at: Option<i64>,
+}
+
 pub struct NewInvite<'a> {
     pub code: &'a str,
     /// `None` for a root invite.
@@ -80,6 +105,35 @@ impl Db {
             r#"SELECT MAX(version) AS "version?" FROM _sqlx_migrations WHERE success"#
         )
         .fetch_one(&self.pool)
+        .await
+    }
+
+    pub async fn insert_member(&self, member: &NewMember<'_>) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT INTO members (account, email, invited_by, joined_at, invite_quota, is_admin)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            member.account,
+            member.email,
+            member.invited_by,
+            member.joined_at,
+            member.invite_quota,
+            member.is_admin,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    /// The member whose account is `account`, in any case.
+    pub async fn member(&self, account: &str) -> sqlx::Result<Option<Member>> {
+        sqlx::query_as!(
+            Member,
+            r#"SELECT account AS "account!", email, email_verified_at, news_opt_in,
+                      invited_by, joined_at, invite_quota, is_admin, removed_at
+               FROM members WHERE account = ?"#,
+            account
+        )
+        .fetch_optional(&self.pool)
         .await
     }
 

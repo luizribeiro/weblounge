@@ -2,6 +2,7 @@
 //! credentials and a fake Ergo.
 
 mod invite;
+mod member;
 mod status;
 
 use std::{fs, path::Path};

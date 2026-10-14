@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT account AS \"account!\", email, email_verified_at, news_opt_in,\n                      invited_by, joined_at, invite_quota, is_admin, removed_at\n               FROM members WHERE account = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "account!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "email",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "email_verified_at",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "news_opt_in",
+        "ordinal": 3,
+        "type_info": "Bool"
+      },
+      {
+        "name": "invited_by",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "joined_at",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "invite_quota",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "is_admin",
+        "ordinal": 7,
+        "type_info": "Bool"
+      },
+      {
+        "name": "removed_at",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "52838e513fdf11d478bb6ec062c9685115b0f53b3b9cc2c0eb1331773e81bfe5"
+}
