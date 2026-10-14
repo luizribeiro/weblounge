@@ -1,77 +1,7 @@
 use concierge::db::{self, NewBot, NewInvite};
-use ergo_api::{SettingsChanges, fake::Failure};
+use ergo_api::fake::Failure;
 
 use crate::{Fixture, OLD_PASSWORD};
-
-mod adopt {
-    use super::*;
-
-    #[tokio::test]
-    async fn imports_an_ergo_account_under_its_canonical_name_at_the_root() {
-        let fixture = Fixture::start().await;
-        fixture.register("Alice").await;
-        let email = SettingsChanges {
-            email: Some("alice@example.org".into()),
-            ..Default::default()
-        };
-        fixture
-            .ergo
-            .client()
-            .update_settings("Alice", email)
-            .await
-            .unwrap();
-
-        let output = fixture.run(&["member", "adopt", "ALICE"]).await.unwrap();
-
-        assert_eq!(output, "adopted Alice\n");
-        let member = fixture.db().await.member("alice").await.unwrap().unwrap();
-        assert_eq!(member.account, "Alice");
-        assert_eq!(member.email.as_deref(), Some("alice@example.org"));
-        assert_eq!(member.invited_by, None);
-        assert!(!member.is_admin);
-        assert_eq!(member.removed_at, None);
-    }
-
-    #[tokio::test]
-    async fn can_make_the_member_an_admin() {
-        let fixture = Fixture::start().await;
-        fixture.register("luiz").await;
-        let output = fixture
-            .run(&["member", "adopt", "luiz", "--admin"])
-            .await
-            .unwrap();
-        assert_eq!(output, "adopted luiz as an admin\n");
-        let member = fixture.db().await.member("luiz").await.unwrap().unwrap();
-        assert!(member.is_admin);
-        assert_eq!(member.email, None);
-    }
-
-    #[tokio::test]
-    async fn refuses_an_account_ergo_does_not_have() {
-        let fixture = Fixture::start().await;
-        let error = fixture
-            .run(&["member", "adopt", "nobody"])
-            .await
-            .unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            "Ergo has no verified, unsuspended account named nobody"
-        );
-        assert_eq!(fixture.db().await.member("nobody").await.unwrap(), None);
-    }
-
-    #[tokio::test]
-    async fn refuses_a_member_twice() {
-        let fixture = Fixture::start().await;
-        fixture.register("alice").await;
-        fixture.run(&["member", "adopt", "alice"]).await.unwrap();
-        let error = fixture
-            .run(&["member", "adopt", "Alice"])
-            .await
-            .unwrap_err();
-        assert_eq!(error.to_string(), "alice is already a member");
-    }
-}
 
 mod reset_password {
     use super::*;
@@ -236,7 +166,7 @@ mod delete {
     }
 
     #[tokio::test]
-    async fn a_removed_member_cannot_be_deleted_reset_or_adopted_again() {
+    async fn a_removed_member_cannot_be_deleted_or_reset_again() {
         let fixture = Fixture::start().await;
         fixture.add_member("alice", None).await;
         fixture.run(&["member", "delete", "alice"]).await.unwrap();
@@ -244,10 +174,6 @@ mod delete {
         for (args, message) in [
             (["member", "delete", "alice"], "alice was removed"),
             (["member", "reset-password", "alice"], "alice was removed"),
-            (
-                ["member", "adopt", "alice"],
-                "alice was removed, and keeps their place in the invite tree",
-            ),
         ] {
             let error = fixture.run(&args).await.unwrap_err();
             assert_eq!(error.to_string(), message, "{args:?}");

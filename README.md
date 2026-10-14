@@ -155,7 +155,6 @@ machine. They print plain lines a script can read:
 | ----------------------------------------------- | ---------------------------------------------------------------- |
 | `status`                                        | Configuration, secrets, database and whether Ergo answers        |
 | `invite create --root [--admin]`                | Prints a root invite's link; `--admin` makes its redeemer admin  |
-| `member adopt <account> [--admin]`              | Makes an existing Ergo account a member at the root of the tree  |
 | `member reset-password <account>`               | Sets a new generated password, ends sessions, prints it once     |
 | `member delete <account>`                       | Removes a member's data and bots; their place in the tree stays  |
 | `member reconcile`                              | Lists accounts Ergo and concierge disagree on, bots included     |

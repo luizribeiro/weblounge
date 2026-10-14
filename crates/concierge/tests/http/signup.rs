@@ -258,11 +258,9 @@ async fn an_invite_revoked_while_ergo_works_adds_no_member_and_says_so() {
     let response = site.post(INVITE, &bob(), None).await;
 
     assert_eq!(response.status(), 500);
-    assert!(
-        body_text(response)
-            .await
-            .contains("setup didn&#39;t finish")
-    );
+    let page = body_text(response).await;
+    assert!(page.contains("setup didn&#39;t finish"), "{page}");
+    assert!(page.contains("clear the nick for a new invite"), "{page}");
     assert_eq!(site.db.member("bob").await.unwrap(), None);
 }
 

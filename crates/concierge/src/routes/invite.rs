@@ -350,7 +350,7 @@ fn unfinished(app: &App, visitor: &Visitor) -> Response {
         visitor,
         StatusCode::INTERNAL_SERVER_ERROR,
         "Your account was created, but setup didn't finish.",
-        &["Ask whoever invited you to get an admin to finish it."],
+        &["Ask whoever invited you to tell an admin, who can clear the nick for a new invite."],
     )
 }
 

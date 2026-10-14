@@ -1,20 +1,12 @@
 use std::collections::BTreeMap;
 
-use anyhow::Context;
 use clap::Subcommand;
 
 use super::{Admin, bot, erase_reminder, print_once};
-use crate::db::{self, NewMember};
+use crate::db;
 
 #[derive(Subcommand)]
 pub enum MemberCommand {
-    /// Make an existing Ergo account a member, at the root of the invite tree.
-    Adopt {
-        account: String,
-        /// Make the member an admin.
-        #[arg(long)]
-        admin: bool,
-    },
     /// Give a member a new generated password, end their sessions, and print
     /// the password once.
     ResetPassword { account: String },
@@ -29,43 +21,10 @@ pub enum MemberCommand {
 
 pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result<String> {
     match command {
-        MemberCommand::Adopt {
-            account,
-            admin: is_admin,
-        } => adopt(admin, &account, is_admin).await,
         MemberCommand::ResetPassword { account } => reset_password(admin, &account).await,
         MemberCommand::Delete { account } => delete(admin, &account).await,
         MemberCommand::Reconcile => reconcile(admin).await,
     }
-}
-
-async fn adopt(admin: &Admin, name: &str, is_admin: bool) -> anyhow::Result<String> {
-    let account = admin
-        .ergo
-        .info(name)
-        .await?
-        .with_context(|| format!("Ergo has no verified, unsuspended account named {name}"))?;
-    let account_name = account.account_name.as_str();
-    if let Some(member) = admin.db.member(account_name).await? {
-        let state = match member.removed_at {
-            Some(_) => "was removed, and keeps their place in the invite tree",
-            None => "is already a member",
-        };
-        anyhow::bail!("{} {state}", member.account);
-    }
-    admin
-        .db
-        .insert_member(&NewMember {
-            account: account_name,
-            email: account.email.as_deref(),
-            news_opt_in: false,
-            invited_by: None,
-            joined_at: db::now(),
-            is_admin,
-        })
-        .await?;
-    let role = if is_admin { " as an admin" } else { "" };
-    Ok(format!("adopted {account_name}{role}\n"))
 }
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
