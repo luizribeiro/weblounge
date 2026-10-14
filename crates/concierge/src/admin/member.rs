@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Context;
 use clap::Subcommand;
 
-use super::{Admin, erase_reminder, print_once};
+use super::{Admin, bot, erase_reminder, print_once};
 use crate::{
     db::{self, NewMember},
     invite_rules,
@@ -21,8 +21,8 @@ pub enum MemberCommand {
     /// Give a member a new generated password, end their sessions, and print
     /// the password once.
     ResetPassword { account: String },
-    /// Remove a member's personal data and sessions and revoke their open
-    /// invites, keeping their place in the invite tree.
+    /// Remove a member's personal data, sessions and bots and revoke their
+    /// open invites, keeping their place in the invite tree.
     Delete { account: String },
     /// Raise a member's invite quota by N.
     GrantInvites {
@@ -88,9 +88,13 @@ async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
 async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
     let member = admin.current_member(name).await?;
     let account = &member.account;
+    let mut bots_removed = String::new();
+    for bot in admin.db.bots(Some(account)).await? {
+        bots_removed += &bot::remove(admin, &bot.account).await?;
+    }
     let removal = admin.db.remove_member(account, db::now()).await?;
     Ok(format!(
-        "removed {account} (sessions ended: {}, invites revoked: {})\n{}",
+        "removed {account} (sessions ended: {}, invites revoked: {})\n{}{bots_removed}",
         removal.sessions_ended,
         removal.invites_revoked,
         erase_reminder(account),

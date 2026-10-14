@@ -183,6 +183,56 @@ mod delete {
     }
 
     #[tokio::test]
+    async fn deletes_the_members_bots_too() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.add_member("bob", Some("alice")).await;
+        let mut passwords = Vec::new();
+        for (owner, bot) in [("alice", "Marvin"), ("alice", "hal"), ("bob", "bender")] {
+            let output = fixture.run(&["bot", "create", owner, bot]).await.unwrap();
+            passwords.push(output.trim_end().to_owned());
+        }
+
+        let output = fixture.run(&["member", "delete", "alice"]).await.unwrap();
+
+        assert_eq!(
+            output,
+            "removed alice (sessions ended: 0, invites revoked: 0)\n\
+             Ergo's API can't delete accounts: an oper must run /NS ERASE alice\n\
+             removed bot hal\n\
+             Ergo's API can't delete accounts: an oper must run /NS ERASE hal\n\
+             removed bot Marvin\n\
+             Ergo's API can't delete accounts: an oper must run /NS ERASE Marvin\n"
+        );
+        let [marvin, hal, bender] = &passwords[..] else {
+            unreachable!()
+        };
+        assert!(!fixture.signs_in_to_ergo("marvin", marvin).await);
+        assert!(!fixture.signs_in_to_ergo("hal", hal).await);
+        assert!(fixture.signs_in_to_ergo("bender", bender).await);
+        let bots = fixture.db().await.bots(None).await.unwrap();
+        assert_eq!(bots.len(), 1, "{bots:?}");
+    }
+
+    #[tokio::test]
+    async fn keeps_the_member_when_ergo_fails_to_lock_a_bot_out() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture
+            .run(&["bot", "create", "alice", "hal"])
+            .await
+            .unwrap();
+        fixture.ergo.fail_next(Failure::UnknownError);
+
+        let error = fixture.run(&["member", "delete", "alice"]).await;
+
+        assert!(error.is_err());
+        let db = fixture.db().await;
+        assert_eq!(db.member("alice").await.unwrap().unwrap().removed_at, None);
+        assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn removes_a_member_with_no_sessions_or_invites() {
         let fixture = Fixture::start().await;
         fixture.add_member("carol", None).await;
