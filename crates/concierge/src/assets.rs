@@ -132,12 +132,16 @@ mod tests {
             assets.url("favicon.svg").unwrap(),
             "/assets/favicon-E6HOAGDL.svg"
         );
+        assert_eq!(
+            assets.url("members.js").unwrap(),
+            "/assets/members-7QK2WZ3D.js"
+        );
     }
 
     #[test]
     fn names_a_missing_entry_point_in_the_error() {
-        let error = fixture().url("members.js").unwrap_err();
-        assert_eq!(error.to_string(), "no asset was built as members.js");
+        let error = fixture().url("invite.js").unwrap_err();
+        assert_eq!(error.to_string(), "no asset was built as invite.js");
     }
 
     #[test]
@@ -157,6 +161,7 @@ mod tests {
             served,
             [
                 "favicon-E6HOAGDL.svg",
+                "members-7QK2WZ3D.js",
                 "members-N4AQSMXV.css",
                 "members-N4AQSMXV.css.map",
                 "wordmark-R5TY7UQ8.svg",

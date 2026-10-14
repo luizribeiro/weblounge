@@ -21,6 +21,7 @@
               <dd>The one you sign in with here.</dd>
             </div>
           </dl>
+          <p class="copy-status visually-hidden" aria-live="polite" data-copy-status></p>
         </section>
       </div>
 {%- endblock %}
@@ -30,6 +31,7 @@
               <dt>{{ label }}</dt>
               <dd>
                 <code>{{ value }}</code>{{ caller() }}
+                <button class="button button-small" type="button" data-copy="{{ value }}" hidden>Copy</button>
               </dd>
             </div>
 {%- endmacro %}

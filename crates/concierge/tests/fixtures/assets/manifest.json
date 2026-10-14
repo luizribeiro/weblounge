@@ -18,6 +18,10 @@
       "bytes": 1007,
       "imports": []
     },
+    "scripts/members.ts": {
+      "bytes": 22,
+      "imports": []
+    },
     "images/wordmark.svg": {
       "bytes": 89,
       "imports": []
@@ -53,6 +57,17 @@
         }
       },
       "bytes": 1007
+    },
+    "members/members-7QK2WZ3D.js": {
+      "imports": [],
+      "exports": [],
+      "entryPoint": "scripts/members.ts",
+      "inputs": {
+        "scripts/members.ts": {
+          "bytesInOutput": 22
+        }
+      },
+      "bytes": 22
     },
     "members/wordmark-R5TY7UQ8.svg": {
       "imports": [],

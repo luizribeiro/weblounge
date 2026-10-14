@@ -64,6 +64,7 @@ async fn every_page_shares_the_header_footer_and_assets() {
         let page = body_text(site.get(path, None).await).await;
         for part in [
             r#"<link rel="stylesheet" href="/assets/members-N4AQSMXV.css">"#,
+            r#"<script src="/assets/members-7QK2WZ3D.js" defer></script>"#,
             r#"<use href="/assets/favicon-E6HOAGDL.svg#mark"/>"#,
             r#"<use href="/assets/wordmark-R5TY7UQ8.svg#wordmark"/>"#,
             r#"<a href="/rules">House rules</a>"#,
@@ -92,6 +93,7 @@ async fn hashed_assets_are_served_immutable_with_their_type() {
     let site = Site::start().await;
     for (path, content_type) in [
         ("/assets/members-N4AQSMXV.css", "text/css"),
+        ("/assets/members-7QK2WZ3D.js", "text/javascript"),
         ("/assets/favicon-E6HOAGDL.svg", "image/svg+xml"),
         ("/assets/wordmark-R5TY7UQ8.svg", "image/svg+xml"),
     ] {

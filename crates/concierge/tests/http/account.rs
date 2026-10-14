@@ -19,3 +19,16 @@ async fn shows_how_to_connect_a_client() {
     }
     assert!(page.contains("· TLS"), "{page}");
 }
+
+#[tokio::test]
+async fn offers_copy_buttons_that_scripts_reveal() {
+    let site = Site::start().await;
+    site.add_member("Alice").await;
+    let cookie = site.sign_in("alice").await;
+    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    for value in ["irc.weblounge.org", "6697", "Alice"] {
+        let button = format!(r#"data-copy="{value}" hidden>Copy</button>"#);
+        assert!(page.contains(&button), "{value}: {page}");
+    }
+    assert!(page.contains(r#"aria-live="polite""#), "{page}");
+}
