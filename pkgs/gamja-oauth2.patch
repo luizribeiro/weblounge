@@ -1,0 +1,114 @@
+diff --git a/components/app.js b/components/app.js
+index d1c8f15..1099af4 100644
+--- a/components/app.js
++++ b/components/app.js
+@@ -362,7 +362,8 @@ export default class App extends Component {
+ 
+ 			let saslOauthBearer;
+ 			try {
+-				saslOauthBearer = await this.exchangeOauth2Code(queryParams.code);
++				let codeVerifier = oauth2.takeCodeVerifier(queryParams.state);
++				saslOauthBearer = await this.exchangeOauth2Code(queryParams.code, codeVerifier);
+ 			} catch (err) {
+ 				this.showError(err);
+ 				return;
+@@ -403,15 +404,19 @@ export default class App extends Component {
+ 			return;
+ 		}
+ 
+-		oauth2.redirectAuthorize({
++		// Redirect URIs can't carry a fragment
++		let redirectUri = new URL(window.location.toString());
++		redirectUri.hash = "";
++
++		await oauth2.redirectAuthorize({
+ 			serverMetadata,
+ 			clientId: this.config.oauth2.client_id,
+-			redirectUri: window.location.toString(),
++			redirectUri: redirectUri.toString(),
+ 			scope: this.config.oauth2.scope,
+ 		});
+ 	}
+ 
+-	async exchangeOauth2Code(code) {
++	async exchangeOauth2Code(code, codeVerifier) {
+ 		let serverMetadata = await oauth2.fetchServerMetadata(this.config.oauth2.url);
+ 
+ 		let redirectUri = new URL(window.location.toString());
+@@ -422,6 +427,7 @@ export default class App extends Component {
+ 			serverMetadata,
+ 			redirectUri: redirectUri.toString(),
+ 			code,
++			codeVerifier,
+ 			clientId: this.config.oauth2.client_id,
+ 			clientSecret: this.config.oauth2.client_secret,
+ 		});
+diff --git a/lib/oauth2.js b/lib/oauth2.js
+index 02abdbc..b8ed612 100644
+--- a/lib/oauth2.js
++++ b/lib/oauth2.js
+@@ -38,14 +38,47 @@ export async function fetchServerMetadata(url) {
+ 	return data;
+ }
+ 
+-export function redirectAuthorize({ serverMetadata, clientId, redirectUri, scope }) {
++const pendingAuthorizationKey = "gamja_oauth2_pending";
++
++function base64URL(bytes) {
++	return btoa(String.fromCharCode(...bytes))
++		.replaceAll("+", "-")
++		.replaceAll("/", "_")
++		.replaceAll("=", "");
++}
++
++function randomString() {
++	return base64URL(crypto.getRandomValues(new Uint8Array(32)));
++}
++
++async function codeChallenge(verifier) {
++	let digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
++	return base64URL(new Uint8Array(digest));
++}
++
++// Returns the PKCE code verifier of the authorization request that state
++// belongs to, which only this tab made.
++export function takeCodeVerifier(state) {
++	let pending = JSON.parse(sessionStorage.getItem(pendingAuthorizationKey));
++	sessionStorage.removeItem(pendingAuthorizationKey);
++	if (!pending || !state || pending.state !== state) {
++		throw new Error("OAuth 2.0 state mismatch");
++	}
++	return pending.verifier;
++}
++
++export async function redirectAuthorize({ serverMetadata, clientId, redirectUri, scope }) {
+ 	// TODO: move fragment to query string in redirect_uri
+-	// TODO: use the state param to prevent cross-site request
+-	// forgery
++	let state = randomString();
++	let verifier = randomString();
++	sessionStorage.setItem(pendingAuthorizationKey, JSON.stringify({ state, verifier }));
+ 	let params = {
+ 		"response_type": "code",
+ 		"client_id": clientId,
+ 		"redirect_uri": redirectUri,
++		"state": state,
++		"code_challenge": await codeChallenge(verifier),
++		"code_challenge_method": "S256",
+ 	};
+ 	if (scope) {
+ 		params.scope = scope;
+@@ -64,11 +97,12 @@ function buildPostHeaders(clientId, clientSecret) {
+ 	return headers;
+ }
+ 
+-export async function exchangeCode({ serverMetadata, redirectUri, code, clientId, clientSecret }) {
++export async function exchangeCode({ serverMetadata, redirectUri, code, codeVerifier, clientId, clientSecret }) {
+ 	let data = {
+ 		"grant_type": "authorization_code",
+ 		code,
+ 		"redirect_uri": redirectUri,
++		"code_verifier": codeVerifier,
+ 	};
+ 	if (!clientSecret) {
+ 		data["client_id"] = clientId;

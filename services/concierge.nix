@@ -35,6 +35,13 @@ in
 {
   imports = [ ./ergo.nix ./loopback.nix ./nginx.nix ./secrets.nix ];
 
+  options.weblounge.concierge.publicUrl = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = publicUrl;
+    description = "The members' site's origin, which is also the OAuth issuer.";
+  };
+
   options.weblounge.concierge.listen = lib.mkOption {
     type = lib.types.str;
     default = "127.0.0.1:8080";

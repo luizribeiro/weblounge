@@ -25,11 +25,6 @@ vmTest ''
       client.wait_until_succeeds(f"{fingerprint} | grep -vqF '{before.strip()}'", timeout=10)
       assert credenza.succeed("systemctl show -P MainPID ergochat") == pid
 
-  with subtest("irc.weblounge.org in a browser redirects to the landing page"):
-      credenza.wait_for_unit("nginx.service")
-      redirect = https("irc.weblounge.org", "/", "-o", "/dev/null", "-w", "%{redirect_url}")
-      assert redirect == "https://weblounge.org/", redirect
-
   with subtest("ergo's API answers the generated token"):
       body, status = ergo_api("status")
       assert status == "200" and '"success":true' in body, (status, body)

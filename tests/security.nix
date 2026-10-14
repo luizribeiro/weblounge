@@ -11,6 +11,7 @@ vmTest ''
   pages_and_directives_they_need = {
       "weblounge.org": ("/", {"script-src", "style-src", "img-src"}),
       members: ("/signin", {"script-src", "style-src", "img-src"}),
+      "irc.weblounge.org": ("/", {"script-src", "style-src", "manifest-src"}),
   }
 
   def assert_loopback_only(port, path):
@@ -29,7 +30,8 @@ vmTest ''
   class PageNeeds(HTMLParser):
       """What a page asks the browser to run inline, and what it fetches under which CSP directive."""
 
-      directives = {"script": "script-src", "img": "img-src", "stylesheet": "style-src", "icon": "img-src"}
+      directives = {"script": "script-src", "img": "img-src", "stylesheet": "style-src", "icon": "img-src",
+                    "manifest": "manifest-src"}
 
       def __init__(self, page):
           super().__init__()
@@ -127,14 +129,15 @@ vmTest ''
               assert headers.get("referrer-policy") == "same-origin", (name, path, headers)
               assert "frame-ancestors 'none'" in headers.get("content-security-policy", ""), (name, path, headers)
 
-  with subtest("the landing page and concierge's load all they need under their CSP, and nothing inline"):
+  with subtest("the landing page, concierge and gamja load all they need under their CSP, and nothing inline"):
       for name, (path, directives) in pages_and_directives_they_need.items():
           policy = headers_of(name, path)["content-security-policy"]
           needs = PageNeeds(https(name, path, "-f"))
           assert needs.inline == [], (name, needs.inline)
           assert {directive for directive, _ in needs.fetches} == directives, (name, needs.fetches)
           for directive, url in needs.fetches:
-              assert re.match(r"/[^/]", url) and csp_sources(policy, directive) == ["'self'"], (name, directive, url, policy)
+              same_origin = not re.match(r"[a-z]+:|//", url)
+              assert same_origin and csp_sources(policy, directive) == ["'self'"], (name, directive, url, policy)
 
   outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
 

@@ -136,7 +136,7 @@ in
     services.nginx.virtualHosts.${serverName} = {
       enableACME = true;
       forceSSL = true;
-      globalRedirect = domain;
+      globalRedirect = lib.mkDefault domain;
     };
 
     networking.firewall.allowedTCPPorts = [ port ];

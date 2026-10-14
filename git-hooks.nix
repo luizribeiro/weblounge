@@ -5,7 +5,11 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
   hooks = {
     check-merge-conflicts.enable = true;
     end-of-file-fixer.enable = true;
-    trim-trailing-whitespace.enable = true;
+    trim-trailing-whitespace = {
+      enable = true;
+      # A diff's blank context lines are a single space.
+      excludes = [ "\\.patch$" ];
+    };
 
     nixpkgs-fmt.enable = true;
     deadnix = {

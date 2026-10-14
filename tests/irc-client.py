@@ -1,21 +1,89 @@
-"""Connect to an IRC server over TLS, optionally logging in with SASL PLAIN
-or OAUTHBEARER, send COMMANDS once welcomed, and print every line the
-server sends."""
+"""Connect to an IRC server over TLS, or over a WebSocket the way a web
+client does, optionally logging in with SASL PLAIN or OAUTHBEARER, send
+COMMANDS once welcomed, and print every line the server sends."""
 
 import argparse
 import base64
+import os
 import socket
 import ssl
 
 QUIET_SECONDS = 2
 
 
-def connect(host, port):
+def connect(host, port, name=None):
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     sock = socket.create_connection((host, port), timeout=10)
-    return context.wrap_socket(sock, server_hostname=host)
+    return context.wrap_socket(sock, server_hostname=name or host)
+
+
+class WebSocket:
+    """Just enough of RFC 6455 to carry IRC lines, one per text frame, as
+    the text.ircv3.net subprotocol has it. Stands in for a socket."""
+
+    def __init__(self, sock, name, path="/socket"):
+        self.sock = sock
+        key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall("\r\n".join([
+            f"GET {path} HTTP/1.1",
+            f"Host: {name}",
+            f"Origin: https://{name}",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            f"Sec-WebSocket-Key: {key}",
+            "Sec-WebSocket-Version: 13",
+            "Sec-WebSocket-Protocol: text.ircv3.net",
+            "", "",
+        ]).encode())
+        self.pending = b""
+        while b"\r\n\r\n" not in self.pending:
+            self.pending += sock.recv(4096) or b"\r\n\r\n"
+        head, self.pending = self.pending.split(b"\r\n\r\n", 1)
+        status = head.split(b"\r\n")[0].decode()
+        if " 101 " not in status:
+            raise SystemExit(f"WebSocket upgrade refused: {status}")
+
+    def settimeout(self, seconds):
+        self.sock.settimeout(seconds)
+
+    def sendall(self, line):
+        payload = line.removesuffix(b"\r\n")
+        assert len(payload) < 126
+        mask = os.urandom(4)
+        masked = bytes(c ^ mask[i % 4] for i, c in enumerate(payload))
+        self.sock.sendall(bytes([0x81, 0x80 | len(payload)]) + mask + masked)
+
+    def recv(self, _size):
+        """The next text frame as a line; b"" once the server closes."""
+        try:
+            return self.text_frame()
+        except EOFError:
+            return b""
+
+    def text_frame(self):
+        while True:
+            first, second = self.read(2)
+            length = second & 0x7F
+            if length >= 126:
+                width = 2 if length == 126 else 8
+                length = int.from_bytes(self.read(width), "big")
+            payload = self.read(length)
+            opcode = first & 0x0F
+            if opcode == 0x8:
+                return b""
+            if opcode == 0x1:
+                return payload + b"\r\n"
+
+    def read(self, size):
+        while len(self.pending) < size:
+            data = self.sock.recv(4096)
+            if not data:
+                raise EOFError
+            self.pending += data
+        data, self.pending = self.pending[:size], self.pending[size:]
+        return data
 
 
 class Connection:
@@ -70,12 +138,20 @@ def main():
     parser.add_argument("--account")
     parser.add_argument("--password")
     parser.add_argument("--token", help="an OAuth 2.0 bearer token")
+    parser.add_argument(
+        "--websocket", metavar="NAME",
+        help="connect to wss://NAME/socket at the host, as a web client",
+    )
     parser.add_argument("commands", nargs="*")
     args = parser.parse_args()
     if args.account and not args.password:
         parser.error("--account needs --password")
 
-    conn = Connection(connect(args.host, 6697))
+    if args.websocket:
+        sock = connect(args.host, 443, args.websocket)
+        conn = Connection(WebSocket(sock, args.websocket))
+    else:
+        conn = Connection(connect(args.host, 6697))
     conn.send("CAP LS 302")
     if args.account:
         plain = f"{args.account}\0{args.account}\0{args.password}"

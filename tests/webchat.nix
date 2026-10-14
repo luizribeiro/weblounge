@@ -70,6 +70,33 @@ vmTest ''
       assert " 903 " in session, session
       assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
 
+  with subtest("irc.weblounge.org serves gamja, set up to sign members in through concierge"):
+      page = https("irc.weblounge.org", "/", "-f")
+      assert "<title>gamja IRC client</title>" in page, page
+      config = json.loads(https("irc.weblounge.org", "/config.json", "-f"))
+      assert config == {
+          "server": {"url": "wss://irc.weblounge.org/socket", "autojoin": "#lounge", "auth": "oauth2", "autoconnect": True},
+          "oauth2": {"url": f"https://{members}", "client_id": "gamja"},
+      }, config
+
+  with subtest("gamja's CSP lets it reach Ergo's WebSocket and concierge, and nothing else"):
+      headers = https("irc.weblounge.org", "/", "-fI").lower()
+      [policy] = re.findall(r"^content-security-policy: (.*)$", headers, re.M)
+      assert f"connect-src 'self' wss://irc.weblounge.org/socket https://{members};" in policy, policy
+      assert "default-src 'none'" in policy and "frame-ancestors 'none'" in policy, policy
+
+  with subtest("the token logs in over gamja's WebSocket too"):
+      session = irc(token=token, websocket="irc.weblounge.org")
+      assert " 903 " in session, session
+      assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
+
+  with subtest("Ergo refuses WebSockets from pages on other origins"):
+      upgrade = ["--http1.1", "-o", "/dev/null", "-w", "%{http_code}", "-H", "Connection: Upgrade",
+                 "-H", "Upgrade: websocket", "-H", "Sec-WebSocket-Version: 13",
+                 "-H", "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=="]
+      status = https("irc.weblounge.org", "/socket", *upgrade, "-H", "Origin: https://evil.example")
+      assert status == "403", status
+
   with subtest("a garbage token is refused"):
       reply = client.fail(irc_command(token="q7Hx2mZp9vLcT4wRfBa-_wq7Hx2mZp9vLcT4wRfBa-_") + " 2>&1")
       assert "SASL OAUTHBEARER login failed" in reply, reply
