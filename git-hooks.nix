@@ -50,5 +50,12 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
       types_or = [ "ts" "css" "json" ];
       settings.flags = "--no-errors-on-unmatched";
     };
+    ty = {
+      enable = true;
+      name = "ty";
+      entry = "${pkgs.ty}/bin/ty check --python ${import ./tests/e2e/lib/python.nix { inherit pkgs; }}";
+      files = "\\.pyi?$";
+      pass_filenames = false;
+    };
   };
 }

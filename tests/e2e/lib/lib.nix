@@ -29,6 +29,10 @@ pkgs.testers.runNixOSTest {
   # credenza sets nixpkgs.hostPlatform, which a read-only pkgs forbids.
   node.pkgsReadOnly = false;
 
+  # The ty pre-commit hook checks the test files, with driver.pyi for the
+  # names the driver provides; the driver's own ty can't import it.
+  skipTypeCheck = true;
+
   nodes = {
     credenza = {
       imports = weblounge.hostModules "credenza" ++ [ ../../../modules/offline-acme.nix (test.credenza or { }) ];

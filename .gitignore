@@ -4,3 +4,4 @@ result-*
 .vm
 .pre-commit-config.yaml
 /target
+.python

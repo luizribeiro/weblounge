@@ -1,6 +1,10 @@
 import json
 import re
 import shlex
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from driver import client, credenza, start_all
 
 
 def ergo_api_token():

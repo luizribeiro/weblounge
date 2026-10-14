@@ -1,7 +1,9 @@
 { pkgs, gitHooks, multiclient }:
 
 pkgs.mkShell ({
-  inherit (gitHooks) shellHook;
+  shellHook = gitHooks.shellHook + ''
+    ln -sfn ${import ./tests/e2e/lib/python.nix { inherit pkgs; }} "$(git rev-parse --show-toplevel)/.python"
+  '';
   packages = gitHooks.enabledPackages ++ (with pkgs; [
     bacon
     cargo

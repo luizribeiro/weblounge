@@ -9,5 +9,7 @@ skip-magic-trailing-comma = true
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP"]
 
-[tool.ruff.lint.per-file-ignores]
-"tests/e2e/lib/helpers.py" = ["F821"]
+[tool.ty.environment]
+# The dev shell links the Python environment of tests/e2e/lib/python.nix here.
+python = ".python"
+extra-paths = ["tests/e2e/lib", "tests/e2e/clients"]
