@@ -34,15 +34,19 @@ pkgs.testers.runNixOSTest {
         ])).rsplit("\n", 1)
 
     def register(token, account, password):
-        body, _ = ergo_api("saregister", token, accountName=account, passphrase=password)
+        body, _ = ergo_api("ns/saregister", token, accountName=account, passphrase=password)
         return body
 
-    def irc(*commands, machine=client, host="credenza", **options):
+    def irc_command(*commands, host="credenza", **options):
         flags = [f"--{name}={value}" for name, value in options.items()]
-        return machine.succeed(shlex.join(["irc-client", host, *flags, *commands]))
+        return shlex.join(["irc-client", host, *flags, *commands])
+
+    def irc(*commands, machine=client, **options):
+        return machine.succeed(irc_command(*commands, **options))
 
     alice = {"account": "alice", "password": "correct-horse"}
     bob = {"account": "bob", "password": "battery-staple"}
+    carol = {"account": "carol", "password": "tr0ub4dor-and-3"}
 
     start_all()
 
@@ -163,10 +167,27 @@ pkgs.testers.runNixOSTest {
 
     with subtest("members may delete their own messages from history"):
         reply = irc("PRIVMSG HistServ :DELETE #lounge no-such-message", **alice)
-        assert "NOTICE alice :Could not delete message" in reply, reply
+        assert "NOTICE alice :Message not found" in reply, reply
 
     with subtest("ergo advertises web push for mobile clients"):
         assert "VAPID=" in session, session
+
+    with subtest("the API changes a member's password, and only the new one logs in"):
+        register(token, **carol)
+        renewed = {**carol, "password": "a-longer-generated-one"}
+        body, _ = ergo_api("ns/passwd", token, accountName=carol["account"], passphrase=renewed["password"])
+        assert json.loads(body)["success"], body
+        client.fail(irc_command(**carol))
+        renewed_session = irc(**renewed)
+        assert " 903 " in renewed_session, renewed_session
+
+    with subtest("the API reads and changes a member's always-on setting"):
+        body, _ = ergo_api("ns/saget", token, accountName=carol["account"])
+        assert json.loads(body)["alwaysOn"] == "default", body
+        body, _ = ergo_api("ns/saset", token, accountName=carol["account"], alwaysOn="off")
+        assert json.loads(body)["alwaysOn"] == "off", body
+        body, _ = ergo_api("ns/saget", token, accountName=carol["account"])
+        assert json.loads(body)["alwaysOn"] == "off", body
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
