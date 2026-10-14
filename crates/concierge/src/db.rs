@@ -85,6 +85,13 @@ pub struct Invite {
     pub revoked_at: Option<i64>,
 }
 
+/// A session that hasn't expired, of a member who hasn't been removed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Session {
+    pub member: Member,
+    pub expires_at: i64,
+}
+
 /// What [`Db::remove_member`] did besides clearing the member's data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Removal {
@@ -194,6 +201,53 @@ impl Db {
         .execute(&self.pool)
         .await
         .map(drop)
+    }
+
+    /// The live session whose token hashes to `token_hash`, if any.
+    pub async fn session(&self, token_hash: &[u8], now: i64) -> sqlx::Result<Option<Session>> {
+        let row = sqlx::query!(
+            "SELECT account, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?",
+            token_hash,
+            now,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let member = self.member(&row.account).await?;
+        Ok(member
+            .filter(|member| member.removed_at.is_none())
+            .map(|member| Session {
+                member,
+                expires_at: row.expires_at,
+            }))
+    }
+
+    pub async fn renew_session(&self, token_hash: &[u8], expires_at: i64) -> sqlx::Result<()> {
+        sqlx::query!(
+            "UPDATE sessions SET expires_at = ? WHERE token_hash = ?",
+            expires_at,
+            token_hash,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    pub async fn end_session(&self, token_hash: &[u8]) -> sqlx::Result<()> {
+        sqlx::query!("DELETE FROM sessions WHERE token_hash = ?", token_hash)
+            .execute(&self.pool)
+            .await
+            .map(drop)
+    }
+
+    /// Deletes the sessions that expired by `now`, answering how many.
+    pub async fn end_expired_sessions(&self, now: i64) -> sqlx::Result<u64> {
+        let deleted = sqlx::query!("DELETE FROM sessions WHERE expires_at <= ?", now)
+            .execute(&self.pool)
+            .await?;
+        Ok(deleted.rows_affected())
     }
 
     /// Ends every session of `account`, answering how many there were.
@@ -422,5 +476,72 @@ pub(crate) mod tests {
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(bob.invited_by.as_deref(), Some("alice"));
         assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
+    }
+
+    async fn with_sessions() -> (Db, tempfile::TempDir) {
+        let (db, dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, joined_at, invite_quota) VALUES ('alice', 0, 5), ('bob', 0, 5);
+             INSERT INTO sessions (token_hash, account, created_at, expires_at)
+             VALUES (x'a1', 'alice', 0, 100), (x'a2', 'alice', 0, 200), (x'b1', 'bob', 0, 100);",
+        )
+        .await
+        .unwrap();
+        (db, dir)
+    }
+
+    #[tokio::test]
+    async fn a_session_signs_its_member_in_until_it_expires() {
+        let (db, _dir) = with_sessions().await;
+        let session = db.session(b"\xa1", 99).await.unwrap().unwrap();
+        assert_eq!(
+            (session.member.account.as_str(), session.expires_at),
+            ("alice", 100)
+        );
+        assert_eq!(db.session(b"\xa1", 100).await.unwrap(), None);
+        assert_eq!(db.session(b"\xff", 0).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn renewing_pushes_the_expiry_back() {
+        let (db, _dir) = with_sessions().await;
+        db.renew_session(b"\xa1", 500).await.unwrap();
+        assert_eq!(
+            db.session(b"\xa1", 300).await.unwrap().unwrap().expires_at,
+            500
+        );
+        assert_eq!(
+            db.session(b"\xb1", 0).await.unwrap().unwrap().expires_at,
+            100
+        );
+    }
+
+    #[tokio::test]
+    async fn ending_a_session_leaves_the_members_others() {
+        let (db, _dir) = with_sessions().await;
+        db.end_session(b"\xa1").await.unwrap();
+        assert_eq!(db.session(b"\xa1", 0).await.unwrap(), None);
+        assert!(db.session(b"\xa2", 0).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn expired_sessions_are_cleaned_up() {
+        let (db, _dir) = with_sessions().await;
+        assert_eq!(db.end_expired_sessions(150).await.unwrap(), 2);
+        assert!(db.session(b"\xa2", 150).await.unwrap().is_some());
+        assert_eq!(db.end_sessions("bob").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_removed_members_session_signs_nobody_in() {
+        let (db, _dir) = with_sessions().await;
+        execute(
+            &db,
+            "UPDATE members SET invite_quota = 0, removed_at = 1 WHERE account = 'alice'",
+        )
+        .await
+        .unwrap();
+        assert_eq!(db.session(b"\xa2", 0).await.unwrap(), None);
     }
 }
