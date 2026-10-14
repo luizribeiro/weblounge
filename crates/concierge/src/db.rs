@@ -516,26 +516,6 @@ impl Db {
         .await
     }
 
-    /// Revokes the unused invite `code`, if `created_by` made it; answers
-    /// whether it did.
-    pub async fn revoke_invite(
-        &self,
-        code: &str,
-        created_by: &str,
-        now: i64,
-    ) -> sqlx::Result<bool> {
-        let revoked = sqlx::query!(
-            "UPDATE invites SET revoked_at = ?
-             WHERE code = ? AND created_by = ? AND redeemed_at IS NULL AND revoked_at IS NULL",
-            now,
-            code,
-            created_by,
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(revoked.rows_affected() == 1)
-    }
-
     /// Holds the invite `code` for one redemption, if it's open now.
     pub async fn claim_invite(&self, code: &str, now: i64) -> sqlx::Result<Option<Claim>> {
         let Some(invite) = self.invite(code).await? else {
@@ -1082,22 +1062,6 @@ pub(crate) mod tests {
                 .is_err()
         );
         assert_eq!(db.invite("open").await.unwrap().unwrap().redeemed_at, None);
-    }
-
-    #[tokio::test]
-    async fn members_revoke_only_their_own_unused_invites() {
-        let (db, _dir) = with_open_invite().await;
-        execute(
-            &db,
-            "INSERT INTO members (account, joined_at, invite_quota) VALUES ('mallory', 0, 5)",
-        )
-        .await
-        .unwrap();
-        assert!(!db.revoke_invite("open", "mallory", CREATED).await.unwrap());
-        assert!(db.revoke_invite("open", "alice", CREATED).await.unwrap());
-        assert!(!db.revoke_invite("open", "alice", CREATED).await.unwrap());
-        let invite = db.invite("open").await.unwrap().unwrap();
-        assert_eq!(invite.status(CREATED), invite_rules::Status::Revoked);
     }
 
     #[tokio::test]

@@ -79,7 +79,6 @@ pub fn router(app: App) -> Router {
                 .post(routes::invites::create)
                 .layer(map_response(routes::no_store)),
         )
-        .route("/invites/revoke", post(routes::invites::revoke))
         .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),

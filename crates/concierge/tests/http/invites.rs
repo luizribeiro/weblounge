@@ -103,44 +103,6 @@ async fn admins_invite_beyond_the_quota() {
 }
 
 #[tokio::test]
-async fn revoking_kills_the_link_and_gives_the_invite_back() {
-    let site = Site::start().await;
-    site.add_member("alice").await;
-    let cookie = site.sign_in("alice").await;
-    let link = create_invite(&site, &cookie).await;
-    let code = link.rsplit('/').next().unwrap();
-
-    let response = site
-        .post("/invites/revoke", &[("code", code)], Some(&cookie))
-        .await;
-
-    assert_eq!(location(&response), "/invites");
-    let page = invites_tab(&site, &cookie).await;
-    assert!(
-        page.contains(&format!("{DEFAULT_QUOTA} left</span>")),
-        "{page}"
-    );
-    let path = link.strip_prefix(PUBLIC_URL).unwrap();
-    assert_eq!(site.get(path, None).await.status(), 404);
-}
-
-#[tokio::test]
-async fn members_cannot_revoke_each_others_invites() {
-    let site = Site::start().await;
-    site.add_member("alice").await;
-    site.add_member("mallory").await;
-    site.add_invite("alices-invite", Some("alice")).await;
-    let cookie = site.sign_in("mallory").await;
-    site.post(
-        "/invites/revoke",
-        &[("code", "alices-invite")],
-        Some(&cookie),
-    )
-    .await;
-    assert_eq!(site.get("/invite/alices-invite", None).await.status(), 200);
-}
-
-#[tokio::test]
 async fn lists_the_people_a_member_invited() {
     let site = Site::start().await;
     site.add_member("alice").await;
@@ -162,10 +124,8 @@ async fn lists_the_people_a_member_invited() {
 async fn guests_and_other_origins_create_nothing() {
     let site = Site::start().await;
     site.add_member("alice").await;
-    for path in ["/invites", "/invites/revoke"] {
-        let response = site.post(path, &[("code", "x")], None).await;
-        assert_eq!(location(&response), "/signin", "{path}");
-    }
+    let response = site.post("/invites", &[], None).await;
+    assert_eq!(location(&response), "/signin");
     let cookie = site.sign_in("alice").await;
     let evil = [(header::ORIGIN.as_str(), "https://evil.example")];
     let response = site.post_with("/invites", &[], Some(&cookie), &evil).await;

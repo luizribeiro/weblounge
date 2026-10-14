@@ -1,13 +1,11 @@
-//! The Invites tab: members creating and revoking their own invites, and
-//! the invite tree. A new invite's link is shown once, as it's created.
+//! The Invites tab: members creating invites, the people they brought in,
+//! and the invite tree. A new invite's link is shown once, as it's made.
 
 use askama::Template;
 use axum::{
-    Form,
     extract::State,
     response::{IntoResponse, Redirect, Response},
 };
-use serde::Deserialize;
 
 use super::{Layout, Tab, internal_error, render};
 use crate::{
@@ -37,12 +35,6 @@ struct NewInvitePage<'a> {
     url: String,
     svg: String,
     lifetime: String,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-pub struct Revocation {
-    code: String,
 }
 
 pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
@@ -90,22 +82,6 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
         }
         Ok(false) => Redirect::to("/invites").into_response(),
         Err(error) => internal_error("Creating an invite", error),
-    }
-}
-
-pub async fn revoke(
-    State(app): State<AppState>,
-    CurrentMember(me): CurrentMember,
-    Form(revocation): Form<Revocation>,
-) -> Response {
-    let revoked = app
-        .db
-        .revoke_invite(&revocation.code, &me.member.account, db::now())
-        .await;
-    // Whether there was such an invite of theirs is nobody's business.
-    match revoked {
-        Ok(_) => Redirect::to("/invites").into_response(),
-        Err(error) => internal_error("Revoking an invite", error),
     }
 }
 
