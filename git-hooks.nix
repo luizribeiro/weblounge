@@ -21,6 +21,13 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
       };
     };
     rustfmt.enable = true;
+    clippy = {
+      enable = true;
+      settings = {
+        denyWarnings = true;
+        extraArgs = "--all-targets";
+      };
+    };
     gofmt.enable = true;
     shellcheck.enable = true;
     yamllint = {

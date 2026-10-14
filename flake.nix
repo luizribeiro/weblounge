@@ -42,7 +42,8 @@
 
       checks = lib.foldl' lib.recursiveUpdate { } [
         weblounge.toplevelChecks
-        (lib.mapAttrs (_: hooks: { git-hooks = hooks; }) gitHooks)
+        # The sandbox can't fetch crates; concierge-clippy lints with them.
+        (lib.mapAttrs (_: hooks: { git-hooks = hooks.overrideAttrs { SKIP = "clippy"; }; }) gitHooks)
         (forEachSystem (pkgs: {
           # Building it runs its go test.
           bot-template-package = pkgs.callPackage ./templates/bot/package.nix { };
