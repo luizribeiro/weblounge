@@ -9,13 +9,13 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{Layout, internal_error, invites::Invites, render, render_with};
+use super::{Layout, internal_error, invites::Invites, render_with};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
     clients::{CLIENTS, Client},
     config::IrcServer,
-    db,
+    db::{self, Member},
     email::{self, Email},
     oauth::Webchat,
 };
@@ -26,18 +26,16 @@ struct Account<'a> {
     layout: Layout<'a>,
     nick: &'a str,
     irc: &'a IrcServer,
-    email: &'a str,
-    email_error: Option<String>,
-    news: bool,
-    saved: bool,
+    clients: &'a [Client],
+    webchat: &'a Webchat,
+    invites: Invites,
+    flash: Flash,
+    settings: SettingsForm<'a>,
     email_max_length: usize,
     email_pattern: &'a str,
-    clients: &'a [Client],
-    invites: Invites,
-    invited: bool,
-    webchat: &'a Webchat,
 }
 
+/// What the last change, redirected here, says it did.
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Flash {
@@ -52,28 +50,30 @@ pub struct Settings {
     news: Option<String>,
 }
 
+/// The email and news form, as stored or as typed.
+struct SettingsForm<'a> {
+    email: &'a str,
+    news: bool,
+    email_error: Option<String>,
+}
+
+/// The parts of the account home a refused form fills in.
+#[derive(Default)]
+struct Forms<'a> {
+    flash: Flash,
+    settings: Option<SettingsForm<'a>>,
+}
+
 pub async fn show(
     State(app): State<AppState>,
     CurrentMember(me): CurrentMember,
     Query(flash): Query<Flash>,
 ) -> Response {
-    let member = &me.member;
-    let invites = match Invites::of(&app, member, db::now()).await {
-        Ok(invites) => invites,
-        Err(error) => return internal_error("Listing invites", error),
+    let forms = Forms {
+        flash,
+        ..Forms::default()
     };
-    let page = Account {
-        saved: flash.saved.is_some(),
-        invited: flash.invited.is_some(),
-        ..page(
-            &app,
-            &member.account,
-            member.email.as_deref().unwrap_or(""),
-            member.news_opt_in,
-            invites,
-        )
-    };
-    render(&page)
+    home(&app, &me.member, StatusCode::OK, forms).await
 }
 
 pub async fn update(
@@ -86,15 +86,15 @@ pub async fn update(
     let email = match Email::parse(&settings.email) {
         Ok(email) => email,
         Err(error) => {
-            let invites = match Invites::of(&app, &me.member, db::now()).await {
-                Ok(invites) => invites,
-                Err(error) => return internal_error("Listing invites", error),
+            let forms = Forms {
+                settings: Some(SettingsForm {
+                    email: &settings.email,
+                    news,
+                    email_error: Some(error.to_string()),
+                }),
+                ..Forms::default()
             };
-            let page = Account {
-                email_error: Some(error.to_string()),
-                ..page(&app, account, &settings.email, news, invites)
-            };
-            return render_with(StatusCode::UNPROCESSABLE_ENTITY, &page);
+            return home(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms).await;
         }
     };
     match app.db.update_settings(account, email.as_str(), news).await {
@@ -103,29 +103,31 @@ pub async fn update(
     }
 }
 
-fn page<'a>(
-    app: &'a App,
-    nick: &'a str,
-    email: &'a str,
-    news: bool,
-    invites: Invites,
-) -> Account<'a> {
-    Account {
+/// The account home of `member`, with `forms` filled in over what's stored.
+async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
+    let invites = match Invites::of(app, member, db::now()).await {
+        Ok(invites) => invites,
+        Err(error) => return internal_error("Listing invites", error),
+    };
+    let settings = forms.settings.unwrap_or_else(|| SettingsForm {
+        email: member.email.as_deref().unwrap_or(""),
+        news: member.news_opt_in,
+        email_error: None,
+    });
+    let page = Account {
         layout: Layout {
             assets: &app.assets,
-            nick: Some(nick),
+            nick: Some(&member.account),
         },
-        nick,
+        nick: &member.account,
         irc: &app.irc_server,
-        email,
-        email_error: None,
-        news,
-        saved: false,
+        clients: &CLIENTS,
+        webchat: &app.webchat,
+        invites,
+        flash: forms.flash,
+        settings,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
-        clients: &CLIENTS,
-        invites,
-        invited: false,
-        webchat: &app.webchat,
-    }
+    };
+    render_with(status, &page)
 }

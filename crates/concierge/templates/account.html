@@ -14,7 +14,7 @@
         </section>
         <section class="card invites" id="invites" aria-labelledby="invites-title">
           <h2 class="eyebrow" id="invites-title">Invites</h2>
-          {%- if invited %}
+          {%- if flash.invited.is_some() %}
           <p class="notice" role="status">Invite created. Send the link yourself; it works once, for a week.</p>
           {%- endif %}
           {%- match invites.remaining %}
@@ -56,21 +56,21 @@
         </section>
         <section class="card" aria-labelledby="settings-title">
           <h2 class="eyebrow" id="settings-title">Settings</h2>
-          {%- if saved %}
+          {%- if flash.saved.is_some() %}
           <p class="notice" role="status">Saved.</p>
           {%- endif %}
           <form class="form" method="post" action="/settings">
             <div class="field">
               <label for="email">Email</label>
-              <input id="email" name="email" type="email" value="{{ email }}" required maxlength="{{ email_max_length }}" pattern="{{ email_pattern }}" autocomplete="email" aria-describedby="email-hint"{% if email_error.is_some() %} aria-invalid="true"{% endif %}>
-              {%- if let Some(error) = email_error %}
+              <input id="email" name="email" type="email" value="{{ settings.email }}" required maxlength="{{ email_max_length }}" pattern="{{ email_pattern }}" autocomplete="email" aria-describedby="email-hint"{% if settings.email_error.is_some() %} aria-invalid="true"{% endif %}>
+              {%- if let Some(error) = settings.email_error %}
               <p class="field-error" id="email-hint">{{ error }}</p>
               {%- else %}
               <p class="hint" id="email-hint">Unverified. For account recovery.</p>
               {%- endif %}
             </div>
             <label class="check">
-              <input name="news" type="checkbox"{% if news %} checked{% endif %}>
+              <input name="news" type="checkbox"{% if settings.news %} checked{% endif %}>
               <span>Occasional news by email</span>
             </label>
             <button class="button button-primary" type="submit">Save</button>
