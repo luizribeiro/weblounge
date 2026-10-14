@@ -13,6 +13,7 @@ use crate::{
     auth::Visitor,
     clients::{self, CLIENTS, Client, Snippet},
     config::IrcServer,
+    oauth::Webchat,
 };
 
 #[derive(Template)]
@@ -25,6 +26,7 @@ struct Guide<'a> {
     snippet: Option<Snippet>,
     ircs_link: Option<String>,
     clients: &'a [Client],
+    webchat: &'a Webchat,
 }
 
 pub async fn show(
@@ -47,5 +49,6 @@ pub async fn show(
         snippet: client.snippet(&app.irc_server, nick),
         ircs_link: client.ircs_link(&app.irc_server),
         clients: &CLIENTS,
+        webchat: &app.webchat,
     })
 }

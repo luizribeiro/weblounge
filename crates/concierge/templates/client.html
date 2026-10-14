@@ -12,6 +12,10 @@
         <a href="{{ link.url }}">{{ link.label }}</a>
         {%- endfor %}
       </p>
+      {%- if client.in_browser %}
+      <p class="prose">{{ client.setup }}</p>
+      {%- call components::open_chat(webchat) %}{% endcall %}
+      {%- else %}
       <div class="account-grid">
         <section class="card" aria-labelledby="setup-title">
           <h2 class="eyebrow" id="setup-title">Set it up</h2>
@@ -32,5 +36,6 @@
           {%- endif %}
         </section>
       </div>
+      {%- endif %}
       {%- call components::guides(clients) %}{% endcall %}
 {%- endblock %}

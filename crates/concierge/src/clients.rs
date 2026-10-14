@@ -20,6 +20,8 @@ pub struct Client {
     config: Option<Format>,
     /// Whether it opens `ircs://` links with the server filled in.
     opens_ircs_links: bool,
+    /// Whether it's our web client, which needs no setup at all.
+    pub in_browser: bool,
 }
 
 pub struct Link {
@@ -41,7 +43,21 @@ pub struct Snippet {
     pub text: String,
 }
 
-pub const CLIENTS: [Client; 5] = [
+pub const CLIENTS: [Client; 6] = [
+    Client {
+        slug: "gamja",
+        name: "gamja",
+        runs_on: "Any browser",
+        price: "Nothing to install",
+        links: &[Link {
+            label: "Source",
+            url: "https://codeberg.org/emersion/gamja",
+        }],
+        setup: "Nothing to set up: it signs you in with your session here and opens #lounge.",
+        config: None,
+        opens_ircs_links: false,
+        in_browser: true,
+    },
     Client {
         slug: "halloy",
         name: "Halloy",
@@ -54,6 +70,7 @@ pub const CLIENTS: [Client; 5] = [
         setup: "Add this to config.toml in Halloy's config directory, then reload the config.",
         config: Some(Format::HalloyToml),
         opens_ircs_links: true,
+        in_browser: false,
     },
     Client {
         slug: "goguma",
@@ -77,6 +94,7 @@ pub const CLIENTS: [Client; 5] = [
         setup: "Fill in the server, your nick and your password. TLS is on by default; give the server as host:port if the port isn't 6697.",
         config: None,
         opens_ircs_links: false,
+        in_browser: false,
     },
     Client {
         slug: "mango",
@@ -96,6 +114,7 @@ pub const CLIENTS: [Client; 5] = [
         setup: "Add a server with the details below: TLS on, SASL PLAIN with your nick and password.",
         config: None,
         opens_ircs_links: false,
+        in_browser: false,
     },
     Client {
         slug: "senpai",
@@ -109,6 +128,7 @@ pub const CLIENTS: [Client; 5] = [
         setup: "Save this as ~/.config/senpai/senpai.scfg. Add password-cmd (or password) for your password.",
         config: Some(Format::SenpaiScfg),
         opens_ircs_links: false,
+        in_browser: false,
     },
     Client {
         slug: "weechat",
@@ -122,6 +142,7 @@ pub const CLIENTS: [Client; 5] = [
         setup: "Run these in WeeChat, typing your password into the /secure line.",
         config: Some(Format::WeechatCommands),
         opens_ircs_links: false,
+        in_browser: false,
     },
 ];
 
@@ -311,6 +332,22 @@ username = "alice"
     }
 
     #[test]
+    fn gamja_is_the_one_client_that_runs_in_the_browser() {
+        let in_browser: Vec<_> = CLIENTS
+            .iter()
+            .filter(|client| client.in_browser)
+            .map(|client| client.slug)
+            .collect();
+        assert_eq!(in_browser, ["gamja"]);
+        assert!(
+            client("gamja")
+                .snippet(&production(), Some("alice"))
+                .is_none()
+        );
+        assert_eq!(client("gamja").ircs_link(&production()), None);
+    }
+
+    #[test]
     fn mobile_clients_are_set_up_by_hand() {
         for slug in ["goguma", "mango"] {
             assert!(client(slug).snippet(&production(), Some("alice")).is_none());
@@ -327,7 +364,7 @@ username = "alice"
             client("halloy").ircs_link(&vm()).as_deref(),
             Some("ircs://irc.weblounge.localhost:16697/#lounge")
         );
-        for slug in ["goguma", "mango", "senpai", "weechat"] {
+        for slug in ["gamja", "goguma", "mango", "senpai", "weechat"] {
             assert_eq!(client(slug).ircs_link(&production()), None, "{slug}");
         }
     }

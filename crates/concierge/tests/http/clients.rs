@@ -30,7 +30,7 @@ async fn a_member_gets_a_config_with_their_nick_and_no_password() {
 #[tokio::test]
 async fn guests_get_every_guide_with_a_placeholder_nick() {
     let site = Site::start().await;
-    for client in &CLIENTS {
+    for client in CLIENTS.iter().filter(|client| !client.in_browser) {
         let response = site.get(&client.guide_url(), None).await;
         assert_eq!(response.status(), 200, "{}", client.slug);
         let page = body_text(response).await;
@@ -44,6 +44,15 @@ async fn guests_get_every_guide_with_a_placeholder_nick() {
         assert_eq!(page.contains(NICK_PLACEHOLDER), has_config, "{page}");
         assert!(page.contains(r#"<a href="/signin">Sign in</a>"#), "{page}");
     }
+}
+
+#[tokio::test]
+async fn gamjas_guide_just_opens_the_chat() {
+    let page = body_text(Site::start().await.get("/clients/gamja", None).await).await;
+    assert!(page.contains("<h1>gamja</h1>"), "{page}");
+    assert!(crate::opens_the_chat(&page), "{page}");
+    assert!(!page.contains("<code>PLAIN</code>"), "{page}");
+    assert!(!page.contains("<pre>"), "{page}");
 }
 
 #[tokio::test]
