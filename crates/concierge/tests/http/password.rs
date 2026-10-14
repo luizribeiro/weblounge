@@ -62,6 +62,16 @@ async fn the_form_lets_password_managers_update_the_saved_password() {
     );
 }
 
+// Bitwarden takes the username from a field before the password, and would
+// otherwise fill the nick into the email field.
+#[tokio::test]
+async fn no_text_field_precedes_the_current_password() {
+    let (site, cookie) = signed_in_alice().await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
+    let current = page.find(r#"id="current-password""#).unwrap();
+    assert!(page.find(r#"id="email""#).unwrap() > current, "{page}");
+}
+
 #[tokio::test]
 async fn changes_the_password_and_ends_every_other_session_and_its_tokens() {
     let (site, cookie) = signed_in_alice().await;
