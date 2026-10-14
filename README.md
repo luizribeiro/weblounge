@@ -114,6 +114,7 @@ machine. They print plain lines a script can read:
 | `member reset-password <account>`         | Sets a new generated password, ends sessions, prints it once    |
 | `member delete <account>`                 | Removes a member's data, keeping their place in the tree        |
 | `member reconcile`                        | Lists Ergo accounts without members, and the other way round    |
+| `member grant-invites <account> <n>`      | Raises a member's invite quota by n                             |
 
 Ergo's API can't delete accounts, so after `member delete` an oper still
 runs `/NS ERASE <account>`.

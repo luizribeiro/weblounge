@@ -24,6 +24,12 @@ pub enum MemberCommand {
     /// Remove a member's personal data and sessions and revoke their open
     /// invites, keeping their place in the invite tree.
     Delete { account: String },
+    /// Raise a member's invite quota by N.
+    GrantInvites {
+        account: String,
+        #[arg(value_parser = clap::value_parser!(u16).range(1..))]
+        n: u16,
+    },
     /// List Ergo accounts that aren't members, members Ergo lacks, and
     /// removed members whose accounts are still to be erased.
     Reconcile,
@@ -37,6 +43,7 @@ pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result
         } => adopt(admin, &account, is_admin).await,
         MemberCommand::ResetPassword { account } => reset_password(admin, &account).await,
         MemberCommand::Delete { account } => delete(admin, &account).await,
+        MemberCommand::GrantInvites { account, n } => grant_invites(admin, &account, n).await,
         MemberCommand::Reconcile => reconcile(admin).await,
     }
 }
@@ -90,6 +97,19 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
         "removed {account} (sessions ended: {}, invites revoked: {})\n\
          Ergo's API can't delete accounts: an oper must run /NS ERASE {account}\n",
         removal.sessions_ended, removal.invites_revoked
+    ))
+}
+
+async fn grant_invites(admin: &Admin, name: &str, n: u16) -> anyhow::Result<String> {
+    let member = current_member(admin, name).await?;
+    let quota = admin
+        .db
+        .grant_invites(&member.account, n.into())
+        .await?
+        .with_context(|| format!("{} was removed", member.account))?;
+    Ok(format!(
+        "{}'s invite quota is now {quota}\n",
+        member.account
     ))
 }
 

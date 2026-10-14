@@ -158,6 +158,20 @@ impl Db {
         .await
     }
 
+    /// Raises a current member's invite quota by `extra`, answering the new
+    /// quota, or `None` if there's no such member or they were removed.
+    pub async fn grant_invites(&self, account: &str, extra: i64) -> sqlx::Result<Option<i64>> {
+        sqlx::query_scalar!(
+            "UPDATE members SET invite_quota = invite_quota + ?
+             WHERE account = ? AND removed_at IS NULL
+             RETURNING invite_quota",
+            extra,
+            account,
+        )
+        .fetch_optional(&self.pool)
+        .await
+    }
+
     /// Every member's account, removed ones included.
     pub async fn member_accounts(&self) -> sqlx::Result<Vec<MemberAccount>> {
         sqlx::query_as!(

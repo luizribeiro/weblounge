@@ -68,6 +68,11 @@ vmTest ''
       status = concierge_admin("status")
       assert "(migration 20261014120000, 1 members)" in status, status
 
+  with subtest("concierge-admin member grant-invites raises a member's invite quota"):
+      granted = concierge_admin("member", "grant-invites", "dana", "3")
+      assert granted == "Dana's invite quota is now 8\n", granted
+      credenza.fail(concierge_admin_command("member", "grant-invites", "dana", "0"))
+
   with subtest("concierge-admin member reset-password replaces the IRC password and prints the new one"):
       password = concierge_admin("member", "reset-password", "dana").strip()
       assert re.fullmatch("[a-z2-9]{26}", password), password

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members SET invite_quota = invite_quota + ?\n             WHERE account = ? AND removed_at IS NULL\n             RETURNING invite_quota",
+  "describe": {
+    "columns": [
+      {
+        "name": "invite_quota",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3bbca8b3e56452776c1b443b1da32aba438792728dc91ce20c7aa5cc3fd52b85"
+}
