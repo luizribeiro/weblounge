@@ -13,3 +13,6 @@ select = ["E", "W", "F", "I", "B", "UP"]
 # The dev shell links the Python environment of tests/e2e/lib/python.nix here.
 python = ".python"
 extra-paths = ["tests/e2e/lib", "tests/e2e/clients"]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
