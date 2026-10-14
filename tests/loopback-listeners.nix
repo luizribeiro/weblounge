@@ -26,13 +26,10 @@ let
     "107.173.231.206:8089" = true;
     "127.0.0.1.example.com:8089" = true;
   };
-
-  misjudged = lib.concatLists (lib.mapAttrsToList
-    (service: setListener: map (listener: "${service}=${listener}") (lib.attrNames
-      (lib.filterAttrs (listener: expected: rejects setListener listener != expected) shouldReject)))
-    listenerSettings);
 in
-pkgs.runCommand "loopback-listeners" { } (
-  if misjudged == [ ] then "touch $out"
-  else "echo 'misjudged listeners: ${toString misjudged}' >&2; exit 1"
-)
+lib.mapAttrs'
+  (service: setListener: lib.nameValuePair "test-${service}-rejects-non-loopback-listeners" {
+    expr = lib.mapAttrs (listener: _: rejects setListener listener) shouldReject;
+    expected = shouldReject;
+  })
+  listenerSettings
