@@ -72,8 +72,9 @@ vmTest ''
           for version in ["tls1_2", "tls1_3"]:
               client.succeed(f"{tls_handshake} credenza:{port} -{version}")
 
-  with subtest("ergo's API and concierge listen on credenza's loopback only"):
+  with subtest("ergo's API and WebSocket listener and concierge listen on credenza's loopback only"):
       assert_loopback_only(8089, "/v1/status")
+      assert_loopback_only(8097, "/")
       assert_loopback_only(8080, "/healthz")
 
   with subtest("ergo's API refuses any token but the generated one"):

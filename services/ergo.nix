@@ -20,6 +20,12 @@ in
     description = "Ergo settings, merged over the default.yaml that Ergo ships.";
   };
 
+  options.weblounge.ergo.websocketListener = lib.mkOption {
+    type = lib.types.str;
+    default = "127.0.0.1:8097";
+    description = "Where Ergo takes WebSocket connections from nginx, as host:port, without TLS.";
+  };
+
   options.weblounge.ergo.address = lib.mkOption {
     type = lib.types.str;
     readOnly = true;
@@ -29,6 +35,7 @@ in
 
   config = {
     weblounge.loopbackListeners."Ergo's API" = cfg.settings.api.listener;
+    weblounge.loopbackListeners."Ergo's WebSocket listener" = cfg.websocketListener;
 
     weblounge.ergo.settings = {
       network.name = "weblounge";
@@ -41,6 +48,11 @@ in
           };
           min-tls-version = "1.2";
         };
+        # nginx terminates TLS and passes the client's address in
+        # X-Forwarded-For, which Ergo trusts from proxy-allowed-from's
+        # default, localhost.
+        listeners.${cfg.websocketListener}.websocket = true;
+        websockets.allowed-origins = [ (config.weblounge.origin serverName) ];
         motd = "${./ergo.motd}";
         ip-cloaking.netname = "weblounge";
       };
