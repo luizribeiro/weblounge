@@ -185,6 +185,29 @@ vmTest ''
       credenza.succeed("journalctl --sync")
       credenza.fail(f"journalctl | grep -qF {code}")
 
+  def sign_up(path, nick, *headers):
+      flags = [arg for header in headers for arg in ["-H", header]]
+      fields = [f"nick={nick}", f"email={nick}@example.org", "password=lantern-orchard-71", "confirmation=lantern-orchard-71"]
+      return https(members, path, "-o", "/dev/null", "-w", "%{http_code}", *flags,
+                   *[arg for field in fields for arg in ["--data-urlencode", field]])
+
+  with subtest("a signup posted from another origin is refused, and the invite still works"):
+      path = mint_invite()
+      assert sign_up(path, "eve", "Origin: https://evil.example") == "403"
+      assert https(members, path, "-o", "/dev/null", "-w", "%{http_code}") == "200"
+
+  with subtest("used, expired and unknown invite links all get the same 404"):
+      used, expired = mint_invite(), mint_invite()
+      assert sign_up(used, "trudy", f"Origin: https://{members}") == "200"
+      code = expired.rsplit("/", 1)[1]
+      expire = ("import sqlite3; db = sqlite3.connect('/var/lib/private/concierge/concierge.db'); "
+                f"db.execute(\"UPDATE invites SET created_at = 0, expires_at = 1 WHERE code = '{code}'\"); db.commit()")
+      credenza.succeed(f"${pkgs.python3}/bin/python3 -c {shlex.quote(expire)}")
+      answers = [https(members, path, "-w", "\n%{http_code}") for path in [used, expired, "/invite/q7Hx2mZp9vLcT4wRfBa-_w"]]
+      assert all(answer.endswith("\n404") for answer in answers), answers
+      assert len(set(answers)) == 1, answers
+      assert "This invite link doesn&#39;t work." in answers[0], answers[0]
+
   # concierge's rate_limit::LOOKUPS_PER_ADDRESS.
   lookups_per_address = 60
 
@@ -192,6 +215,8 @@ vmTest ''
       def lookup(n):
           return https(members, "/signup/nick", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Origin: https://{members}",
                        "-H", f"X-Real-IP: 198.51.100.{n % 250}", "--data", "nick=bob")
-      statuses = [lookup(n) for n in range(lookups_per_address + 1)]
-      assert statuses == ["200"] * lookups_per_address + ["429"], statuses
+      # The signup above counted as one.
+      allowed = lookups_per_address - 1
+      statuses = [lookup(n) for n in range(allowed + 1)]
+      assert statuses == ["200"] * allowed + ["429"], statuses
 ''
