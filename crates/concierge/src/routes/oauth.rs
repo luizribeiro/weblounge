@@ -5,11 +5,11 @@ use std::time::Instant;
 use axum::{
     Form, Json,
     extract::{Query, Request, State},
-    http::{HeaderValue, StatusCode, Uri, header},
+    http::{HeaderMap, HeaderValue, StatusCode, Uri, header},
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::internal_error;
@@ -25,6 +25,7 @@ use crate::{
 pub const METADATA_PATH: &str = "/.well-known/oauth-authorization-server";
 pub const AUTHORIZE_PATH: &str = "/oauth/authorize";
 pub const TOKEN_PATH: &str = "/oauth/token";
+pub const INTROSPECTION_PATH: &str = "/oauth/introspect";
 
 /// RFC 8414's metadata. The introspection endpoint is left out: it's for
 /// Ergo alone, and gamja would call it from the browser if it were listed.
@@ -146,6 +147,50 @@ pub async fn token(
         "token_type": "Bearer",
         "expires_in": session.expires_at - now,
     });
+    super::no_store(Json(answer).into_response()).await
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub struct Introspection {
+    token: String,
+}
+
+/// RFC 7662 introspection, for Ergo alone: it authenticates with its
+/// secret, and learns whose token gamja logged in with, in the
+/// `username` claim it reads.
+pub async fn introspect(
+    State(app): State<AppState>,
+    headers: HeaderMap,
+    Form(Introspection { token }): Form<Introspection>,
+) -> Response {
+    let authorization = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+    if !oauth::authenticates_introspection(authorization, &app.introspection_secret) {
+        let challenge = [(header::WWW_AUTHENTICATE, "Basic realm=\"concierge\"")];
+        let error = token_error(StatusCode::UNAUTHORIZED, "invalid_client");
+        return (challenge, error).into_response();
+    }
+    let live = match Token::parse(&token) {
+        Some(token) => {
+            app.db
+                .access_token(&app.sessions.hash(&token), db::now())
+                .await
+        }
+        None => Ok(None),
+    };
+    let answer = match live {
+        Ok(Some(token)) => json!({
+            "active": true,
+            "username": token.account,
+            "client_id": token.client_id,
+            "token_type": "Bearer",
+            "exp": token.expires_at,
+        }),
+        Ok(None) => json!({ "active": false }),
+        Err(error) => return internal_error("Introspecting a token", error),
+    };
     super::no_store(Json(answer).into_response()).await
 }
 

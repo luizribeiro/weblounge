@@ -39,6 +39,7 @@ const PUBLIC_URL: &str = "https://members.weblounge.org";
 const WEBCHAT_URL: &str = "https://irc.weblounge.org";
 const SESSION_KEY: &[u8] = b"a session key for tests, at least 32 bytes";
 const PASSWORD: &str = "correct-horse-battery";
+const INTROSPECTION_SECRET: &str = "a secret Ergo introspects tokens with";
 
 struct Site {
     router: Router,
@@ -70,6 +71,7 @@ impl Site {
             webchat: Webchat {
                 origin: WEBCHAT_URL.into(),
             },
+            introspection_secret: INTROSPECTION_SECRET.into(),
             irc_server: irc_server(),
         });
         Self {

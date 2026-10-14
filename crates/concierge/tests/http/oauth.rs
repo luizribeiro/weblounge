@@ -2,7 +2,9 @@ use axum::http::header;
 use concierge::oauth::CODE_LIFETIME;
 use serde_json::Value;
 
-use crate::{PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
+use base64::{Engine, engine::general_purpose::STANDARD};
+
+use crate::{INTROSPECTION_SECRET, PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
 
 impl Site {
     /// Asks for a code as gamja does, with the session in `cookie`.
@@ -15,6 +17,30 @@ impl Site {
     /// gamja sends.
     async fn exchange(&self, code: &str, changes: &[(&str, &str)]) -> axum::response::Response {
         self.exchange_from(code, changes, WEBCHAT_URL).await
+    }
+
+    /// A member's access token, the way gamja gets one.
+    async fn access_token(&self, cookie: &str) -> String {
+        let code = self.authorization_code(cookie).await;
+        let answer = json(self.exchange(&code, &[]).await).await;
+        answer["access_token"].as_str().unwrap().to_owned()
+    }
+
+    /// Introspects `token` the way Ergo does, with these credentials.
+    async fn introspect_as(&self, credentials: &str, token: &str) -> axum::response::Response {
+        let basic = format!("Basic {}", STANDARD.encode(credentials));
+        let headers = [(header::AUTHORIZATION.as_str(), basic.as_str())];
+        self.post_with("/oauth/introspect", &[("token", token)], None, &headers)
+            .await
+    }
+
+    async fn introspect(&self, token: &str) -> Value {
+        let response = self
+            .introspect_as(&format!("ergo:{INTROSPECTION_SECRET}"), token)
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        json(response).await
     }
 
     async fn exchange_from(
@@ -420,4 +446,105 @@ async fn our_own_pages_cannot_post_from_the_web_clients_origin() {
     let form = [("nick", "alice"), ("password", crate::PASSWORD)];
     let response = site.post_with("/signin", &form, None, &headers).await;
     assert_eq!(response.status(), 403);
+}
+
+#[tokio::test]
+async fn ergo_learns_whose_token_it_is() {
+    let site = Site::start().await;
+    site.add_member("Alice").await;
+    let cookie = site.sign_in("alice").await;
+    let token = site.access_token(&cookie).await;
+
+    let answer = site.introspect(&token).await;
+
+    let expiry = site.session_expiry(&cookie).await.unwrap();
+    assert_eq!(
+        answer,
+        serde_json::json!({
+            "active": true,
+            "username": "Alice",
+            "client_id": "gamja",
+            "token_type": "Bearer",
+            "exp": expiry,
+        })
+    );
+}
+
+#[tokio::test]
+async fn unknown_garbage_and_expired_tokens_are_inactive() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let token = site.access_token(&cookie).await;
+    let inactive = serde_json::json!({"active": false});
+    for other in ["", "garbage", "q7Hx2mZp9vLcT4wRfBa-_wq7Hx2mZp9vLcT4wRfBa-_"] {
+        assert_eq!(site.introspect(other).await, inactive, "{other}");
+    }
+    let code = site.authorization_code(&cookie).await;
+    assert_eq!(site.introspect(&code).await, inactive);
+    site.execute("UPDATE oauth_tokens SET expires_at = 1").await;
+    assert_eq!(site.introspect(&token).await, inactive);
+}
+
+#[tokio::test]
+async fn a_token_dies_with_its_session_or_its_member() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.add_member("bob").await;
+    let alices = site.sign_in("alice").await;
+    let bobs = site.sign_in("bob").await;
+    let (alice_token, bob_token) = (
+        site.access_token(&alices).await,
+        site.access_token(&bobs).await,
+    );
+    site.post("/signout", &[], Some(&alices)).await;
+    assert_eq!(site.introspect(&alice_token).await["active"], false);
+    site.db
+        .remove_member("bob", concierge::db::now())
+        .await
+        .unwrap();
+    assert_eq!(site.introspect(&bob_token).await["active"], false);
+}
+
+#[tokio::test]
+async fn only_ergo_with_its_secret_may_introspect() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let token = site.access_token(&cookie).await;
+    for credentials in [
+        "ergo:a wrong secret".to_owned(),
+        "ergo:".to_owned(),
+        format!("gamja:{INTROSPECTION_SECRET}"),
+        format!("ergo:{INTROSPECTION_SECRET} "),
+    ] {
+        let response = site.introspect_as(&credentials, &token).await;
+        assert_eq!(response.status(), 401, "{credentials}");
+        assert_eq!(
+            response.headers()[header::WWW_AUTHENTICATE],
+            "Basic realm=\"concierge\""
+        );
+        assert_eq!(
+            json(response).await,
+            serde_json::json!({"error": "invalid_client"})
+        );
+    }
+    let anonymous = site
+        .post_with("/oauth/introspect", &[("token", &token)], None, &[])
+        .await;
+    assert_eq!(anonymous.status(), 401);
+    let from_gamja = site
+        .post_with(
+            "/oauth/introspect",
+            &[("token", &token)],
+            None,
+            &[(header::ORIGIN.as_str(), WEBCHAT_URL)],
+        )
+        .await;
+    assert_eq!(from_gamja.status(), 401);
+    assert!(
+        !from_gamja
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+    );
 }

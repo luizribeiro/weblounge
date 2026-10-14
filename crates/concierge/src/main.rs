@@ -40,6 +40,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         webchat: Webchat {
             origin: config.webchat_url.clone(),
         },
+        introspection_secret: config.read_introspection_secret()?,
         irc_server: config.irc_server.clone(),
     };
     let listener = TcpListener::bind(config.listen).await?;

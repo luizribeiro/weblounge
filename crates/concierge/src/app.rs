@@ -34,6 +34,8 @@ pub struct App {
     pub public_url: String,
     /// The web client, which signs members in through our OAuth server.
     pub webchat: Webchat,
+    /// What Ergo authenticates with to introspect the web client's tokens.
+    pub introspection_secret: String,
     /// Where members point their IRC clients.
     pub irc_server: IrcServer,
 }
@@ -98,6 +100,11 @@ pub fn router(app: App) -> Router {
         .route(&format!("{}{{file}}", assets::URL_PREFIX), get(asset))
         .layer(middleware::from_fn_with_state(public_url, csrf::guard))
         .merge(webchat_api)
+        // Ergo calls this, not a browser, and authenticates with its secret.
+        .route(
+            routes::oauth::INTROSPECTION_PATH,
+            post(routes::oauth::introspect),
+        )
         .with_state(state);
     // Pages reload themselves when the dev loop restarts concierge.
     #[cfg(debug_assertions)]
