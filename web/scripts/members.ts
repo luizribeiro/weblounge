@@ -1,3 +1,5 @@
+import "./signup";
+
 const FEEDBACK_MS = 1500;
 
 const copyStatus = document.querySelector("[data-copy-status]");

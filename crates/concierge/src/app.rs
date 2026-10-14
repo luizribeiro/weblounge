@@ -46,6 +46,7 @@ pub fn router(app: App) -> Router {
             get(routes::signin::show).post(routes::signin::submit),
         )
         .route("/signout", post(routes::signin::sign_out))
+        .route("/password-rules.json", get(routes::checks::password_rules))
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
         .route("/clients/{slug}", get(routes::clients::show))

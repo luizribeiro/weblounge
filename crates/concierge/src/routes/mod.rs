@@ -1,4 +1,5 @@
 pub mod account;
+pub mod checks;
 pub mod clients;
 pub mod invite;
 pub mod pages;
