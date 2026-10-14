@@ -17,6 +17,7 @@ let
   withDependencies = args: commonArgs // args // { inherit cargoArtifacts; };
 in
 craneLib.buildPackage (withDependencies {
+  cargoExtraArgs = "--locked --package concierge";
   doCheck = false;
   meta.mainProgram = "concierge";
 
