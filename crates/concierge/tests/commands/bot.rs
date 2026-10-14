@@ -263,6 +263,67 @@ mod reset_password {
     }
 }
 
+mod delete {
+    use super::*;
+
+    #[tokio::test]
+    async fn locks_the_bot_out_keeps_its_name_and_reminds_to_erase_it() {
+        let fixture = Fixture::with_owners().await;
+        let output = fixture
+            .run(&["bot", "create", "luiz", "Bender"])
+            .await
+            .unwrap();
+        let password = printed_password(&output).to_owned();
+
+        let output = fixture.run(&["bot", "delete", "bender"]).await.unwrap();
+
+        assert_eq!(
+            output,
+            "removed bot Bender\n\
+             Ergo's API can't delete accounts: an oper must run /NS ERASE Bender\n"
+        );
+        assert!(!fixture.signs_in_to_ergo("bender", &password).await);
+        assert!(fixture.bot("bender").await.unwrap().removed_at.is_some());
+        assert_eq!(fixture.db().await.bots(None).await.unwrap(), []);
+        let error = fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "bender is taken");
+    }
+
+    #[tokio::test]
+    async fn refuses_members_and_deleted_bots() {
+        let fixture = Fixture::with_owners().await;
+        fixture.insert_deleted_bot("dalek").await;
+        for (name, message) in [
+            ("luiz", "luiz is not a bot"),
+            ("dalek", "dalek was deleted"),
+        ] {
+            let error = fixture.run(&["bot", "delete", name]).await.unwrap_err();
+            assert_eq!(error.to_string(), message);
+        }
+    }
+
+    #[tokio::test]
+    async fn keeps_the_bot_when_ergo_fails() {
+        let fixture = Fixture::with_owners().await;
+        fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap();
+        fixture.ergo.fail_next(Failure::UnknownError);
+
+        let error = fixture.run(&["bot", "delete", "bender"]).await.unwrap_err();
+
+        assert!(
+            error.to_string().starts_with("Ergo didn't take bender's"),
+            "{error:#}"
+        );
+        assert_eq!(fixture.bot("bender").await.unwrap().removed_at, None);
+    }
+}
+
 mod list {
     use super::*;
 

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::Context;
 use clap::Subcommand;
 
-use super::{Admin, print_once};
+use super::{Admin, erase_reminder, print_once};
 use crate::{
     db::{self, NewMember},
     invite_rules,
@@ -90,9 +90,10 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
     let account = &member.account;
     let removal = admin.db.remove_member(account, db::now()).await?;
     Ok(format!(
-        "removed {account} (sessions ended: {}, invites revoked: {})\n\
-         Ergo's API can't delete accounts: an oper must run /NS ERASE {account}\n",
-        removal.sessions_ended, removal.invites_revoked
+        "removed {account} (sessions ended: {}, invites revoked: {})\n{}",
+        removal.sessions_ended,
+        removal.invites_revoked,
+        erase_reminder(account),
     ))
 }
 

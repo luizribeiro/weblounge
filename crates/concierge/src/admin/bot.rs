@@ -2,7 +2,7 @@ use anyhow::Context;
 use clap::Subcommand;
 use ergo_api::{Passphrase, Preference, Registration, SettingsChanges};
 
-use super::{Admin, print_once};
+use super::{Admin, erase_reminder, print_once};
 use crate::{
     db::{self, Bot, NewBot},
     nick::Nick,
@@ -26,6 +26,9 @@ pub enum BotCommand {
     /// Give a bot a new generated password, and print it once. Turns its
     /// always-on and auto-away off again too.
     ResetPassword { name: String },
+    /// Lock a bot out with a password nobody knows and mark it deleted,
+    /// keeping its name taken.
+    Delete { name: String },
 }
 
 pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -35,6 +38,7 @@ pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<St
         }
         BotCommand::List { owner } => list(admin, owner.as_deref()).await,
         BotCommand::ResetPassword { name } => reset_password(admin, &name).await,
+        BotCommand::Delete { name } => delete(admin, &name).await,
     }
 }
 
@@ -73,6 +77,22 @@ async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
     stay_offline_when_stopped(admin, &bot.account).await?;
     let password = admin.set_generated_password(&bot.account).await?;
     Ok(print_once(&password))
+}
+
+async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
+    let bot = live_bot(admin, name).await?;
+    remove(admin, &bot.account).await
+}
+
+/// Locks the live bot `account` out and marks it deleted, answering what's
+/// left for an oper to do.
+pub(super) async fn remove(admin: &Admin, account: &str) -> anyhow::Result<String> {
+    admin.set_generated_password(account).await?;
+    admin.db.remove_bot(account, db::now()).await?;
+    Ok(format!(
+        "removed bot {account}\n{}",
+        erase_reminder(account)
+    ))
 }
 
 /// The bot named `name`, unless there's none or it was deleted.
