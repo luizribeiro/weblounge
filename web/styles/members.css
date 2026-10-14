@@ -412,27 +412,6 @@
   }
 }
 
-.account-home {
-  @media (min-width: 52rem) {
-    grid-template-areas:
-      "connect invites"
-      "connect more";
-    grid-template-rows: auto 1fr;
-
-    & .connect {
-      grid-area: connect;
-    }
-
-    & .invites {
-      grid-area: invites;
-    }
-
-    & .more {
-      grid-area: more;
-    }
-  }
-}
-
 .more-links {
   margin: 0;
   padding: 0;

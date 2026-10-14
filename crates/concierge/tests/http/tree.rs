@@ -1,4 +1,4 @@
-use crate::{Site, body_text, location};
+use crate::{Site, body_text};
 
 /// alice (root) invited bob and carol; bob invited dave; carol left.
 async fn site_with_a_tree() -> Site {
@@ -35,7 +35,7 @@ async fn shows_who_invited_whom_from_the_root_down() {
     let site = site_with_a_tree().await;
     let cookie = site.sign_in("bob").await;
 
-    let response = site.get("/tree", Some(&cookie)).await;
+    let response = site.get("/invites", Some(&cookie)).await;
 
     assert_eq!(response.status(), 200);
     let page = body_text(response).await;
@@ -50,7 +50,7 @@ async fn shows_who_invited_whom_from_the_root_down() {
 async fn marks_the_viewer_and_who_left_and_shows_no_emails() {
     let site = site_with_a_tree().await;
     let cookie = site.sign_in("bob").await;
-    let page = body_text(site.get("/tree", Some(&cookie)).await).await;
+    let page = body_text(site.get("/invites", Some(&cookie)).await).await;
     assert!(
         page.contains(r#"<strong class="tree-you" aria-current="true">bob</strong> <span class="muted">(you)</span>"#),
         "{page}"
@@ -61,20 +61,4 @@ async fn marks_the_viewer_and_who_left_and_shows_no_emails() {
         "{page}"
     );
     assert!(!page.contains("someone@example.org"), "{page}");
-}
-
-#[tokio::test]
-async fn guests_are_sent_to_sign_in_and_back() {
-    let site = site_with_a_tree().await;
-    let response = site.get("/tree", None).await;
-    assert_eq!(response.status(), 303);
-    assert_eq!(location(&response), "/signin?next=%2Ftree");
-}
-
-#[tokio::test]
-async fn the_account_home_links_to_it() {
-    let site = site_with_a_tree().await;
-    let cookie = site.sign_in("alice").await;
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
-    assert!(page.contains(r#"href="/tree""#), "{page}");
 }

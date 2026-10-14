@@ -185,10 +185,10 @@ vmTest ''
       assert '"success":true' in body, body
 
   with subtest("an invite's QR page is its inviter's alone, and names the invite without its code"):
-      assert mallorys_browser.post("/invites") == f"303 https://{members}/?invited#invites"
-      home = mallorys_browser.get("/", "-f")
-      [code] = re.findall(r'<code class="invite-link">https://[^/]+/invite/([^<]+)</code>', home)
-      [qr] = re.findall(r'href="(/invites/[^"]+/qr)"', home)
+      assert mallorys_browser.post("/invites") == f"303 https://{members}/invites?invited"
+      tab = mallorys_browser.get("/invites", "-f")
+      [code] = re.findall(r'<code class="invite-link">https://[^/]+/invite/([^<]+)</code>', tab)
+      [qr] = re.findall(r'href="(/invites/[^"]+/qr)"', tab)
       assert code not in qr, (code, qr)
       needs = PageNeeds(mallorys_browser.get(qr, "-f"))
       assert needs.inline == [] and all(directive for directive, _ in needs.fetches), (needs.inline, needs.fetches)

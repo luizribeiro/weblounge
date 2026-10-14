@@ -73,7 +73,12 @@ pub fn router(app: App) -> Router {
             "/irc-settings",
             post(routes::presence::update).layer(map_response(routes::no_store)),
         )
-        .route("/invites", post(routes::invites::create))
+        .route(
+            "/invites",
+            get(routes::invites::show)
+                .post(routes::invites::create)
+                .layer(map_response(routes::no_store)),
+        )
         .route("/invites/revoke", post(routes::invites::revoke))
         .route(
             "/invites/{id}/qr",
@@ -86,7 +91,6 @@ pub fn router(app: App) -> Router {
         .route("/signout", post(routes::signin::sign_out))
         .route("/signup/nick", post(routes::checks::nick))
         .route("/password-rules.json", get(routes::checks::password_rules))
-        .route("/tree", get(routes::tree::show))
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
         .route("/clients/{slug}", get(routes::clients::show))

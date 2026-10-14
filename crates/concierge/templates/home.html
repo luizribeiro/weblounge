@@ -7,58 +7,14 @@
       <p class="eyebrow">Account</p>
       <h1>{{ nick }}</h1>
       {%- call components::open_chat(webchat) %}{% endcall %}
-      <div class="account-grid account-home">
+      <div class="account-grid">
         <section class="card connect" aria-labelledby="connect-title">
           <h2 class="eyebrow" id="connect-title">Connect a client</h2>
           {%- call components::connection(irc, Some(nick), "The one you sign in with here.") %}{% endcall %}
         </section>
-        <section class="card invites" id="invites" aria-labelledby="invites-title">
-          <h2 class="eyebrow" id="invites-title">Invites</h2>
-          {%- if flash.invited.is_some() %}
-          <p class="notice" role="status">Invite created. Send the link yourself; it works once, for a week.</p>
-          {%- endif %}
-          {%- match invites.remaining %}
-          {%- when Some(0) %}
-          <p class="muted">No invites left.</p>
-          {%- else %}
-          <form method="post" action="/invites">
-            <button class="button" type="submit">Invite someone</button>
-            <span class="muted">
-              {%- if let Some(left) = invites.remaining %}{{ left }} left{% else %}Admins have no quota.{% endif -%}
-            </span>
-          </form>
-          {%- endmatch %}
-          {%- if !invites.open.is_empty() %}
-          <ul class="invite-list">
-            {%- for invite in invites.open %}
-            <li>
-              <code class="invite-link">{{ invite.url }}</code>
-              <div class="invite-actions">
-                <span class="muted">{{ invite.time_left }} left</span>
-                <button class="button button-small" type="button" data-copy="{{ invite.url }}" data-copy-label="invite link" hidden>Copy</button>
-                <a class="button button-small" href="/invites/{{ invite.id }}/qr">QR</a>
-                <form method="post" action="/invites/revoke">
-                  <input type="hidden" name="code" value="{{ invite.code }}">
-                  <button class="button button-small" type="submit">Revoke</button>
-                </form>
-              </div>
-            </li>
-            {%- endfor %}
-          </ul>
-          {%- endif %}
-          {%- if !invites.invitees.is_empty() %}
-          <h3 class="eyebrow">You invited</h3>
-          <ul class="invitees">
-            {%- for invitee in invites.invitees %}
-            <li>{{ invitee.account }}{% if invitee.removed %} <span class="muted">(left)</span>{% endif %}</li>
-            {%- endfor %}
-          </ul>
-          {%- endif %}
-        </section>
         <nav class="card more" aria-labelledby="more-title">
           <h2 class="eyebrow" id="more-title">More</h2>
           <ul class="more-links">
-            <li><a href="/tree">Invite tree</a> <span class="muted">who invited whom</span></li>
             <li><a href="/certificates">Client certificates</a> <span class="muted">log in without a password</span></li>
           </ul>
         </nav>

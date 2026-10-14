@@ -1,7 +1,12 @@
 use crate::{Site, body_text, location};
 
 /// Each tab's path and label, in the row under the header.
-const TABS: [(&str, &str); 3] = [("/", "Home"), ("/account", "Account"), ("/irc", "IRC")];
+const TABS: [(&str, &str); 4] = [
+    ("/", "Home"),
+    ("/invites", "Invites"),
+    ("/account", "Account"),
+    ("/irc", "IRC"),
+];
 
 fn tab_links(page: &str) -> Vec<(String, String)> {
     let link = regex::Regex::new(r#"<li><a href="([^"]+)"[^>]*>([^<]+)</a></li>"#).unwrap();

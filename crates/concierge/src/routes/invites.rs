@@ -1,15 +1,16 @@
-//! Members creating and revoking their own invites, from the account home.
+//! The Invites tab: members creating and revoking their own invites, and
+//! the invite tree.
 
 use askama::Template;
 use axum::{
     Form,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 
-use super::{Layout, internal_error, render};
+use super::{Flash, Layout, Tab, internal_error, render};
 use crate::{
     app::{App, AppState},
     auth::{CurrentMember, Visitor},
@@ -18,7 +19,18 @@ use crate::{
     invite_code,
     invite_rules::{self, Inviter, Status},
     qr,
+    tree::{self, Line},
 };
+
+#[derive(Template)]
+#[template(path = "invites.html")]
+struct InvitesPage<'a> {
+    layout: Layout<'a>,
+    nick: &'a str,
+    flash: Flash,
+    invites: Invites,
+    lines: Vec<Line>,
+}
 
 #[derive(Template)]
 #[template(path = "qr.html")]
@@ -32,6 +44,29 @@ struct QrPage<'a> {
 #[serde(default)]
 pub struct Revocation {
     code: String,
+}
+
+pub async fn show(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    Query(flash): Query<Flash>,
+) -> Response {
+    let member = &me.member;
+    let invites = match Invites::of(&app, member, db::now()).await {
+        Ok(invites) => invites,
+        Err(error) => return internal_error("Listing invites", error),
+    };
+    let branches = match app.db.invite_tree().await {
+        Ok(branches) => branches,
+        Err(error) => return internal_error("Reading the invite tree", error),
+    };
+    render(&InvitesPage {
+        layout: Layout::new(&app, Some(&member.account)).on(Tab::Invites),
+        nick: &member.account,
+        flash,
+        invites,
+        lines: tree::lines(branches),
+    })
 }
 
 pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
@@ -50,8 +85,8 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
         invite_rules::may_invite(&inviter, &invites, now).is_ok()
     });
     match created.await {
-        Ok(true) => Redirect::to("/?invited#invites").into_response(),
-        Ok(false) => Redirect::to("/#invites").into_response(),
+        Ok(true) => Redirect::to("/invites?invited").into_response(),
+        Ok(false) => Redirect::to("/invites").into_response(),
         Err(error) => internal_error("Creating an invite", error),
     }
 }
@@ -67,7 +102,7 @@ pub async fn revoke(
         .await;
     // Whether there was such an invite of theirs is nobody's business.
     match revoked {
-        Ok(_) => Redirect::to("/#invites").into_response(),
+        Ok(_) => Redirect::to("/invites").into_response(),
         Err(error) => internal_error("Revoking an invite", error),
     }
 }
@@ -97,7 +132,7 @@ pub async fn show_qr(
     }
 }
 
-/// A member's invites, as the account home shows them.
+/// A member's invites, as the Invites tab shows them.
 pub struct Invites {
     pub open: Vec<OpenInvite>,
     pub invitees: Vec<Invitee>,

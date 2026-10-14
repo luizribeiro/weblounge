@@ -52,12 +52,12 @@ vmTest ''
       assert re.search(r"^:erin!\S+ JOIN #lounge", session, re.M), session
 
   with subtest("the new member invites someone, who joins under them"):
-      assert erins_browser.post("/invites") == f"303 https://{members}/?invited#invites"
-      home = erins_browser.get("/", "-f")
-      [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', home)
+      assert erins_browser.post("/invites") == f"303 https://{members}/invites?invited"
+      tab = erins_browser.get("/invites", "-f")
+      [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', tab)
       assert sign_up(franks_browser, invite_path(link), frank, *outcome) == "200 "
-      home = erins_browser.get("/", "-f")
-      assert "<li>frank</li>" in home, home
+      tab = erins_browser.get("/invites", "-f")
+      assert "<li>frank</li>" in tab, tab
       assert "frank" not in concierge_admin("member", "reconcile")
       assert " 903 " in irc(**frank)
 

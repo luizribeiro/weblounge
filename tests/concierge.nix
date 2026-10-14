@@ -121,11 +121,11 @@ vmTest ''
       assert "Both on by default." in tab, tab
 
   with subtest("the invite tree lists a new member under whoever invited them"):
-      assert browser.post("/invites") == f"303 https://{members}/?invited#invites"
-      [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', browser.get("/", "-f"))
+      assert browser.post("/invites") == f"303 https://{members}/invites?invited"
+      [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', browser.get("/invites", "-f"))
       fields = ["nick=ivy", "email=ivy@example.org", "password=ivy-chose-this-one", "confirmation=ivy-chose-this-one"]
       assert Browser("ivy").post(link.removeprefix(f"https://{members}"), *fields) == "200 "
-      tree = browser.get("/tree", "-f")
+      tree = browser.get("/invites", "-f")
       assert re.search(r'aria-current="true">Dana</strong>.*?<ul>\s*<li>\s*<span>ivy</span>', tree, re.S), tree
 
   with subtest("the client certificate guide's commands attach a certificate that SASL EXTERNAL logs in with"):

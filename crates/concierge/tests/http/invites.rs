@@ -9,8 +9,8 @@ fn invite_links(page: &str) -> Vec<String> {
     link.captures_iter(page).map(|c| c[1].to_owned()).collect()
 }
 
-async fn home(site: &Site, cookie: &str) -> String {
-    body_text(site.get("/", Some(cookie)).await).await
+async fn invites_tab(site: &Site, cookie: &str) -> String {
+    body_text(site.get("/invites", Some(cookie)).await).await
 }
 
 #[tokio::test]
@@ -22,8 +22,8 @@ async fn a_member_creates_an_invite_and_gets_a_copyable_link() {
     let response = site.post("/invites", &[], Some(&cookie)).await;
 
     assert_eq!(response.status(), 303);
-    assert_eq!(location(&response), "/?invited#invites");
-    let response = site.get("/?invited", Some(&cookie)).await;
+    assert_eq!(location(&response), "/invites?invited");
+    let response = site.get("/invites?invited", Some(&cookie)).await;
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let page = body_text(response).await;
     assert!(page.contains("Invite created."), "{page}");
@@ -49,7 +49,7 @@ async fn the_quota_runs_out_and_says_so() {
     for _ in 0..DEFAULT_QUOTA + 2 {
         site.post("/invites", &[], Some(&cookie)).await;
     }
-    let page = home(&site, &cookie).await;
+    let page = invites_tab(&site, &cookie).await;
     assert_eq!(invite_links(&page).len(), DEFAULT_QUOTA as usize);
     assert!(page.contains("No invites left."), "{page}");
     assert!(!page.contains(r#"action="/invites""#), "{page}");
@@ -68,7 +68,7 @@ async fn two_invites_at_once_cannot_both_take_the_last_place() {
         site.post("/invites", &[], Some(&cookie))
     );
 
-    assert_eq!(invite_links(&home(&site, &cookie).await).len(), 1);
+    assert_eq!(invite_links(&invites_tab(&site, &cookie).await).len(), 1);
 }
 
 #[tokio::test]
@@ -81,7 +81,7 @@ async fn admins_invite_beyond_the_quota() {
     for _ in 0..DEFAULT_QUOTA + 2 {
         site.post("/invites", &[], Some(&cookie)).await;
     }
-    let page = home(&site, &cookie).await;
+    let page = invites_tab(&site, &cookie).await;
     assert_eq!(invite_links(&page).len(), DEFAULT_QUOTA as usize + 2);
     assert!(page.contains("Admins have no quota."), "{page}");
 }
@@ -92,7 +92,7 @@ async fn revoking_kills_the_link_and_gives_the_invite_back() {
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
     site.post("/invites", &[], Some(&cookie)).await;
-    let [link] = invite_links(&home(&site, &cookie).await)
+    let [link] = invite_links(&invites_tab(&site, &cookie).await)
         .try_into()
         .unwrap();
     let code = link.rsplit('/').next().unwrap();
@@ -101,8 +101,8 @@ async fn revoking_kills_the_link_and_gives_the_invite_back() {
         .post("/invites/revoke", &[("code", code)], Some(&cookie))
         .await;
 
-    assert_eq!(location(&response), "/#invites");
-    let page = home(&site, &cookie).await;
+    assert_eq!(location(&response), "/invites");
+    let page = invites_tab(&site, &cookie).await;
     assert!(invite_links(&page).is_empty(), "{page}");
     assert!(
         page.contains(&format!("{DEFAULT_QUOTA} left</span>")),
@@ -138,7 +138,7 @@ async fn lists_the_people_a_member_invited() {
     )
     .await;
     let cookie = site.sign_in("alice").await;
-    let page = home(&site, &cookie).await;
+    let page = invites_tab(&site, &cookie).await;
     assert!(page.contains("<li>bob</li>"), "{page}");
     assert!(
         page.contains(r#"<li>carol <span class="muted">(left)</span></li>"#),
@@ -158,7 +158,7 @@ async fn guests_and_other_origins_create_nothing() {
     let evil = [(header::ORIGIN.as_str(), "https://evil.example")];
     let response = site.post_with("/invites", &[], Some(&cookie), &evil).await;
     assert_eq!(response.status(), 403);
-    assert!(invite_links(&home(&site, &cookie).await).is_empty());
+    assert!(invite_links(&invites_tab(&site, &cookie).await).is_empty());
 }
 
 fn qr_paths(page: &str) -> Vec<String> {
@@ -171,7 +171,7 @@ async fn alice_with_an_invite() -> (Site, String, String, String) {
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
     site.post("/invites", &[], Some(&cookie)).await;
-    let page = home(&site, &cookie).await;
+    let page = invites_tab(&site, &cookie).await;
     let [link] = invite_links(&page).try_into().unwrap();
     let [qr] = qr_paths(&page).try_into().unwrap();
     (site, cookie, link, qr)
@@ -223,7 +223,7 @@ async fn revoked_and_redeemed_invites_have_no_qr_code() {
     assert_eq!(site.get(&qr, Some(&cookie)).await.status(), 404);
 
     site.post("/invites", &[], Some(&cookie)).await;
-    let page = home(&site, &cookie).await;
+    let page = invites_tab(&site, &cookie).await;
     let [link] = invite_links(&page).try_into().unwrap();
     let [qr] = qr_paths(&page).try_into().unwrap();
     let code = link.rsplit('/').next().unwrap();

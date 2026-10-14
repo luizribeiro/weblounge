@@ -131,8 +131,6 @@ async fn sections_come_in_the_order_phones_stack_them() {
     let positions: Vec<_> = [
         ">Open chat<",
         ">Connect a client<",
-        ">Invites<",
-        r#"<a href="/tree">Invite tree</a>"#,
         r#"<a href="/certificates">Client certificates</a>"#,
     ]
     .iter()
