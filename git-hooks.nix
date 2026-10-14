@@ -20,6 +20,7 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
       };
     };
     rustfmt.enable = true;
+    gofmt.enable = true;
     shellcheck.enable = true;
     yamllint.enable = true;
     biome = {
