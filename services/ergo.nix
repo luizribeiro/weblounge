@@ -11,7 +11,7 @@ let
 
 in
 {
-  imports = [ ./loopback.nix ./nginx.nix ./secrets.nix ./sqlite-vacuum.nix ];
+  imports = [ ./loopback.nix ./nginx.nix ./sandbox.nix ./secrets.nix ./sqlite-vacuum.nix ];
 
   # The nixpkgs module's defaults leave out fakelag, login throttling, nick
   # reservation, cloaking and logging; Ergo's default.yaml keeps them on.
@@ -125,7 +125,13 @@ in
     systemd.services.ergochat = {
       wants = [ "acme-${serverName}.service" ];
       after = [ "acme-${serverName}.service" ];
-      serviceConfig = {
+      # Web push reaches whatever servers members' browsers name, so ergo
+      # keeps the Internet; its own dialer refuses internal addresses.
+      serviceConfig = config.weblounge.sandbox // {
+        # sd_notify, and name lookups for web push: ergo is built with cgo,
+        # so glibc resolves names, through nscd.
+        RestrictAddressFamilies = config.weblounge.sandbox.RestrictAddressFamilies ++ [ "AF_UNIX" ];
+        StateDirectoryMode = "0700";
         # Ergo reads its secrets only from its config file or environment.
         ExecStart = lib.mkForce (pkgs.writeShellScript "ergo-start" (''
           export ERGO__API__BEARER_TOKENS="[\"$(< "$CREDENTIALS_DIRECTORY/ergo-api-token")\"]"

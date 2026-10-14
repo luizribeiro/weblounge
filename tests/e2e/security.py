@@ -135,6 +135,10 @@ with subtest("the generated secrets stay out of the Nix store, readable by root 
 with subtest("default.yaml's example oper and WebIRC gateway, with published credentials, are left out"):
     credenza.fail("grep -qE '^opers:|webirc' /etc/ergo.yaml")
 
+with subtest("ergo, concierge, nginx and bender run sandboxed"):
+    for unit in ["ergochat", "concierge", "nginx", "weblounge-bot-bender"]:
+        credenza.succeed(f"systemd-analyze security --threshold=20 --no-pager {unit}.service")
+
 with subtest("a client that doesn't log in with SASL is turned away, even from loopback"):
     for reply in [irc(), irc(machine=credenza, host="localhost")]:
         assert " 001 " not in reply and re.search(r"^ERROR .*SASL", reply, re.M), reply
