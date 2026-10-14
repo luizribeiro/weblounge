@@ -22,6 +22,7 @@ const CHALLENGE_LENGTH: usize = 43;
 /// RFC 7636's bounds on a code verifier.
 const VERIFIER_LENGTHS: std::ops::RangeInclusive<usize> = 43..=128;
 /// Generous for any random state a client keeps; gamja's is 43 characters.
+/// RFC 6749 allows printable ASCII in it.
 const MAX_STATE_LENGTH: usize = 256;
 
 /// The one registered client and where it may be sent back to.
@@ -88,7 +89,8 @@ impl AuthorizationRequest {
         }
         let state = self
             .state
-            .filter(|state| (1..=MAX_STATE_LENGTH).contains(&state.len()));
+            .filter(|state| (1..=MAX_STATE_LENGTH).contains(&state.len()))
+            .filter(|state| state.bytes().all(|c| (0x20..=0x7e).contains(&c)));
         let invalid = |error| Refusal::Invalid {
             redirect_uri: redirect_uri.clone(),
             state: state.clone(),
@@ -371,6 +373,8 @@ mod tests {
             None,
             Some(String::new()),
             Some("s".repeat(MAX_STATE_LENGTH + 1)),
+            Some("line\r\nbreak".into()),
+            Some("caf\u{e9}".into()),
         ] {
             let request = AuthorizationRequest { state, ..gamja() };
             assert_eq!(
