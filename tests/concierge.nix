@@ -164,9 +164,30 @@ vmTest {
         assert after == f"303 https://{members}/signin", after
         assert browser.sign_in("dana", new_password).startswith("303 ")
 
+    with subtest("a bot made with concierge-admin logs in to IRC with SASL, but not to the members' site"):
+        bot_password = concierge_admin("bot", "create", "dana", "bender", "--note", "answers !ping").strip()
+        assert re.fullmatch("[a-z2-9]{26}", bot_password), bot_password
+        listed = concierge_admin("bot", "list", "dana")
+        assert re.fullmatch(r"bender Dana \d{4}-\d\d-\d\d answers !ping\n", listed), listed
+        session = irc(account="bender", password=bot_password)
+        assert " 903 " in session, session
+        body, _ = ergo_api("ns/saget", accountName="bender")
+        settings = json.loads(body)
+        assert (settings["alwaysOn"], settings["autoAway"]) == ("off", "off"), body
+        refused = Browser("bender").sign_in("bender", bot_password)
+        assert refused == "401 ", refused
+        account = browser.get("/account", "-f")
+        assert "<strong>bender</strong>" in account and "answers !ping" in account, account
+
+    with subtest("concierge-admin bot delete locks the bot out of IRC"):
+        deleted = concierge_admin("bot", "delete", "bender")
+        assert "an oper must run /NS ERASE bender" in deleted, deleted
+        client.fail(irc_command(account="bender", password=bot_password))
+        assert concierge_admin("bot", "list") == ""
+
     with subtest("the passwords never reach the journal"):
         credenza.succeed("journalctl --sync")
-        for secret in [old_password, password, new_password]:
+        for secret in [old_password, password, new_password, bot_password]:
             credenza.fail(f"journalctl | grep -qF {secret}")
   '';
 }
