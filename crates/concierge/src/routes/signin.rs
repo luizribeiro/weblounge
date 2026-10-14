@@ -15,9 +15,8 @@ use super::{Layout, internal_error, render, render_with};
 use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
-    db::{self, Member, NewSession},
-    nick, rate_limit,
-    session::{self, Token},
+    db::Member,
+    nick, rate_limit, session,
 };
 
 /// The same answer whether the account exists or not.
@@ -143,29 +142,9 @@ async fn authenticate(app: &App, nick: &str, password: &str) -> anyhow::Result<O
     Ok(member.filter(|member| member.removed_at.is_none()))
 }
 
-/// Signs `member` in with a fresh token, ending the session the browser
-/// had, if any, and cleaning up expired ones while at it.
 async fn start_session(app: &App, visitor: &Visitor, member: &Member, next: &str) -> Response {
-    let token = Token::generate();
-    let token_hash = app.sessions.hash(&token);
-    let now = db::now();
-    let replaced = visitor.0.as_ref().map(|signed_in| &signed_in.token_hash);
-    let stored = async {
-        app.db.end_expired_sessions(now).await?;
-        if let Some(token_hash) = replaced {
-            app.db.end_session(token_hash).await?;
-        }
-        app.db
-            .insert_session(&NewSession {
-                token_hash: &token_hash,
-                account: &member.account,
-                created_at: now,
-                expires_at: session::expires_at(now),
-            })
-            .await
-    };
-    match stored.await {
-        Ok(()) => ([(header::SET_COOKIE, token.cookie())], Redirect::to(next)).into_response(),
+    match auth::start_session(app, visitor, &member.account).await {
+        Ok(cookie) => ([(header::SET_COOKIE, cookie)], Redirect::to(next)).into_response(),
         Err(error) => internal_error("Starting a session", error),
     }
 }

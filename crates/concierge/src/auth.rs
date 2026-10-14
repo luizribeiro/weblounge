@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use axum::{
     extract::{FromRequestParts, Request, State},
-    http::{Method, header, request::Parts},
+    http::{HeaderValue, Method, header, request::Parts},
     middleware::Next,
     response::{Redirect, Response},
 };
 
 use crate::{
-    app::AppState,
-    db::{self, Member},
+    app::{App, AppState},
+    db::{self, Member, NewSession},
     routes::internal_error,
     session::{self, Token},
 };
@@ -101,6 +101,32 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentMember {
             })
         })
     }
+}
+
+/// Signs `account` in with a fresh token, ending the session the browser
+/// had, if any, and cleaning up expired ones while at it. Answers the
+/// cookie to set.
+pub async fn start_session(
+    app: &App,
+    visitor: &Visitor,
+    account: &str,
+) -> sqlx::Result<HeaderValue> {
+    let token = Token::generate();
+    let token_hash = app.sessions.hash(&token);
+    let now = db::now();
+    app.db.end_expired_sessions(now).await?;
+    if let Some(signed_in) = &visitor.0 {
+        app.db.end_session(&signed_in.token_hash).await?;
+    }
+    app.db
+        .insert_session(&NewSession {
+            token_hash: &token_hash,
+            account,
+            created_at: now,
+            expires_at: session::expires_at(now),
+        })
+        .await?;
+    Ok(token.cookie())
 }
 
 fn sign_in_url(next: &str) -> String {
