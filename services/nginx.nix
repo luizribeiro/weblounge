@@ -21,13 +21,17 @@ let
     Content-Security-Policy = contentSecurityPolicy;
   };
 
-  # Invite codes are secrets: a request for /invite/<code>, or from a page
-  # under it, is logged without the code.
-  withoutInviteCodes = variable: logged: ''
-    map ${variable} ${logged} {
-      "~^/invite/" "/invite/[redacted]";
-      "~*invite" "[redacted]";
-      default ${variable};
+  # Invite codes are secrets. Paths are logged decoded and without their
+  # query, so no spelling of /invite/<code> gets through; referers, which
+  # nginx doesn't decode, are left out whenever they could hold a code.
+  inviteRedaction = ''
+    map $uri $logged_uri {
+      "~*^/invite/" "/invite/[redacted]";
+      default $uri;
+    }
+    map $http_referer $logged_referer {
+      "~*invite|%" "[redacted]";
+      default $http_referer;
     }
   '';
 in
@@ -43,8 +47,7 @@ in
     recommendedProxySettings = true;
     recommendedTlsSettings = true;
     # We promise members that no IP addresses are kept anywhere.
-    commonHttpConfig = withoutInviteCodes "$request_uri" "$logged_uri"
-      + withoutInviteCodes "$http_referer" "$logged_referer" + ''
+    commonHttpConfig = inviteRedaction + ''
       log_format anonymous '[$time_local] $host "$request_method $logged_uri $server_protocol" '
                            '$status $body_bytes_sent "$logged_referer" "$http_user_agent"';
       access_log /var/log/nginx/access.log anonymous;

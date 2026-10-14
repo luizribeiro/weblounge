@@ -179,6 +179,9 @@ vmTest ''
       https(members, path, "-f", "-o", "/dev/null")
       https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}{path}")
       https(members, f"/signin?next=%2Finvite%2F{code}", "-f", "-o", "/dev/null")
+      for spelling in [f"/%69nvite/{code}", f"/INVITE/{code}", f"/./invite/{code}"]:
+          https(members, spelling, "--path-as-is", "-o", "/dev/null")
+      https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}/%69nvite/{code}")
       access_log = credenza.succeed("cat /var/log/nginx/access.log")
       assert re.search(r'"GET /invite/\[redacted\] HTTP/[\d.]+" 200', access_log), access_log
       assert code not in access_log, access_log
