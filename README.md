@@ -85,6 +85,20 @@ lands in #lounge without typing anything:
 
 In the VM it's at https://irc.weblounge.localhost:10443.
 
+## Bots
+
+A bot is an Ergo account a member owns. Ergo can't tell it from anyone
+else's account, so concierge's `bots` table is the record of which
+accounts are bots and whose they are; admins create them with
+`concierge-admin bot create`. Bots set mode `+B` on themselves.
+
+`templates/bot` is a Go bot to start from (`nix flake init -t
+github:luizribeiro/weblounge#bot`); its README covers running it with and
+without NixOS. bender, our own bot, is that template deployed as is on
+credenza: it joins #bots and answers `!ping`. Before each start,
+`bender-account.service` registers it as luiz's bot, or puts back its
+generated password, so it stays down until luiz is a member.
+
 ## Running a server locally
 
 `just vm start` boots credenza's real configuration in a QEMU VM on your
@@ -148,7 +162,7 @@ machine. They print plain lines a script can read:
 | `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
 | `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |
 | `bot delete <name>`                             | Locks a bot out and marks it deleted, keeping its name taken     |
-| `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password to the file's |
+| `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password; `-` is stdin |
 
 Ergo's API can't delete accounts, so after `member delete` or `bot delete`
 an oper still runs `/NS ERASE <account>`.
