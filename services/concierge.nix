@@ -129,6 +129,8 @@ in
           proxy_set_header X-Real-IP $remote_addr;
         '';
       };
+      # Only Ergo introspects tokens, on loopback.
+      locations."= /oauth/introspect".return = "404";
     };
   };
 }

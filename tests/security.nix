@@ -86,6 +86,13 @@ vmTest ''
           assert credenza.succeed(introspect.format(shlex.quote(credentials))) == "401", credentials
       assert credenza.succeed(introspect.format(shlex.quote(f"ergo:{secret}"))) == "200"
 
+  with subtest("introspection isn't reachable from outside, and the token endpoint takes the web client's origin alone"):
+      assert https(members, "/oauth/introspect", "-o", "/dev/null", "-w", "%{http_code}", "-d", "token=x") == "404"
+      for origin in ["https://evil.example", f"https://{members}"]:
+          response = https(members, "/oauth/token", "-i", "-H", f"Origin: {origin}", "-d", "grant_type=authorization_code")
+          assert response.startswith("HTTP/2 403"), (origin, response)
+          assert "access-control-allow-origin" not in response.lower(), (origin, response)
+
   with subtest("ergo's API refuses any token but the generated one"):
       for token in ["not-the-token", "example"]:
           _, status = ergo_api("status", token=token)
