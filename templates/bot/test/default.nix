@@ -107,7 +107,7 @@ pkgs.testers.runNixOSTest {
         bot.succeed("install -D -m 600 /dev/null /run/keys/bot-password")
         bot.succeed("echo ${bot.password} > /run/keys/bot-password")
         bot.succeed("systemctl start weblounge-bot-${bot.nick}")
-        bot.wait_until_succeeds("journalctl -u weblounge-bot-${bot.nick} | grep -q 'connected to ircd:6697 as ${bot.nick}'")
+        bot.wait_until_succeeds("journalctl -u weblounge-bot-${bot.nick} | grep 'connected to ircd:6697 as ${bot.nick}' >/dev/null")
 
     with subtest("in a channel, the bot answers the asker by name"):
         session = ping("#bots")

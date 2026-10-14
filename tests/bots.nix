@@ -20,7 +20,7 @@ vmTest ''
 
   with subtest("bender joins #bots marked as a bot, and answers !ping"):
       register(**alice)
-      client.wait_until_succeeds(irc_command("JOIN #bots", "NAMES #bots", **alice) + " | grep -q ' 353 alice = #bots :.*bender'", timeout=60)
+      client.wait_until_succeeds(irc_command("JOIN #bots", "NAMES #bots", **alice) + " | grep ' 353 alice = #bots :.*bender' >/dev/null", timeout=60)
       session = irc("PRIVMSG #bots :!ping", "WHOIS bender", **alice)
       assert re.search(r"^:bender!\S+ PRIVMSG #bots :alice: pong", session, re.M), session
       assert " 335 alice bender " in session, session
@@ -28,5 +28,5 @@ vmTest ''
   with subtest("a restart puts back bender's password, whatever it was changed to"):
       concierge_admin("bot", "reset-password", "bender")
       credenza.succeed("systemctl restart bender-account.service weblounge-bot-bender.service")
-      client.wait_until_succeeds(irc_command("PRIVMSG bender :!ping", **alice) + " | grep -q '^:bender!\\S* PRIVMSG alice :pong'", timeout=60)
+      client.wait_until_succeeds(irc_command("PRIVMSG bender :!ping", **alice) + " | grep '^:bender!\\S* PRIVMSG alice :pong' >/dev/null", timeout=60)
 ''
