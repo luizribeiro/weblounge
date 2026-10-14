@@ -143,6 +143,7 @@ mod delete {
             created_by: Some(created_by),
             created_at: now,
             expires_at: now + 3600,
+            makes_admin: false,
         };
         fixture.db().await.insert_invite(&invite).await.unwrap();
     }

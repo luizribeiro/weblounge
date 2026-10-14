@@ -209,7 +209,7 @@ async fn create_account(
         news_opt_in: account.news,
         invited_by: claim.created_by.as_deref(),
         joined_at: now,
-        is_admin: false,
+        is_admin: claim.makes_admin,
     };
     match app.db.redeem_invite(claim, &member).await {
         Ok(Redemption::Redeemed) => Ok(()),

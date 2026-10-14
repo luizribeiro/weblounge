@@ -15,11 +15,29 @@ async fn create_root_prints_a_link_to_a_new_invite_nobody_vouches_for() {
     assert_eq!(code.len(), 22, "{output}");
     let invite = fixture.db().await.invite(code).await.unwrap().unwrap();
     assert_eq!(invite.created_by, None);
+    assert!(!invite.makes_admin);
     assert_eq!(invite.expires_at, invite.created_at + LIFETIME);
     assert_eq!(
         (invite.claimed_at, invite.redeemed_by, invite.revoked_at),
         (None, None, None)
     );
+}
+
+#[tokio::test]
+async fn an_admin_root_invite_makes_its_redeemer_an_admin() {
+    let fixture = Fixture::start().await;
+
+    let output = fixture
+        .run(&["invite", "create", "--root", "--admin"])
+        .await
+        .unwrap();
+
+    let code = output
+        .trim_end()
+        .strip_prefix(&fixture.config.invite_url(""))
+        .unwrap();
+    let invite = fixture.db().await.invite(code).await.unwrap().unwrap();
+    assert!(invite.makes_admin);
 }
 
 #[tokio::test]

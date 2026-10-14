@@ -107,6 +107,8 @@ pub struct NewInvite<'a> {
     pub created_by: Option<&'a str>,
     pub created_at: i64,
     pub expires_at: i64,
+    /// Whether whoever redeems it becomes an admin.
+    pub makes_admin: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +121,7 @@ pub struct Invite {
     pub redeemed_by: Option<String>,
     pub redeemed_at: Option<i64>,
     pub revoked_at: Option<i64>,
+    pub makes_admin: bool,
 }
 
 impl Invite {
@@ -143,6 +146,7 @@ pub struct Claim {
     pub code_hash: Vec<u8>,
     pub claimed_at: i64,
     pub created_by: Option<String>,
+    pub makes_admin: bool,
 }
 
 /// Someone a member invited.
@@ -418,7 +422,7 @@ impl Db {
         let invites = sqlx::query_as!(
             Invite,
             r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
-                      redeemed_by, redeemed_at, revoked_at
+                      redeemed_by, redeemed_at, revoked_at, makes_admin
                FROM invites WHERE created_by = ?"#,
             invite.created_by,
         )
@@ -437,7 +441,7 @@ impl Db {
         sqlx::query_as!(
             Invite,
             r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
-                      redeemed_by, redeemed_at, revoked_at
+                      redeemed_by, redeemed_at, revoked_at, makes_admin
                FROM invites WHERE code_hash = ?"#,
             code_hash
         )
@@ -450,7 +454,7 @@ impl Db {
         sqlx::query_as!(
             Invite,
             r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
-                      redeemed_by, redeemed_at, revoked_at
+                      redeemed_by, redeemed_at, revoked_at, makes_admin
                FROM invites WHERE created_by = ? ORDER BY created_at DESC, rowid DESC"#,
             account
         )
@@ -505,6 +509,7 @@ impl Db {
             code_hash: invite.code_hash,
             claimed_at: now,
             created_by: invite.created_by,
+            makes_admin: invite.makes_admin,
         }))
     }
 
@@ -756,12 +761,13 @@ async fn insert_invite(
 ) -> sqlx::Result<()> {
     let code_hash = invite_code::hash(invite.code);
     sqlx::query!(
-        "INSERT INTO invites (code_hash, created_by, created_at, expires_at)
-         VALUES (?, ?, ?, ?)",
+        "INSERT INTO invites (code_hash, created_by, created_at, expires_at, makes_admin)
+         VALUES (?, ?, ?, ?, ?)",
         code_hash,
         invite.created_by,
         invite.created_at,
         invite.expires_at,
+        invite.makes_admin,
     )
     .execute(executor)
     .await
@@ -1130,6 +1136,7 @@ pub(crate) mod tests {
             created_by,
             created_at,
             expires_at,
+            makes_admin: false,
         };
         db.insert_invite(&invite).await.unwrap();
     }
@@ -1182,6 +1189,7 @@ pub(crate) mod tests {
                 code_hash: invite_code::hash("open"),
                 claimed_at: now,
                 created_by: Some("alice".into()),
+                makes_admin: false,
             }
         );
         assert_eq!(db.claim_invite("open", now).await.unwrap(), None);

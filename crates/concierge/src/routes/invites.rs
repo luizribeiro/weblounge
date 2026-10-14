@@ -63,6 +63,7 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
         created_by: Some(&me.member.account),
         created_at: now,
         expires_at: invite_rules::expires_at(now),
+        makes_admin: false,
     };
     let inviter = inviter(&me.member);
     let created = app.db.insert_invite_if(&invite, |invites| {

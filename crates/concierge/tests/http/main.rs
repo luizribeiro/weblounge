@@ -195,6 +195,7 @@ impl Site {
             created_by,
             created_at: now,
             expires_at: invite_rules::expires_at(now),
+            makes_admin: false,
         };
         self.db.insert_invite(&invite).await.unwrap();
     }

@@ -62,6 +62,7 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     assert_eq!(member.invited_by.as_deref(), Some("alice"));
     assert_eq!(member.email.as_deref(), Some("bob@example.org"));
     assert!(member.news_opt_in);
+    assert!(!member.is_admin);
     let invite = site.db.invite(CODE).await.unwrap().unwrap();
     assert_eq!(invite.redeemed_by.as_deref(), Some("Bob"));
     let ergo = site.ergo.client();
@@ -85,6 +86,15 @@ async fn a_root_invite_makes_a_root_member_without_news() {
     let member = site.db.member("bob").await.unwrap().unwrap();
     assert_eq!(member.invited_by, None);
     assert!(!member.news_opt_in);
+}
+
+#[tokio::test]
+async fn an_admin_invite_makes_an_admin() {
+    let site = Site::start().await;
+    site.add_invite(CODE, None).await;
+    site.update_invite(CODE, "makes_admin = TRUE").await;
+    assert_eq!(site.post(INVITE, &bob(), None).await.status(), 200);
+    assert!(site.db.member("bob").await.unwrap().unwrap().is_admin);
 }
 
 #[tokio::test]
