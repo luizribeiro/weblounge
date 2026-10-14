@@ -15,3 +15,4 @@ nix copy --no-check-sigs --to "ssh-ng://$host" "$toplevel"
 # shellcheck disable=SC2029,SC2086
 ssh ${NIX_SSHOPTS:-} "$host" \
   "sudo nix-env -p /nix/var/nix/profiles/system --set $toplevel && sudo $toplevel/bin/switch-to-configuration switch"
+scripts/check-units "$host"
