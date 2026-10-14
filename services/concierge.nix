@@ -4,6 +4,7 @@ let
   cfg = config.weblounge.concierge;
   hostName = "members.${config.weblounge.domain}";
   publicUrl = config.weblounge.origin hostName;
+  joinHostName = "join.${config.weblounge.domain}";
   concierge = lib.getExe pkgs.weblounge.concierge;
   multiclient = config.weblounge.ergo.settings.accounts.multiclient;
 
@@ -97,6 +98,7 @@ in
         Environment = [
           "CONCIERGE_LISTEN=${cfg.listen}"
           "CONCIERGE_PUBLIC_URL=${publicUrl}"
+          "CONCIERGE_JOIN_URL=${config.weblounge.origin joinHostName}"
           "CONCIERGE_WEBCHAT_URL=${config.weblounge.origin config.weblounge.ergo.serverName}"
           "CONCIERGE_IRC_SERVER=${config.weblounge.ergo.address}"
           "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
@@ -154,6 +156,15 @@ in
       };
       # Only Ergo introspects tokens, on loopback.
       locations."= /oauth/introspect".return = "404";
+    };
+
+    # Invite links' short home. Browsers carry the code in the fragment
+    # across the redirect, and never send it here.
+    services.nginx.virtualHosts.${joinHostName} = {
+      enableACME = true;
+      forceSSL = true;
+      locations."= /".return = "302 ${publicUrl}/invite";
+      locations."/".return = "404";
     };
   };
 }

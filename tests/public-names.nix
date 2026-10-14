@@ -8,6 +8,8 @@ let
     virtualHosts = lib.mapAttrs (_: vhost: vhost.serverAliases) host.services.nginx.virtualHosts;
     conciergeUrl = lib.findFirst (lib.hasPrefix "CONCIERGE_PUBLIC_URL=") null
       host.systemd.services.concierge.serviceConfig.Environment;
+    joinUrl = lib.findFirst (lib.hasPrefix "CONCIERGE_JOIN_URL=") null
+      host.systemd.services.concierge.serviceConfig.Environment;
   };
 
   expected = {
@@ -16,16 +18,20 @@ let
         "weblounge.org" = [ "www.weblounge.org" "credenza.weblounge.org" ];
         "irc.weblounge.org" = [ ];
         "members.weblounge.org" = [ ];
+        "join.weblounge.org" = [ ];
       };
       conciergeUrl = "CONCIERGE_PUBLIC_URL=https://members.weblounge.org";
+      joinUrl = "CONCIERGE_JOIN_URL=https://join.weblounge.org";
     };
     vm = {
       virtualHosts = {
         "weblounge.localhost" = [ "www.weblounge.localhost" "credenza.weblounge.localhost" ];
         "irc.weblounge.localhost" = [ ];
         "members.weblounge.localhost" = [ ];
+        "join.weblounge.localhost" = [ ];
       };
       conciergeUrl = "CONCIERGE_PUBLIC_URL=https://members.weblounge.localhost:10443";
+      joinUrl = "CONCIERGE_JOIN_URL=https://join.weblounge.localhost:10443";
     };
   };
 

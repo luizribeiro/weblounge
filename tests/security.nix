@@ -5,7 +5,7 @@ vmTest ''
 
   mallory = {"account": "mallory", "password": "an-insider-gone-bad"}
   tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
-  sites = ["weblounge.org", "members.weblounge.org", "irc.weblounge.org"]
+  sites = ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]
   members = "members.weblounge.org"
   pages_and_directives_they_need = {
       "weblounge.org": ("/", {"script-src", "style-src", "img-src"}),

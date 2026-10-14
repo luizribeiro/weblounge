@@ -35,6 +35,10 @@ vmTest {
         health = https("members.weblounge.org", "/healthz", "-f")
         assert health == "ok", health
 
+    with subtest("join.weblounge.org sends invite links on to the invite page, and nothing else anywhere"):
+        assert https("join.weblounge.org", "/", *outcome) == f"302 https://{members}/invite"
+        assert https("join.weblounge.org", "/invite", *outcome) == "404 "
+
     with subtest("concierge's release build carries no live-reload code"):
         assert "livereload" not in page, page
         credenza.fail("grep -aq tower-livereload /proc/$(systemctl show -P MainPID concierge)/exe")
@@ -57,9 +61,9 @@ vmTest {
         modes = credenza.succeed("stat -L -c %a /var/lib/private /var/lib/concierge /var/lib/concierge/concierge.db").split()
         assert modes == ["700", "700", "600"], modes
 
-    with subtest("concierge-admin invite create --root prints a link to members.weblounge.org"):
+    with subtest("concierge-admin invite create --root prints a link to join.weblounge.org"):
         link = concierge_admin("invite", "create", "--root")
-        assert re.fullmatch(r"https://members\.weblounge\.org/invite#[A-Za-z0-9_-]{22}\n", link), link
+        assert re.fullmatch(r"https://join\.weblounge\.org/#[A-Za-z0-9_-]{22}\n", link), link
 
     with subtest("an admin's root invite brings the network's first member in"):
         credenza.wait_for_open_port(8089)

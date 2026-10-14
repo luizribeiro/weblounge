@@ -14,9 +14,10 @@ vmTest {
     credenza.wait_for_unit("ergochat.service")
     credenza.wait_for_open_port(8089)
 
-    with subtest("an admin mints a root invite and the invitee opens it over HTTPS"):
+    with subtest("an admin mints a root invite on join.weblounge.org and the invitee opens it over HTTPS"):
         link = concierge_admin("invite", "create", "--root").strip()
-        opened = erins_browser.get(link.removeprefix(f"https://{members}"), "-L", "-f")
+        assert re.fullmatch(r"https://join\.weblounge\.org/#[A-Za-z0-9_-]{22}", link), link
+        opened = erins_browser.get("/invite", "-f")
         assert "<h1 data-invite-heading>You're invited.</h1>" in opened, opened
         assert 'name="code"' in opened and 'autocomplete="new-password"' in opened, opened
 
