@@ -25,7 +25,7 @@ use concierge::{
     config::IrcServer,
     db::{self, Db, NewInvite, NewMember},
     invite_rules::{self, DEFAULT_QUOTA},
-    rate_limit::{Limiter, LookupLimiter},
+    rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter},
     session::{self, Token},
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
@@ -61,7 +61,7 @@ impl Site {
             ergo: ergo.unwrap_or_else(|| fake.client()),
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),
-            lookups: LookupLimiter::default(),
+            lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
             public_url: PUBLIC_URL.into(),
             irc_server: irc_server(),
         });

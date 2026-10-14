@@ -16,7 +16,7 @@ use crate::{
     config::IrcServer,
     csrf,
     db::Db,
-    rate_limit::{Limiter, LookupLimiter},
+    rate_limit::{AddressLimiter, Limiter},
     routes, session,
 };
 
@@ -27,7 +27,7 @@ pub struct App {
     pub ergo: Client,
     pub sessions: session::Hasher,
     pub limiter: Limiter,
-    pub lookups: LookupLimiter,
+    pub lookups: AddressLimiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
     /// Where members point their IRC clients.

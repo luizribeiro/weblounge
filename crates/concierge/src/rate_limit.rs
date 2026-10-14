@@ -160,28 +160,28 @@ pub const TRY_LATER: &str = "Too many attempts. Try again in 15 minutes.";
 /// Enough to try a few nicks while typing, too few to list the members.
 pub const LOOKUPS_PER_ADDRESS: usize = 60;
 
-/// Nick lookups in the last [`WINDOW`], by client address.
-pub struct LookupLimiter {
-    lookups: Recent<IpAddr>,
+/// Requests in the last [`WINDOW`], by client address, up to a limit.
+pub struct AddressLimiter {
+    requests: Recent<IpAddr>,
+    limit: usize,
 }
 
-impl Default for LookupLimiter {
-    fn default() -> Self {
+impl AddressLimiter {
+    pub fn new(limit: usize) -> Self {
         Self {
-            lookups: Recent::new(WINDOW),
+            requests: Recent::new(WINDOW),
+            limit,
         }
     }
-}
 
-impl LookupLimiter {
-    /// Whether another lookup from `address` may go ahead, counting it if so.
+    /// Whether another request from `address` may go ahead, counting it if so.
     pub fn allows(&self, address: Option<IpAddr>, now: Instant) -> bool {
         let Some(address) = address else {
             return true;
         };
-        let allowed = self.lookups.under(&address, LOOKUPS_PER_ADDRESS, now);
+        let allowed = self.requests.under(&address, self.limit, now);
         if allowed {
-            self.lookups.record(address, now);
+            self.requests.record(address, now);
         }
         allowed
     }
@@ -279,8 +279,8 @@ mod tests {
     }
 
     #[test]
-    fn an_address_gets_sixty_lookups_per_window() {
-        let (lookups, start) = (LookupLimiter::default(), Instant::now());
+    fn an_address_gets_its_limit_of_requests_per_window() {
+        let (lookups, start) = (AddressLimiter::new(LOOKUPS_PER_ADDRESS), Instant::now());
         for _ in 0..LOOKUPS_PER_ADDRESS {
             assert!(lookups.allows(HOME, start));
         }
