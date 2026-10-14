@@ -10,6 +10,10 @@ fake = ["dep:axum", "dep:tokio"]
 # The real ergo binary on loopback, for contract tests and the dev loop.
 local = []
 
+[[bin]]
+name = "local-ergo"
+required-features = ["local"]
+
 [dependencies]
 axum = { version = "0.8.9", optional = true }
 reqwest = { version = "0.13.5", default-features = false, features = ["json"] }

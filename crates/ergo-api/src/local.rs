@@ -9,6 +9,8 @@ use serde_json::json;
 
 use crate::Client;
 
+const DATASTORE: &str = "ircd.db";
+
 /// An Ergo whose datastore and IRC socket live in `dir` and whose API
 /// listens on `api` and accepts `token`.
 pub struct LocalErgo {
@@ -48,6 +50,21 @@ impl LocalErgo {
         Client::new(self.url(), &self.token)
     }
 
+    /// Creates the datastore, unless `dir` already holds one.
+    pub fn init(&self) -> io::Result<()> {
+        if self.dir.join(DATASTORE).exists() {
+            return Ok(());
+        }
+        let status = self.command("initdb").status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "ergo initdb failed with {status}"
+            )))
+        }
+    }
+
     /// `ergo <subcommand>` on this instance's settings.
     pub fn command(&self, subcommand: &str) -> Command {
         let mut command = Command::new(&self.bin);
@@ -67,7 +84,7 @@ impl LocalErgo {
                 "ERGO__SERVER__LISTENERS",
                 json!({ path("irc.sock"): {} }).to_string(),
             ),
-            ("ERGO__DATASTORE__PATH", path("ircd.db")),
+            ("ERGO__DATASTORE__PATH", path(DATASTORE)),
             ("ERGO__API__ENABLED", "true".into()),
             ("ERGO__API__LISTENER", self.api.to_string()),
             ("ERGO__API__BEARER_TOKENS", json!([self.token]).to_string()),
