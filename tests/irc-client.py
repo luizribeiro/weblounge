@@ -1,7 +1,8 @@
-"""Connect to an IRC server over TLS, send COMMANDS once welcomed, and print
-every line the server sends."""
+"""Connect to an IRC server over TLS, optionally logging in with SASL PLAIN,
+send COMMANDS once welcomed, and print every line the server sends."""
 
 import argparse
+import base64
 import socket
 import ssl
 
@@ -54,16 +55,31 @@ class Connection:
         return None
 
 
+def authenticate(conn, account, password):
+    conn.send("CAP REQ :sasl")
+    conn.send("AUTHENTICATE PLAIN")
+    payload = f"{account}\0{account}\0{password}".encode()
+    conn.send("AUTHENTICATE " + base64.b64encode(payload).decode())
+    if conn.read_until("903", "904") != "903":
+        raise SystemExit(f"SASL login as {account} failed")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("host")
+    parser.add_argument("--account")
+    parser.add_argument("--password")
     parser.add_argument("commands", nargs="*")
     args = parser.parse_args()
+    if args.account and not args.password:
+        parser.error("--account needs --password")
 
     conn = Connection(connect(args.host, 6697))
     conn.send("CAP LS 302")
+    if args.account:
+        authenticate(conn, args.account, args.password)
     conn.send("CAP END")
-    conn.send("NICK visitor")
+    conn.send(f"NICK {args.account or 'visitor'}")
     conn.send("USER guest 0 * :weblounge test client")
     if conn.read_until("001") is None:
         return

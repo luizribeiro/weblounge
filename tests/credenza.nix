@@ -12,7 +12,7 @@ pkgs.testers.runNixOSTest {
   nodes = {
     credenza = {
       imports = weblounge.hostModules "credenza" ++ [ ../modules/offline-acme.nix ];
-      environment.systemPackages = [ ircClient ];
+      environment.systemPackages = [ pkgs.curl ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [
         "-netdev user,id=wan,net=107.173.231.128/25,host=107.173.231.129"
@@ -23,12 +23,25 @@ pkgs.testers.runNixOSTest {
   };
 
   testScript = ''
+    import json
     import re
     import shlex
+
+    def ergo_api(endpoint, token, **fields):
+        return credenza.succeed(shlex.join([
+            "curl", "-s", "-w", "\\n%{http_code}", "-H", f"Authorization: Bearer {token}",
+            "-d", json.dumps(fields), f"http://127.0.0.1:8089/v1/{endpoint}",
+        ])).rsplit("\n", 1)
+
+    def register(token, account, password):
+        body, _ = ergo_api("saregister", token, accountName=account, passphrase=password)
+        return body
 
     def irc(*commands, machine=client, host="credenza", **options):
         flags = [f"--{name}={value}" for name, value in options.items()]
         return machine.succeed(shlex.join(["irc-client", host, *flags, *commands]))
+
+    alice = {"account": "alice", "password": "correct-horse"}
 
     start_all()
 
@@ -91,6 +104,37 @@ pkgs.testers.runNixOSTest {
 
     with subtest("default.yaml's example oper and WebIRC gateway are left out"):
         credenza.fail("grep -qE '^opers:|webirc' /etc/ergo.yaml")
+
+    with subtest("ergo's API answers on credenza's loopback, only to the generated token"):
+        token = credenza.succeed("cat /var/lib/weblounge-secrets/ergo-api-token").strip()
+        body, status = ergo_api("status", token)
+        assert status == "200" and '"success":true' in body, (status, body)
+        _, status = ergo_api("status", "not-the-token")
+        assert status == "401", status
+        listeners = credenza.succeed("ss -Htln 'sport = :8089'")
+        assert listeners.split()[3] == "127.0.0.1:8089" and listeners.count("\n") == 1, listeners
+        client.fail("curl -s --max-time 3 http://credenza:8089/v1/status")
+
+    with subtest("the API token stays out of the Nix store and readable by root alone"):
+        modes = credenza.succeed("stat -c '%a %U' /var/lib/weblounge-secrets /var/lib/weblounge-secrets/ergo-api-token")
+        assert modes == "700 root\n600 root\n", modes
+        credenza.fail(f"{{ systemctl cat ergochat; cat /etc/ergo.yaml; }} | grep -qF {token}")
+
+    with subtest("the token survives a restart of the secrets service and ergo"):
+        credenza.succeed("systemctl restart weblounge-secrets ergochat")
+        credenza.wait_for_open_port(8089)
+        _, status = ergo_api("status", token)
+        assert status == "200", status
+
+    with subtest("an account created through the API logs in over TLS with SASL"):
+        body = register(token, **alice)
+        assert '"success":true' in body, body
+        session = irc(**alice)
+        assert " 903 " in session and " 001 alice " in session, session
+
+    with subtest("NickServ won't register new accounts"):
+        reply = irc("PRIVMSG NickServ :REGISTER battery-staple", **alice)
+        assert "NOTICE alice :This command has been disabled" in reply, reply
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")

@@ -17,7 +17,7 @@ let
   '';
 in
 {
-  imports = [ ./nginx.nix ];
+  imports = [ ./nginx.nix ./secrets.nix ];
 
   # The nixpkgs module's defaults leave out fakelag, login throttling, nick
   # reservation, cloaking and logging; Ergo's default.yaml keeps them on.
@@ -40,9 +40,16 @@ in
           min-tls-version = "1.2";
         };
       };
-      accounts.require-sasl = {
+      accounts = {
+        registration.enabled = false;
+        require-sasl = {
+          enabled = true;
+          exempted = [ ];
+        };
+      };
+      api = {
         enabled = true;
-        exempted = [ ];
+        listener = "127.0.0.1:8089";
       };
       # nixpkgs' ergo ships no translations for the default path to find.
       languages.enabled = false;
@@ -53,10 +60,18 @@ in
       inherit configFile;
     };
 
+    weblounge.secrets.ergo-api-token.loadedBy = [ "ergochat" ];
+
     systemd.services.ergochat = {
       wants = [ "acme-${serverName}.service" ];
       after = [ "acme-${serverName}.service" ];
       serviceConfig = {
+        # Ergo reads its API token only from its config file or environment.
+        ExecStart = lib.mkForce (pkgs.writeShellScript "ergo-start" ''
+          export ERGO__API__BEARER_TOKENS="[\"$(< "$CREDENTIALS_DIRECTORY/ergo-api-token")\"]"
+          exec ${lib.getExe pkgs.ergochat} run --conf /etc/ergo.yaml
+        '');
+        SyslogIdentifier = "ergo";
         # Ergo's RELOADING=1 carries no MONOTONIC_USEC, which notify-reload
         # waits for until it times out.
         Type = lib.mkForce "notify";
