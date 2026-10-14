@@ -35,6 +35,10 @@ in
       Type = "oneshot";
       RemainAfterExit = true;
     };
+    # Its script calls concierge-admin, which changes with every change to
+    # concierge; restarting it on deploy would take the bot down with it.
+    # It only needs to run before the bot starts.
+    restartIfChanged = false;
   };
 
   systemd.services."weblounge-bot-${nick}" = {

@@ -1,6 +1,6 @@
 # Builds a VM test of credenza's real configuration, probed from a client.
-# Takes the test script, or { script, client, browsers } to add to the
-# client node; browsers maps command names to Playwright scripts.
+# Takes the test script, or { script, credenza, client, browsers } to add
+# to the nodes; browsers maps command names to Playwright scripts.
 { pkgs, weblounge, name }:
 
 test:
@@ -30,7 +30,7 @@ pkgs.testers.runNixOSTest {
 
   nodes = {
     credenza = {
-      imports = weblounge.hostModules "credenza" ++ [ ../modules/offline-acme.nix ];
+      imports = weblounge.hostModules "credenza" ++ [ ../modules/offline-acme.nix (test.credenza or { }) ];
       environment.systemPackages = [ pkgs.curl ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [
