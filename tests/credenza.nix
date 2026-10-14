@@ -143,6 +143,9 @@ pkgs.testers.runNixOSTest {
         whois = irc("WHOIS alice", **alice)
         assert re.search(r" 311 alice alice \S+ \S+\.weblounge ", whois), whois
 
+    with subtest("logging in joins #lounge"):
+        assert re.search(r"^:alice!\S+ JOIN #lounge", session, re.M), session
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()

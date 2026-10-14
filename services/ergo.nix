@@ -54,6 +54,7 @@ in
           exempted = [ ];
         };
       };
+      channels.auto-join = [ "#lounge" ];
       api = {
         enabled = true;
         listener = "127.0.0.1:8089";
