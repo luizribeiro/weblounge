@@ -1,21 +1,32 @@
 //! Members creating and revoking their own invites, from the account home.
 
+use askama::Template;
 use axum::{
     Form,
-    extract::State,
+    extract::{Path, State},
+    http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 
-use super::internal_error;
+use super::{Layout, internal_error, render};
 use crate::{
     app::{App, AppState},
-    auth::CurrentMember,
+    auth::{CurrentMember, Visitor},
     config,
     db::{self, Invitee, Member, NewInvite},
     invite_code,
     invite_rules::{self, Inviter, Status},
+    qr,
 };
+
+#[derive(Template)]
+#[template(path = "qr.html")]
+struct QrPage<'a> {
+    layout: Layout<'a>,
+    invite: OpenInvite,
+    svg: String,
+}
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -61,6 +72,34 @@ pub async fn revoke(
     }
 }
 
+/// An open invite's link as a QR code, big enough to scan from another
+/// phone. Other members' invites, and dead ones, aren't found.
+pub async fn show_qr(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    Path(id): Path<String>,
+) -> Response {
+    match open_invite(&app, &me.member, &id, db::now()).await {
+        Ok(Some(invite)) => render(&QrPage {
+            layout: Layout {
+                assets: &app.assets,
+                nick: Some(&me.member.account),
+            },
+            svg: qr::svg(&invite.url),
+            invite,
+        }),
+        Ok(None) => super::message(
+            &app,
+            &Visitor(Some(me.clone())),
+            StatusCode::NOT_FOUND,
+            "Invites",
+            "No such invite.",
+            &["It was used, revoked or expired, or it isn't yours."],
+        ),
+        Err(error) => internal_error("Looking up an invite", error),
+    }
+}
+
 /// A member's invites, as the account home shows them.
 pub struct Invites {
     pub open: Vec<OpenInvite>,
@@ -71,6 +110,8 @@ pub struct Invites {
 
 pub struct OpenInvite {
     pub code: String,
+    /// What URLs call it by, since the code is a secret.
+    pub id: String,
     pub url: String,
     pub time_left: String,
 }
@@ -79,21 +120,35 @@ impl Invites {
     pub async fn of(app: &App, member: &Member, now: i64) -> sqlx::Result<Self> {
         let invites = app.db.invites_created_by(&member.account).await?;
         let rules: Vec<_> = invites.iter().map(db::Invite::rules).collect();
-        let open = invites
-            .into_iter()
-            .filter(|invite| matches!(invite.status(now), Status::Open | Status::Claimed))
-            .map(|invite| OpenInvite {
-                url: config::invite_url(&app.public_url, &invite.code),
-                time_left: invite_rules::time_left(invite.expires_at, now),
-                code: invite.code,
-            })
-            .collect();
         Ok(Self {
-            open,
+            open: open(app, invites, now).collect(),
             invitees: app.db.invitees(&member.account).await?,
             remaining: invite_rules::remaining(&inviter(member), &rules, now),
         })
     }
+}
+
+/// The open invite of `member`'s that URLs call `id`, if there is one.
+pub async fn open_invite(
+    app: &App,
+    member: &Member,
+    id: &str,
+    now: i64,
+) -> sqlx::Result<Option<OpenInvite>> {
+    let invites = app.db.invites_created_by(&member.account).await?;
+    Ok(open(app, invites, now).find(|invite| invite.id == id))
+}
+
+fn open(app: &App, invites: Vec<db::Invite>, now: i64) -> impl Iterator<Item = OpenInvite> {
+    invites
+        .into_iter()
+        .filter(move |invite| matches!(invite.status(now), Status::Open | Status::Claimed))
+        .map(move |invite| OpenInvite {
+            id: invite_code::public_id(&invite.code),
+            url: config::invite_url(&app.public_url, &invite.code),
+            time_left: invite_rules::time_left(invite.expires_at, now),
+            code: invite.code,
+        })
 }
 
 fn inviter(member: &Member) -> Inviter {

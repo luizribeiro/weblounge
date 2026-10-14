@@ -66,6 +66,10 @@ pub fn router(app: App) -> Router {
         .route("/invites", post(routes::invites::create))
         .route("/invites/revoke", post(routes::invites::revoke))
         .route(
+            "/invites/{id}/qr",
+            get(routes::invites::show_qr).layer(map_response(routes::no_store)),
+        )
+        .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),
         )

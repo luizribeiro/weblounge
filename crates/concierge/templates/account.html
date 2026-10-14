@@ -36,6 +36,7 @@
               <div class="invite-actions">
                 <span class="muted">{{ invite.time_left }} left</span>
                 <button class="button button-small" type="button" data-copy="{{ invite.url }}" data-copy-label="invite link" hidden>Copy</button>
+                <a class="button button-small" href="/invites/{{ invite.id }}/qr">QR</a>
                 <form method="post" action="/invites/revoke">
                   <input type="hidden" name="code" value="{{ invite.code }}">
                   <button class="button button-small" type="submit">Revoke</button>

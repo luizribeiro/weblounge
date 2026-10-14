@@ -14,6 +14,7 @@ pub mod oauth;
 pub mod password;
 pub mod password_rules;
 pub mod platform;
+pub mod qr;
 mod random;
 pub mod rate_limit;
 mod routes;

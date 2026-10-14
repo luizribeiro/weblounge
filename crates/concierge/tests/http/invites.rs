@@ -160,3 +160,85 @@ async fn guests_and_other_origins_create_nothing() {
     assert_eq!(response.status(), 403);
     assert!(invite_links(&home(&site, &cookie).await).is_empty());
 }
+
+fn qr_paths(page: &str) -> Vec<String> {
+    let path = Regex::new(r#"href="(/invites/[A-Za-z0-9_-]{16}/qr)""#).unwrap();
+    path.captures_iter(page).map(|c| c[1].to_owned()).collect()
+}
+
+async fn alice_with_an_invite() -> (Site, String, String, String) {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    site.post("/invites", &[], Some(&cookie)).await;
+    let page = home(&site, &cookie).await;
+    let [link] = invite_links(&page).try_into().unwrap();
+    let [qr] = qr_paths(&page).try_into().unwrap();
+    (site, cookie, link, qr)
+}
+
+#[tokio::test]
+async fn an_invites_qr_code_encodes_its_link_on_a_page_named_without_the_code() {
+    let (site, cookie, link, qr) = alice_with_an_invite().await;
+    let code = link.rsplit('/').next().unwrap();
+    assert!(!qr.contains(code), "{qr}");
+
+    let response = site.get(&qr, Some(&cookie)).await;
+
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let page = body_text(response).await;
+    assert!(page.contains(&concierge::qr::svg(&link)), "{page}");
+    assert!(
+        page.contains(&format!(r#"<code class="invite-link">{link}</code>"#)),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn only_the_inviter_sees_the_qr_code() {
+    let (site, _, _, qr) = alice_with_an_invite().await;
+    site.add_member("mallory").await;
+    let mallorys = site.sign_in("mallory").await;
+    let response = site.get(&qr, Some(&mallorys)).await;
+    assert_eq!(response.status(), 404);
+    assert!(body_text(response).await.contains("No such invite."));
+    let response = site.get(&qr, None).await;
+    assert_eq!(
+        location(&response),
+        format!("/signin?next={}", qr.replace('/', "%2F"))
+    );
+    let response = site
+        .get("/invites/AAAAAAAAAAAAAAAA/qr", Some(&mallorys))
+        .await;
+    assert_eq!(response.status(), 404);
+}
+
+#[tokio::test]
+async fn revoked_and_redeemed_invites_have_no_qr_code() {
+    let (site, cookie, link, qr) = alice_with_an_invite().await;
+    let code = link.rsplit('/').next().unwrap();
+    site.post("/invites/revoke", &[("code", code)], Some(&cookie))
+        .await;
+    assert_eq!(site.get(&qr, Some(&cookie)).await.status(), 404);
+
+    site.post("/invites", &[], Some(&cookie)).await;
+    let page = home(&site, &cookie).await;
+    let [link] = invite_links(&page).try_into().unwrap();
+    let [qr] = qr_paths(&page).try_into().unwrap();
+    let code = link.rsplit('/').next().unwrap();
+    site.execute(&format!(
+        "INSERT INTO members (account, invited_by, joined_at, invite_quota) VALUES ('bob', 'alice', 1, 5);
+         UPDATE invites SET redeemed_by = 'bob', redeemed_at = 1 WHERE code = '{code}';"
+    ))
+    .await;
+    assert_eq!(site.get(&qr, Some(&cookie)).await.status(), 404);
+}
+
+#[tokio::test]
+async fn an_expired_invite_has_no_qr_code() {
+    let (site, cookie, _, qr) = alice_with_an_invite().await;
+    site.execute("UPDATE invites SET created_at = 0, expires_at = 1")
+        .await;
+    assert_eq!(site.get(&qr, Some(&cookie)).await.status(), 404);
+}

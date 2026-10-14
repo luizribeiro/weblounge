@@ -184,6 +184,26 @@ vmTest ''
       body, _ = ergo_api("check_auth", accountName="mallory", passphrase=mallory["password"])
       assert '"success":true' in body, body
 
+  with subtest("an invite's QR page is its inviter's alone, and names the invite without its code"):
+      assert mallorys_browser.post("/invites") == f"303 https://{members}/?invited#invites"
+      home = mallorys_browser.get("/", "-f")
+      [code] = re.findall(r'<code class="invite-link">https://[^/]+/invite/([^<]+)</code>', home)
+      [qr] = re.findall(r'href="(/invites/[^"]+/qr)"', home)
+      assert code not in qr, (code, qr)
+      needs = PageNeeds(mallorys_browser.get(qr, "-f"))
+      assert needs.inline == [] and all(directive for directive, _ in needs.fetches), (needs.inline, needs.fetches)
+      assert "<svg" in mallorys_browser.get(qr, "-f")
+      oscar = {"account": "oscar", "password": "another-member-entirely"}
+      register(**oscar)
+      concierge_admin("member", "adopt", "oscar")
+      oscars_browser = Browser("oscar")
+      assert oscars_browser.sign_in(**oscar).startswith("303 ")
+      assert oscars_browser.get(qr, *outcome) == "404 "
+      assert https(members, qr, *outcome) == f"303 https://{members}/signin?next={qr.replace('/', '%2F')}"
+      credenza.succeed("journalctl --sync")
+      credenza.fail(f"grep -qF {code} /var/log/nginx/access.log")
+      credenza.fail(f"journalctl | grep -qF {code}")
+
   with subtest("a POST from another origin, or from nowhere, is refused"):
       for headers in [["-H", "Origin: https://evil.example"], ["-H", "Referer: https://evil.example/"], []]:
           status = https(members, "/signin", "-o", "/dev/null", "-w", "%{http_code}", "--data", "", *headers)

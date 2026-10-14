@@ -344,3 +344,37 @@
   text-decoration: underline 3px var(--signal);
   text-underline-offset: 0.25em;
 }
+
+.qr-page {
+  max-width: 32rem;
+  margin: 0 auto;
+  text-align: center;
+
+  & .links {
+    justify-content: center;
+  }
+}
+
+.qr {
+  margin: 0 0 1rem;
+
+  & figcaption {
+    margin-top: 0.75rem;
+  }
+}
+
+/* Scanners want dark modules on light, whatever the colour scheme. */
+.qr-code {
+  box-sizing: border-box;
+  width: min(100%, 70vh);
+  margin: 0 auto;
+  padding: 0.5rem;
+  border-radius: var(--radius-card);
+  background: #fff;
+
+  & svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+}
