@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use sqlx::{
-    SqlitePool,
+    SqliteExecutor, SqlitePool,
     migrate::Migrator,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
 };
@@ -76,6 +76,13 @@ pub struct Invite {
     pub redeemed_by: Option<String>,
     pub redeemed_at: Option<i64>,
     pub revoked_at: Option<i64>,
+}
+
+/// What [`Db::remove_member`] did besides clearing the member's data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Removal {
+    pub sessions_ended: u64,
+    pub invites_revoked: u64,
 }
 
 /// Concierge's SQLite database, migrated to the schema this build knows.
@@ -159,10 +166,49 @@ impl Db {
 
     /// Ends every session of `account`, answering how many there were.
     pub async fn end_sessions(&self, account: &str) -> sqlx::Result<u64> {
-        let deleted = sqlx::query!("DELETE FROM sessions WHERE account = ?", account)
-            .execute(&self.pool)
-            .await?;
-        Ok(deleted.rows_affected())
+        delete_sessions(&self.pool, account).await
+    }
+
+    /// Clears everything personal about a member, ends their sessions and
+    /// revokes their open invites. Their row stays as their place in the
+    /// invite tree, so the people they invited stay attached.
+    pub async fn remove_member(&self, account: &str, now: i64) -> sqlx::Result<Removal> {
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query!(
+            "UPDATE members
+             SET email = NULL, email_verified_at = NULL, news_opt_in = FALSE,
+                 invite_quota = 0, is_admin = FALSE, removed_at = ?
+             WHERE account = ?",
+            now,
+            account,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        let sessions_ended = delete_sessions(&mut *transaction, account).await?;
+        let revoked = sqlx::query!(
+            "UPDATE invites SET revoked_at = ?
+             WHERE created_by = ? AND redeemed_at IS NULL AND revoked_at IS NULL
+               AND expires_at > ?",
+            now,
+            account,
+            now,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        // Notes are written about the invitee, so the ones on the invite
+        // that brought the member in are about them too.
+        sqlx::query!(
+            "UPDATE invites SET note = NULL WHERE created_by = ? OR redeemed_by = ?",
+            account,
+            account,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(Removal {
+            sessions_ended,
+            invites_revoked: revoked.rows_affected(),
+        })
     }
 
     pub async fn insert_invite(&self, invite: &NewInvite<'_>) -> sqlx::Result<()> {
@@ -200,6 +246,13 @@ impl Db {
         .fetch_one(&self.pool)
         .await
     }
+}
+
+async fn delete_sessions(executor: impl SqliteExecutor<'_>, account: &str) -> sqlx::Result<u64> {
+    let deleted = sqlx::query!("DELETE FROM sessions WHERE account = ?", account)
+        .execute(executor)
+        .await?;
+    Ok(deleted.rows_affected())
 }
 
 #[cfg(test)]
@@ -283,5 +336,59 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn removing_a_member_keeps_the_invites_that_shaped_the_tree() {
+        let (db, _dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, invited_by, joined_at, invite_quota)
+             VALUES ('root', NULL, NULL, 0, 5),
+                    ('alice', 'alice@example.org', 'root', 10, 5),
+                    ('bob', 'bob@example.org', 'alice', 20, 5);
+             UPDATE members SET email_verified_at = 11, news_opt_in = TRUE, is_admin = TRUE
+             WHERE account = 'alice';
+             INSERT INTO invites (code, created_by, note, created_at, expires_at, redeemed_by, redeemed_at)
+             VALUES ('to-alice', 'root', 'for alice from work', 5, 100, 'alice', 10),
+                    ('to-bob', 'alice', 'for bob', 15, 100, 'bob', 20),
+                    ('stale', 'alice', 'for carol', 15, 100, NULL, NULL),
+                    ('open', 'alice', 'for dave', 150, 300, NULL, NULL);",
+        )
+        .await
+        .unwrap();
+
+        let removal = db.remove_member("alice", 200).await.unwrap();
+
+        assert_eq!(removal.invites_revoked, 1);
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert_eq!(
+            alice,
+            Member {
+                account: "alice".into(),
+                email: None,
+                email_verified_at: None,
+                news_opt_in: false,
+                invited_by: Some("root".into()),
+                joined_at: 10,
+                invite_quota: 0,
+                is_admin: false,
+                removed_at: Some(200),
+            }
+        );
+        for (code, redeemed_by, revoked_at) in [
+            ("open", None, Some(200)),
+            ("stale", None, None),
+            ("to-alice", Some("alice"), None),
+            ("to-bob", Some("bob"), None),
+        ] {
+            let invite = db.invite(code).await.unwrap().unwrap();
+            assert_eq!(invite.note, None, "{code}");
+            assert_eq!(invite.redeemed_by.as_deref(), redeemed_by, "{code}");
+            assert_eq!(invite.revoked_at, revoked_at, "{code}");
+        }
+        let bob = db.member("bob").await.unwrap().unwrap();
+        assert_eq!(bob.invited_by.as_deref(), Some("alice"));
+        assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
     }
 }

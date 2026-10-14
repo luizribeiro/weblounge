@@ -19,6 +19,9 @@ pub enum MemberCommand {
     /// Give a member a new generated password, end their sessions, and print
     /// the password once.
     ResetPassword { account: String },
+    /// Remove a member's personal data and sessions and revoke their open
+    /// invites, keeping their place in the invite tree.
+    Delete { account: String },
 }
 
 pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -28,6 +31,7 @@ pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result
             admin: is_admin,
         } => adopt(admin, &account, is_admin).await,
         MemberCommand::ResetPassword { account } => reset_password(admin, &account).await,
+        MemberCommand::Delete { account } => delete(admin, &account).await,
     }
 }
 
@@ -70,6 +74,17 @@ async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
         .with_context(|| format!("Ergo didn't take {}'s new password", member.account))?;
     admin.db.end_sessions(&member.account).await?;
     Ok(format!("{}\n", password.as_str()))
+}
+
+async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
+    let member = current_member(admin, name).await?;
+    let account = &member.account;
+    let removal = admin.db.remove_member(account, db::now()).await?;
+    Ok(format!(
+        "removed {account} (sessions ended: {}, invites revoked: {})\n\
+         Ergo's API can't delete accounts: an oper must run /NS ERASE {account}\n",
+        removal.sessions_ended, removal.invites_revoked
+    ))
 }
 
 /// The member named `name`, unless there's none or they were removed.

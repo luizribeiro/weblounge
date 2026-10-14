@@ -1,5 +1,5 @@
 use concierge::{
-    db::{NewMember, NewSession},
+    db::{self, NewInvite, NewMember, NewSession},
     invite_rules::DEFAULT_QUOTA,
 };
 use ergo_api::{Passphrase, Registration, SettingsChanges, fake::Failure};
@@ -172,5 +172,91 @@ mod reset_password {
         );
         assert!(fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
         assert_eq!(fixture.db().await.end_sessions("alice").await.unwrap(), 1);
+    }
+}
+
+mod delete {
+    use super::*;
+
+    async fn invite(fixture: &Fixture, code: &str, created_by: &str) {
+        let now = db::now();
+        let invite = NewInvite {
+            code,
+            created_by: Some(created_by),
+            note: Some("for my sister"),
+            created_at: now,
+            expires_at: now + 3600,
+        };
+        fixture.db().await.insert_invite(&invite).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn leaves_a_placeholder_in_the_tree_and_reminds_to_erase_the_account() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.add_member("bob", Some("alice")).await;
+        fixture.sign_in("alice", b"alice-laptop").await;
+        invite(&fixture, "q7Hx2mZp9vLcT4wRfBa-_w", "alice").await;
+
+        let output = fixture.run(&["member", "delete", "Alice"]).await.unwrap();
+
+        assert_eq!(
+            output,
+            "removed alice (sessions ended: 1, invites revoked: 1)\n\
+             Ergo's API can't delete accounts: an oper must run /NS ERASE alice\n"
+        );
+        let db = fixture.db().await;
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert!(alice.removed_at.is_some());
+        assert_eq!(
+            (alice.email, alice.invite_quota, alice.is_admin),
+            (None, 0, false)
+        );
+        let bob = db.member("bob").await.unwrap().unwrap();
+        assert_eq!(bob.invited_by.as_deref(), Some("alice"));
+        let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
+        assert!(invite.revoked_at.is_some());
+        assert_eq!(invite.note, None);
+        assert_eq!(db.end_sessions("alice").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn removes_a_member_with_no_sessions_or_invites() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("carol", None).await;
+        let output = fixture.run(&["member", "delete", "carol"]).await.unwrap();
+        assert!(
+            output.starts_with("removed carol (sessions ended: 0, invites revoked: 0)\n"),
+            "{output}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_removed_member_cannot_be_deleted_reset_or_adopted_again() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.run(&["member", "delete", "alice"]).await.unwrap();
+
+        for (args, message) in [
+            (["member", "delete", "alice"], "alice was removed"),
+            (["member", "reset-password", "alice"], "alice was removed"),
+            (
+                ["member", "adopt", "alice"],
+                "alice was removed, and keeps their place in the invite tree",
+            ),
+        ] {
+            let error = fixture.run(&args).await.unwrap_err();
+            assert_eq!(error.to_string(), message, "{args:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn refuses_someone_who_is_not_a_member() {
+        let fixture = Fixture::start().await;
+        let error = fixture
+            .run(&["member", "delete", "nobody"])
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "nobody is not a member");
     }
 }
