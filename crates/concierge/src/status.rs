@@ -36,6 +36,7 @@ mod tests {
         Config {
             listen: "127.0.0.1:8080".parse().unwrap(),
             public_url: "https://members.weblounge.localhost:10443".into(),
+            assets_dir: "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members".into(),
             state_dir: state_dir.into(),
             credentials_dir: credentials_dir.into(),
         }

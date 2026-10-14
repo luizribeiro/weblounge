@@ -10,6 +10,7 @@ const MIN_SESSION_KEY_BYTES: usize = 32;
 pub struct Config {
     pub listen: SocketAddr,
     pub public_url: String,
+    pub assets_dir: PathBuf,
     pub state_dir: PathBuf,
     pub credentials_dir: PathBuf,
 }
@@ -71,6 +72,7 @@ impl Config {
                     "expected an http(s) origin, without a path",
                 )
             })?,
+            assets_dir: require("CONCIERGE_ASSETS")?.into(),
             state_dir: require("STATE_DIRECTORY")?.into(),
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
         })
@@ -104,9 +106,13 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 4] = [
+    const PRODUCTION: [(&str, &str); 5] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
+        (
+            "CONCIERGE_ASSETS",
+            "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members",
+        ),
         ("STATE_DIRECTORY", "/var/lib/concierge"),
         (
             "CREDENTIALS_DIRECTORY",
@@ -132,6 +138,8 @@ mod tests {
             Ok(Config {
                 listen: "127.0.0.1:8080".parse().unwrap(),
                 public_url: "https://members.weblounge.org".into(),
+                assets_dir: "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members"
+                    .into(),
                 state_dir: "/var/lib/concierge".into(),
                 credentials_dir: "/run/credentials/concierge.service".into(),
             })

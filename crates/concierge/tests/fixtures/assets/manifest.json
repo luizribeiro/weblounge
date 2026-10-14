@@ -1,0 +1,54 @@
+{
+  "inputs": {
+    "styles/tokens.css": {
+      "bytes": 30,
+      "imports": []
+    },
+    "styles/members.css": {
+      "bytes": 62,
+      "imports": [
+        {
+          "path": "styles/tokens.css",
+          "kind": "import-rule",
+          "original": "./tokens.css"
+        }
+      ]
+    },
+    "images/favicon.svg": {
+      "bytes": 1007,
+      "imports": []
+    }
+  },
+  "outputs": {
+    "members/members-N4AQSMXV.css.map": {
+      "imports": [],
+      "exports": [],
+      "inputs": {},
+      "bytes": 297
+    },
+    "members/members-N4AQSMXV.css": {
+      "imports": [],
+      "entryPoint": "styles/members.css",
+      "inputs": {
+        "styles/tokens.css": {
+          "bytesInOutput": 30
+        },
+        "styles/members.css": {
+          "bytesInOutput": 37
+        }
+      },
+      "bytes": 166
+    },
+    "members/favicon-E6HOAGDL.svg": {
+      "imports": [],
+      "exports": [],
+      "entryPoint": "images/favicon.svg",
+      "inputs": {
+        "images/favicon.svg": {
+          "bytesInOutput": 1007
+        }
+      },
+      "bytes": 1007
+    }
+  }
+}
