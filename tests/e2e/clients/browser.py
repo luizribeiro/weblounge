@@ -14,14 +14,11 @@ TIMEOUT_MS = 30_000
 def browsing():
     errors = []
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            args=["--host-resolver-rules=MAP *.weblounge.org credenza"],
-        )
+        browser = playwright.chromium.launch(args=["--host-resolver-rules=MAP *.weblounge.org credenza"])
         page = browser.new_page(ignore_https_errors=True)
         page.set_default_timeout(TIMEOUT_MS)
         expect.set_options(timeout=TIMEOUT_MS)
-        page.on("console", lambda message: message.type == "error"
-                and errors.append(message.text))
+        page.on("console", lambda message: message.type == "error" and errors.append(message.text))
         yield page
         browser.close()
     if errors:

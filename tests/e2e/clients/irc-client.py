@@ -29,7 +29,7 @@ class WebSocket:
     def __init__(self, sock, name, path="/socket"):
         self.sock = sock
         key = base64.b64encode(os.urandom(16)).decode()
-        sock.sendall("\r\n".join([
+        request = [
             f"GET {path} HTTP/1.1",
             f"Host: {name}",
             f"Origin: https://{name}",
@@ -38,8 +38,10 @@ class WebSocket:
             f"Sec-WebSocket-Key: {key}",
             "Sec-WebSocket-Version: 13",
             "Sec-WebSocket-Protocol: text.ircv3.net",
-            "", "",
-        ]).encode())
+            "",
+            "",
+        ]
+        sock.sendall("\r\n".join(request).encode())
         self.pending = b""
         while b"\r\n\r\n" not in self.pending:
             self.pending += sock.recv(4096) or b"\r\n\r\n"
@@ -142,13 +144,8 @@ def main():
     parser.add_argument("--account")
     parser.add_argument("--password")
     parser.add_argument("--token", help="an OAuth 2.0 bearer token")
-    parser.add_argument(
-        "--cert", help="a PEM file with the key and certificate to present",
-    )
-    parser.add_argument(
-        "--websocket", metavar="NAME",
-        help="connect to wss://NAME/socket at the host, as a web client",
-    )
+    parser.add_argument("--cert", help="a PEM file with the key and certificate to present")
+    parser.add_argument("--websocket", metavar="NAME", help="connect to wss://NAME/socket at the host, as a web client")
     parser.add_argument("commands", nargs="*")
     args = parser.parse_args()
     if args.account and not (args.password or args.cert):

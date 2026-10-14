@@ -9,10 +9,10 @@ def ergo_api_token():
 
 def ergo_api(endpoint, token=None, **fields):
     token = token or ergo_api_token()
-    return credenza.succeed(shlex.join([
-        "curl", "-s", "-w", "\\n%{http_code}", "-H", f"Authorization: Bearer {token}",
-        "-d", json.dumps(fields), f"http://127.0.0.1:8089/v1/{endpoint}",
-    ])).rsplit("\n", 1)
+    auth = f"Authorization: Bearer {token}"
+    url = f"http://127.0.0.1:8089/v1/{endpoint}"
+    command = ["curl", "-s", "-w", "\\n%{http_code}", "-H", auth, "-d", json.dumps(fields), url]
+    return credenza.succeed(shlex.join(command)).rsplit("\n", 1)
 
 
 def register(account, password):
@@ -31,9 +31,9 @@ def irc(*commands, machine=client, **options):
 
 def https(name, path="/", *flags):
     address = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
-    return client.succeed(shlex.join(
-        ["curl", "-sk", "--resolve", f"{name}:443:{address}", *flags, f"https://{name}{path}"]
-    ))
+    return client.succeed(
+        shlex.join(["curl", "-sk", "--resolve", f"{name}:443:{address}", *flags, f"https://{name}{path}"])
+    )
 
 
 members = "members.weblounge.org"
@@ -71,8 +71,13 @@ class Browser:
 
     def sign_up(self, link, account, password, flags=outcome):
         """Fills in the invite page with the code from `link`, as its script does."""
-        fields = [f"code={invite_code(link)}", f"nick={account}", f"email={account}@example.org",
-                  f"password={password}", f"confirmation={password}"]
+        fields = [
+            f"code={invite_code(link)}",
+            f"nick={account}",
+            f"email={account}@example.org",
+            f"password={password}",
+            f"confirmation={password}",
+        ]
         return self.post("/invite", *fields, flags=flags)
 
     def create_invite(self):
@@ -105,9 +110,7 @@ def assert_client_address_absent(logs):
 def files_containing(*texts):
     """Files under /var/lib and /var/log, the journal's aside, that hold any of texts."""
     credenza.succeed("sync")
-    return credenza.succeed(
-        f"grep -rlaF --exclude-dir=journal {patterns(texts)} /var/lib /var/log || true"
-    ).split()
+    return credenza.succeed(f"grep -rlaF --exclude-dir=journal {patterns(texts)} /var/lib /var/log || true").split()
 
 
 start_all()

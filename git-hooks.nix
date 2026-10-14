@@ -29,6 +29,8 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
       };
     };
     gofmt.enable = true;
+    ruff.enable = true;
+    ruff-format.enable = true;
     shellcheck.enable = true;
     yamllint = {
       enable = true;

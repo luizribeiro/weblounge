@@ -5,7 +5,8 @@
 
 test:
 let
-  ircClient = pkgs.writers.writePython3Bin "irc-client" { } ../clients/irc-client.py;
+  # ruff lints it with the rest of the repository's Python.
+  ircClient = pkgs.writers.writePython3Bin "irc-client" { doCheck = false; } ../clients/irc-client.py;
   testScript = test.script or test;
   browsers = test.browsers or { };
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
