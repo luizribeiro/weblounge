@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, runCommand, writeShellApplication, writeShellScript, gawk, diffutils, esbuild, typescript }:
+{ lib, stdenvNoCC, writeShellApplication, writeShellScript, gawk, diffutils, esbuild }:
 
 let
   src = ../web;
@@ -69,13 +69,6 @@ stdenvNoCC.mkDerivation {
   '';
 
   passthru = {
-    typecheck = runCommand "weblounge-web-typecheck"
-      { nativeBuildInputs = [ typescript ]; }
-      ''
-        tsc -p ${src}/tsconfig.json
-        touch $out
-      '';
-
     # Serves the working tree, not the store copy, so edits show up live.
     dev = writeShellApplication {
       name = "weblounge-web-dev";

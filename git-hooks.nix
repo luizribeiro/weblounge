@@ -24,6 +24,13 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
     shellcheck.enable = true;
     yamllint.enable = true;
     actionlint.enable = true;
+    tsc = {
+      enable = true;
+      name = "tsc";
+      entry = "${pkgs.typescript}/bin/tsc -p web/tsconfig.json";
+      files = "^web/.*\\.ts$";
+      pass_filenames = false;
+    };
     biome = {
       enable = true;
       types_or = [ "ts" "css" "json" ];
