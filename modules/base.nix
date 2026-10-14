@@ -7,6 +7,12 @@
       PasswordAuthentication = false;
       KbdInteractiveAuthentication = false;
       PermitRootLogin = "no";
+      # Admins use the box itself; nothing tunnels through it.
+      AllowTcpForwarding = false;
+      AllowAgentForwarding = false;
+      AllowStreamLocalForwarding = false;
+      MaxAuthTries = 3;
+      LoginGraceTime = 30;
     };
   };
 

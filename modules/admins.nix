@@ -14,6 +14,8 @@ in
 {
   users.mutableUsers = false;
 
+  services.openssh.settings.AllowUsers = lib.attrNames admins;
+
   users.users = lib.mapAttrs
     (_: admin: {
       isNormalUser = true;

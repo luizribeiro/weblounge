@@ -13,6 +13,18 @@ with subtest("sshd only accepts keys"):
     assert "passwordauthentication no" in config, config
     assert "permitrootlogin no" in config, config
 
+with subtest("sshd lets admins alone in, and forwards nothing for them"):
+    config = credenza.succeed("sshd -T").lower().splitlines()
+    for setting in [
+        "allowusers luiz",
+        "allowtcpforwarding no",
+        "allowagentforwarding no",
+        "allowstreamlocalforwarding no",
+        "maxauthtries 3",
+        "logingracetime 30",
+    ]:
+        assert setting in config, (setting, config)
+
 with subtest("admins log in with their key and get passwordless sudo"):
     credenza.succeed("id -nG luiz | grep -qw wheel")
     credenza.succeed("grep -q cardno: /etc/ssh/authorized_keys.d/luiz")
