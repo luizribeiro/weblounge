@@ -48,6 +48,10 @@
       <a href="/rules">House rules</a>
       <span aria-hidden="true">·</span>
       <a href="/privacy">Privacy</a>
+      {%- if layout.nick.is_some() %}
+      <span aria-hidden="true">·</span>
+      <a href="https://github.com/luizribeiro/weblounge">GitHub</a>
+      {%- endif %}
     </footer>
   </body>
 </html>

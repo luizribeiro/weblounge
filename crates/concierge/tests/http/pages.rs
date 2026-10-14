@@ -79,6 +79,19 @@ async fn every_page_shares_the_header_footer_and_assets() {
 }
 
 #[tokio::test]
+async fn only_members_see_the_footer_link_to_github() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let link = r#"<a href="https://github.com/luizribeiro/weblounge">GitHub</a>"#;
+    let guest = body_text(site.get("/rules", None).await).await;
+    assert!(!guest.contains("github.com"), "{guest}");
+
+    let cookie = site.sign_in("alice").await;
+    let member = body_text(site.get("/rules", Some(&cookie)).await).await;
+    assert!(member.contains(link), "{member}");
+}
+
+#[tokio::test]
 async fn pages_carry_the_live_reload_script_only_in_debug_builds() {
     let page = body_text(Site::start().await.get("/rules", None).await).await;
     assert_eq!(
