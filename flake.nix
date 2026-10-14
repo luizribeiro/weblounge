@@ -28,6 +28,11 @@
 
       overlays.default = weblounge.overlay;
 
+      templates.bot = {
+        path = ./templates/bot;
+        description = "An IRC bot for weblounge.org, in Go";
+      };
+
       packages = lib.recursiveUpdate weblounge.vmPackages
         (forEachSystem (pkgs: { inherit (pkgs.weblounge) web concierge; }));
 
@@ -36,6 +41,8 @@
         (lib.mapAttrs (_: hooks: { git-hooks = hooks; }) gitHooks)
         (forEachSystem (pkgs: {
           web-typecheck = pkgs.weblounge.web.typecheck;
+          # Building it runs its go test.
+          bot-template-package = pkgs.callPackage ./templates/bot/package.nix { };
         } // lib.mapAttrs' (name: lib.nameValuePair "concierge-${name}") pkgs.weblounge.concierge.checks))
         weblounge.testChecks
       ];
