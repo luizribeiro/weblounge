@@ -7,7 +7,7 @@
         <p class="eyebrow">Privacy</p>
         <h1>What we keep.</h1>
         <h2>Stored</h2>
-        <p>Your nick, your email address, and who invited whom.</p>
+        <p>Your nick, your email address, who invited whom, and when you joined. The IRC server keeps a hash of your password and your settings.</p>
         <h2>Not stored</h2>
         <p>Members' IP addresses: not in the database, not in the logs. Failed sign-ins are counted per address, in memory, for {{ failed_sign_in_minutes }} minutes.</p>
         <h2>Messages</h2>
@@ -15,6 +15,6 @@
         <h2>Email</h2>
         <p>News emails are opt-in, and you can turn them off on your account page.</p>
         <h2>Leaving</h2>
-        <p>Ask an admin and they'll delete your account.</p>
+        <p>Ask an admin and they'll delete your account: your email and sessions go, and your password stops working. Your nick stays in the invite tree, so the people you invited stay attached.</p>
       </article>
 {%- endblock %}
