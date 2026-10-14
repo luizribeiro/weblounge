@@ -14,6 +14,7 @@ mod presence;
 mod security;
 mod signin;
 mod signup;
+mod tabs;
 mod tree;
 
 use std::path::Path;

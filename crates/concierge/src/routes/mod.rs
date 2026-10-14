@@ -25,11 +25,12 @@ use crate::{app::App, assets::Assets, auth::Visitor};
 pub const ERGO_UNAVAILABLE: &str =
     "Can't reach the chat server. Nothing changed; try again in a minute.";
 
-/// What the shared layout around every page needs: the assets it links and
-/// who to greet in the header.
+/// What the shared layout around every page needs: the assets it links,
+/// who to greet in the header and which of their tabs is open.
 pub struct Layout<'a> {
     pub assets: &'a Assets,
     pub nick: Option<&'a str>,
+    tab: Option<Tab>,
 }
 
 impl<'a> Layout<'a> {
@@ -37,6 +38,40 @@ impl<'a> Layout<'a> {
         Self {
             assets: &app.assets,
             nick,
+            tab: None,
+        }
+    }
+
+    pub fn on(self, tab: Tab) -> Self {
+        Self {
+            tab: Some(tab),
+            ..self
+        }
+    }
+
+    pub fn is_open(&self, tab: &Tab) -> bool {
+        self.tab == Some(*tab)
+    }
+}
+
+/// The member pages in the row under the header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    Home,
+}
+
+impl Tab {
+    pub const ALL: [Self; 1] = [Self::Home];
+
+    pub fn path(self) -> &'static str {
+        match self {
+            Self::Home => "/",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Home => "Home",
         }
     }
 }

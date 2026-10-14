@@ -9,7 +9,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{Layout, internal_error, invites::Invites, presence::Presence, render_with};
+use super::{Layout, Tab, internal_error, invites::Invites, presence::Presence, render_with};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
@@ -155,7 +155,7 @@ pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         email_error: None,
     });
     let page = Account {
-        layout: Layout::new(app, Some(&member.account)),
+        layout: Layout::new(app, Some(&member.account)).on(Tab::Home),
         nick: &member.account,
         irc: &app.irc_server,
         clients: &CLIENTS,

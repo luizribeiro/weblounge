@@ -32,6 +32,15 @@
         {%- endif %}
       </nav>
     </header>
+    {%- if layout.nick.is_some() %}
+    <nav class="tabs" aria-label="Members">
+      <ul>
+        {%- for tab in crate::routes::Tab::ALL %}
+        <li><a href="{{ tab.path() }}"{% if layout.is_open(tab) %} aria-current="page"{% endif %}>{{ tab.label() }}</a></li>
+        {%- endfor %}
+      </ul>
+    </nav>
+    {%- endif %}
     <main class="page">
       {%- block content %}{% endblock %}
     </main>
