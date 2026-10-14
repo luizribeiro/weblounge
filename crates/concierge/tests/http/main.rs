@@ -27,7 +27,7 @@ use axum::{
 use concierge::{
     app::{self, App},
     assets::Assets,
-    config::IrcServer,
+    config::{IrcServer, Presence},
     db::{self, Db, NewInvite, NewMember},
     invite_rules::{self, DEFAULT_QUOTA},
     oauth::Webchat,
@@ -78,6 +78,10 @@ impl Site {
             },
             introspection_secret: INTROSPECTION_SECRET.into(),
             irc_server: irc_server(),
+            presence_defaults: Presence {
+                always_on: true,
+                auto_away: true,
+            },
         };
         change(&mut app);
         Self {

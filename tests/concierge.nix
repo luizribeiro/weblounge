@@ -118,6 +118,7 @@ vmTest ''
       home = browser.get("/?irc", "-f")
       assert '<input name="always_on" type="checkbox">' in home, home
       assert '<input name="auto_away" type="checkbox" checked>' in home, home
+      assert "Both on by default." in home, home
 
   with subtest("the invite tree lists a new member under whoever invited them"):
       assert browser.post("/invites") == f"303 https://{members}/?invited#invites"

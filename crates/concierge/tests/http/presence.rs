@@ -1,13 +1,18 @@
 use axum::http::header;
 use ergo_api::{Preference, SettingsChanges, fake::Failure};
 
+use concierge::config::Presence;
+
 use crate::{Site, body_text, location};
 
 const ALWAYS_ON: &str = r#"<input name="always_on" type="checkbox""#;
 const AUTO_AWAY: &str = r#"<input name="auto_away" type="checkbox""#;
 
 async fn signed_in_alice() -> (Site, String) {
-    let site = Site::start().await;
+    signed_in_alice_on(Site::start().await).await
+}
+
+async fn signed_in_alice_on(site: Site) -> (Site, String) {
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
     (site, cookie)
@@ -23,12 +28,37 @@ fn checked(page: &str, input: &str) -> bool {
 }
 
 #[tokio::test]
-async fn the_network_default_shows_as_on() {
+async fn the_network_default_shows_as_on_under_opt_out() {
     let (site, cookie) = signed_in_alice().await;
     let page = body_text(site.get("/", Some(&cookie)).await).await;
     assert!(page.contains(r#"<form class="form" method="post" action="/irc-settings">"#));
     assert!(checked(&page, ALWAYS_ON), "{page}");
     assert!(checked(&page, AUTO_AWAY), "{page}");
+    assert!(page.contains("Both on by default."), "{page}");
+}
+
+#[tokio::test]
+async fn under_opt_in_the_default_shows_as_off_and_switching_on_pins_it() {
+    let opt_in = Presence {
+        always_on: false,
+        auto_away: false,
+    };
+    let (site, cookie) =
+        signed_in_alice_on(Site::start_with(|app| app.presence_defaults = opt_in).await).await;
+    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    assert!(!checked(&page, ALWAYS_ON), "{page}");
+    assert!(!checked(&page, AUTO_AWAY), "{page}");
+    assert!(page.contains("Both off by default."), "{page}");
+
+    site.post("/irc-settings", &[("always_on", "on")], Some(&cookie))
+        .await;
+    assert_eq!(
+        preferences(&site).await,
+        (Preference::On, Preference::Default)
+    );
+    let page = body_text(site.get("/?irc", Some(&cookie)).await).await;
+    assert!(checked(&page, ALWAYS_ON), "{page}");
+    assert!(!checked(&page, AUTO_AWAY), "{page}");
 }
 
 #[tokio::test]

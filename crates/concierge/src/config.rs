@@ -4,6 +4,8 @@ use anyhow::Context;
 use axum::http::Uri;
 use ergo_api::{Client, Url};
 
+pub use crate::routes::presence::Presence;
+
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
 pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
 pub const INTROSPECTION_SECRET_CREDENTIAL: &str = "oauth-introspection-secret";
@@ -22,6 +24,9 @@ pub struct Config {
     pub assets_dir: PathBuf,
     pub state_dir: PathBuf,
     pub credentials_dir: PathBuf,
+    /// Ergo's multiclient always-on and auto-away, as what members get
+    /// until they choose.
+    pub presence_defaults: Presence,
 }
 
 /// The address members' IRC clients connect to, over TLS.
@@ -87,6 +92,16 @@ impl Config {
         let webchat_url = require("CONCIERGE_WEBCHAT_URL")?;
         let irc_server = require("CONCIERGE_IRC_SERVER")?;
         let ergo_api = var("CONCIERGE_ERGO_API").unwrap_or_else(|| DEFAULT_ERGO_API.into());
+        let multiclient_default = |name| {
+            let value = require(name)?;
+            parse_multiclient_default(&value).ok_or_else(|| {
+                invalid(
+                    name,
+                    value,
+                    "expected opt-in or opt-out; members can't choose under mandatory or disabled",
+                )
+            })
+        };
         Ok(Self {
             listen: listen.parse().map_err(|_| {
                 invalid(
@@ -126,6 +141,10 @@ impl Config {
             assets_dir: require("CONCIERGE_ASSETS")?.into(),
             state_dir: require("STATE_DIRECTORY")?.into(),
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
+            presence_defaults: Presence {
+                always_on: multiclient_default("CONCIERGE_ALWAYS_ON_DEFAULT")?,
+                auto_away: multiclient_default("CONCIERGE_AUTO_AWAY_DEFAULT")?,
+            },
         })
     }
 
@@ -180,6 +199,16 @@ pub fn invite_url(public_url: &str, code: &str) -> String {
     format!("{public_url}/invite/{code}")
 }
 
+/// Whether an Ergo multiclient setting, such as `always-on`, turns the
+/// feature on for members who haven't chosen.
+fn parse_multiclient_default(setting: &str) -> Option<bool> {
+    match setting {
+        "opt-out" => Some(true),
+        "opt-in" => Some(false),
+        _ => None,
+    }
+}
+
 fn parse_http_url(url: &str) -> Option<Url> {
     Url::parse(url).ok().filter(|url| url.scheme() == "http")
 }
@@ -197,11 +226,13 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 7] = [
+    const PRODUCTION: [(&str, &str); 9] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_WEBCHAT_URL", "https://irc.weblounge.org"),
         ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
+        ("CONCIERGE_ALWAYS_ON_DEFAULT", "opt-out"),
+        ("CONCIERGE_AUTO_AWAY_DEFAULT", "opt-out"),
         (
             "CONCIERGE_ASSETS",
             "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members",
@@ -245,7 +276,40 @@ mod tests {
                     .into(),
                 state_dir: "/var/lib/concierge".into(),
                 credentials_dir: "/run/credentials/concierge.service".into(),
+                presence_defaults: Presence {
+                    always_on: true,
+                    auto_away: true,
+                },
             })
+        );
+    }
+
+    #[test]
+    fn opt_in_means_off_until_a_member_chooses() {
+        let config = parse_with(&[("CONCIERGE_AUTO_AWAY_DEFAULT", Some("opt-in"))]);
+        assert_eq!(
+            config.map(|config| config.presence_defaults),
+            Ok(Presence {
+                always_on: true,
+                auto_away: false,
+            })
+        );
+    }
+
+    #[test]
+    fn refuses_multiclient_settings_members_cannot_choose_under() {
+        for setting in ["mandatory", "disabled", "true", "Opt-Out", ""] {
+            let error = parse_with(&[("CONCIERGE_ALWAYS_ON_DEFAULT", Some(setting))]).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "CONCIERGE_ALWAYS_ON_DEFAULT={setting:?} is invalid: expected opt-in or opt-out; members can't choose under mandatory or disabled"
+                )
+            );
+        }
+        assert_eq!(
+            parse_with(&[("CONCIERGE_AUTO_AWAY_DEFAULT", None)]),
+            Err(ConfigError::Missing("CONCIERGE_AUTO_AWAY_DEFAULT"))
         );
     }
 

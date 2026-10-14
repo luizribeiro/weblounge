@@ -112,7 +112,7 @@
               <input name="auto_away" type="checkbox"{% if presence.auto_away %} checked{% endif %}>
               <span>Auto-away <span class="hint">· marked away while no client is open</span></span>
             </label>
-            <p class="hint">Both on by default.</p>
+            <p class="hint">{{ presence_defaults.hint() }}</p>
             <button class="button button-primary" type="submit">Save</button>
           </form>
           {%- when Err(error) %}

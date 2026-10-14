@@ -13,7 +13,7 @@ use ergo_api::Client;
 use crate::{
     assets::{self, Assets},
     auth,
-    config::IrcServer,
+    config::{IrcServer, Presence},
     csrf,
     db::Db,
     oauth::Webchat,
@@ -38,6 +38,8 @@ pub struct App {
     pub introspection_secret: String,
     /// Where members point their IRC clients.
     pub irc_server: IrcServer,
+    /// What Ergo turns on for members who haven't chosen.
+    pub presence_defaults: Presence,
 }
 
 pub type AppState = Arc<App>;

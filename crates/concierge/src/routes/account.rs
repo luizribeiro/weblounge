@@ -36,6 +36,7 @@ struct Account<'a> {
     /// The IRC settings, or why they can't be shown.
     presence: Result<Presence, &'static str>,
     presence_error: Option<&'static str>,
+    presence_defaults: Presence,
     email_max_length: usize,
     email_pattern: &'a str,
 }
@@ -142,7 +143,7 @@ pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         Err(error) => return internal_error("Listing invites", error),
     };
     let presence = match app.ergo.settings(member.account.as_str()).await {
-        Ok(settings) => Ok(Presence::from(&settings)),
+        Ok(settings) => Ok(Presence::of(&settings, app.presence_defaults)),
         Err(error) => {
             eprintln!("Reading IRC settings failed: {error}");
             Err("Can't reach the chat server.")
@@ -168,6 +169,7 @@ pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         password: forms.password,
         presence_error: forms.presence_error.filter(|_| presence.is_ok()),
         presence,
+        presence_defaults: app.presence_defaults,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
     };
