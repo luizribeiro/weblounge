@@ -1,7 +1,7 @@
 use clap::Parser;
 use concierge::{
     admin::{self, Command},
-    app,
+    app::{self, App},
     assets::Assets,
     config::Config,
     db::Db,
@@ -24,9 +24,12 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     config.read_session_key()?;
     config.ergo_client()?;
     Db::open(&config.database_path()).await?;
-    let assets = Assets::load(&config.assets_dir)?;
+    let app = App {
+        assets: Assets::load(&config.assets_dir)?,
+        public_url: config.public_url.clone(),
+    };
     let listener = TcpListener::bind(config.listen).await?;
     eprintln!("Serving {} on {}", config.public_url, config.listen);
-    axum::serve(listener, app::router(assets)).await?;
+    axum::serve(listener, app::router(app)).await?;
     Ok(())
 }

@@ -2,6 +2,7 @@ pub mod admin;
 pub mod app;
 pub mod assets;
 pub mod config;
+mod csrf;
 pub mod db;
 pub mod invite_code;
 pub mod invite_rules;

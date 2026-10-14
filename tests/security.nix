@@ -122,4 +122,9 @@ vmTest ''
           assert {directive for directive, _ in needs.fetches} == directives, (name, needs.fetches)
           for directive, url in needs.fetches:
               assert re.match(r"/[^/]", url) and csp_sources(policy, directive) == ["'self'"], (name, directive, url, policy)
+
+  with subtest("a POST from another origin, or from nowhere, is refused"):
+      for headers in [["-H", "Origin: https://evil.example"], ["-H", "Referer: https://evil.example/"], []]:
+          status = https("members.weblounge.org", "/", "-o", "/dev/null", "-w", "%{http_code}", "--data", "", *headers)
+          assert status == "403", (headers, status)
 ''

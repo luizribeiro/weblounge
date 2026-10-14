@@ -10,8 +10,10 @@ struct Index<'a> {
     layout: Layout<'a>,
 }
 
-pub async fn show(State(assets): State<AppState>) -> Response {
+pub async fn show(State(app): State<AppState>) -> Response {
     super::render(&Index {
-        layout: Layout { assets: &assets },
+        layout: Layout {
+            assets: &app.assets,
+        },
     })
 }

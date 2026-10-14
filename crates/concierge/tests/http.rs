@@ -1,14 +1,37 @@
 use std::path::Path;
 
-use axum::{body::Body, http::Request, response::Response};
-use concierge::assets::Assets;
+use axum::{
+    Router,
+    body::Body,
+    http::{Request, header},
+    response::Response,
+};
+use concierge::{
+    app::{self, App},
+    assets::Assets,
+};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-async fn get(path: &str) -> Response {
+const PUBLIC_URL: &str = "https://members.weblounge.org";
+
+fn router() -> Router {
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/assets");
-    concierge::app::router(Assets::load(&fixtures).unwrap())
-        .oneshot(Request::get(path).body(Body::empty()).unwrap())
+    app::router(App {
+        assets: Assets::load(&fixtures).unwrap(),
+        public_url: PUBLIC_URL.into(),
+    })
+}
+
+async fn get(path: &str) -> Response {
+    let request = Request::get(path).body(Body::empty()).unwrap();
+    router().oneshot(request).await.unwrap()
+}
+
+async fn post_from(origin: &str) -> Response {
+    let request = Request::post("/").header(header::ORIGIN, origin);
+    router()
+        .oneshot(request.body(Body::empty()).unwrap())
         .await
         .unwrap()
 }
@@ -141,4 +164,12 @@ async fn only_built_assets_are_served() {
 #[tokio::test]
 async fn unknown_paths_are_not_found() {
     assert_eq!(get("/invite/nope").await.status(), 404);
+}
+
+#[tokio::test]
+async fn posts_from_other_origins_are_refused_before_routing() {
+    let response = post_from("https://evil.example").await;
+    assert_eq!(response.status(), 403);
+    assert_eq!(body_text(response).await, "Cross-origin request refused.\n");
+    assert_eq!(post_from(PUBLIC_URL).await.status(), 405);
 }
