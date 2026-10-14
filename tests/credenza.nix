@@ -42,6 +42,7 @@ pkgs.testers.runNixOSTest {
         return machine.succeed(shlex.join(["irc-client", host, *flags, *commands]))
 
     alice = {"account": "alice", "password": "correct-horse"}
+    bob = {"account": "bob", "password": "battery-staple"}
 
     start_all()
 
@@ -145,6 +146,12 @@ pkgs.testers.runNixOSTest {
 
     with subtest("logging in joins #lounge"):
         assert re.search(r"^:alice!\S+ JOIN #lounge", session, re.M), session
+
+    with subtest("members stay in their channels, away, after disconnecting"):
+        register(token, **bob)
+        seen = irc("NAMES #lounge", "WHOIS alice", **bob)
+        assert re.search(r" 353 bob = #lounge :.*\balice\b", seen), seen
+        assert " 301 bob alice " in seen, seen
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")

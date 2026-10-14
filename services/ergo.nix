@@ -53,6 +53,10 @@ in
           enabled = true;
           exempted = [ ];
         };
+        multiclient = {
+          always-on = "opt-out";
+          auto-away = "opt-out";
+        };
       };
       channels.auto-join = [ "#lounge" ];
       api = {
