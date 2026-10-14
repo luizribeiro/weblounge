@@ -9,9 +9,13 @@ name: check
 permissions:
   contents: read
 
+# A PR's new commits supersede its running check; every push to main gets
+# its own group, so none is cancelled or dropped from the queue.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request'
+    && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
