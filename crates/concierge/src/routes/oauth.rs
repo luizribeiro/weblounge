@@ -103,7 +103,7 @@ pub async fn token(
     Form(request): Form<TokenRequest>,
 ) -> Response {
     if !app.oauth_requests.allows(address.0, Instant::now()) {
-        return token_error(StatusCode::TOO_MANY_REQUESTS, "temporarily_unavailable");
+        return token_error(StatusCode::TOO_MANY_REQUESTS, "invalid_request");
     }
     if request.grant_type != "authorization_code" {
         return token_error(StatusCode::BAD_REQUEST, "unsupported_grant_type");
@@ -147,7 +147,7 @@ pub async fn token(
         "token_type": "Bearer",
         "expires_in": session.expires_at - now,
     });
-    super::no_store(Json(answer).into_response()).await
+    Json(answer).into_response()
 }
 
 #[derive(Deserialize, Default)]
@@ -191,7 +191,7 @@ pub async fn introspect(
         Ok(None) => json!({ "active": false }),
         Err(error) => return internal_error("Introspecting a token", error),
     };
-    super::no_store(Json(answer).into_response()).await
+    Json(answer).into_response()
 }
 
 fn token_error(status: StatusCode, error: &str) -> Response {

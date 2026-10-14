@@ -85,10 +85,12 @@ pub fn router(app: App) -> Router {
         .route(routes::oauth::METADATA_PATH, get(routes::oauth::metadata))
         .route(
             routes::oauth::TOKEN_PATH,
-            post(routes::oauth::token).layer(middleware::from_fn_with_state(
-                webchat_origin.clone(),
-                csrf::guard,
-            )),
+            post(routes::oauth::token)
+                .layer(map_response(routes::no_store))
+                .layer(middleware::from_fn_with_state(
+                    webchat_origin.clone(),
+                    csrf::guard,
+                )),
         )
         .layer(middleware::from_fn_with_state(
             webchat_origin,
@@ -103,7 +105,7 @@ pub fn router(app: App) -> Router {
         // Ergo calls this, not a browser, and authenticates with its secret.
         .route(
             routes::oauth::INTROSPECTION_PATH,
-            post(routes::oauth::introspect),
+            post(routes::oauth::introspect).layer(map_response(routes::no_store)),
         )
         .with_state(state);
     // Pages reload themselves when the dev loop restarts concierge.

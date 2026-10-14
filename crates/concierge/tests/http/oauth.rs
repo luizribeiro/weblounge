@@ -49,6 +49,16 @@ impl Site {
         changes: &[(&str, &str)],
         origin: &str,
     ) -> axum::response::Response {
+        let headers = [(header::ORIGIN.as_str(), origin)];
+        self.exchange_with(code, changes, &headers).await
+    }
+
+    async fn exchange_with(
+        &self,
+        code: &str,
+        changes: &[(&str, &str)],
+        headers: &[(&str, &str)],
+    ) -> axum::response::Response {
         let mut form = vec![
             ("grant_type", "authorization_code"),
             ("code", code),
@@ -60,8 +70,7 @@ impl Site {
             form.retain(|(field, _)| field != name);
             form.push((name, value));
         }
-        let headers = [(header::ORIGIN.as_str(), origin)];
-        self.post_with("/oauth/token", &form, None, &headers).await
+        self.post_with("/oauth/token", &form, None, headers).await
     }
 }
 
@@ -330,6 +339,33 @@ async fn a_code_and_its_verifier_buy_a_token_that_lasts_as_long_as_the_session()
 }
 
 #[tokio::test]
+async fn trading_codes_shares_the_per_address_limit_with_asking_for_them() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let code = site.authorization_code(&cookie).await;
+    let path = authorize_path(&[]);
+    for _ in 0..concierge::rate_limit::OAUTH_REQUESTS_PER_ADDRESS {
+        site.get_with(&path, &cookie, "192.0.2.7").await;
+    }
+    let from = |address| {
+        [
+            (header::ORIGIN.as_str(), WEBCHAT_URL),
+            ("x-real-ip", address),
+        ]
+    };
+    let limited = site.exchange_with(&code, &[], &from("192.0.2.7")).await;
+    assert_eq!(limited.status(), 429);
+    assert_eq!(limited.headers()[header::CACHE_CONTROL], "no-store");
+    assert_eq!(
+        json(limited).await,
+        serde_json::json!({"error": "invalid_request"})
+    );
+    let elsewhere = site.exchange_with(&code, &[], &from("198.51.100.9")).await;
+    assert_eq!(elsewhere.status(), 200);
+}
+
+#[tokio::test]
 async fn a_code_works_once_even_after_a_failed_try() {
     let site = Site::start().await;
     site.add_member("alice").await;
@@ -338,6 +374,7 @@ async fn a_code_works_once_even_after_a_failed_try() {
     assert_eq!(site.exchange(&code, &[]).await.status(), 200);
     let reused = site.exchange(&code, &[]).await;
     assert_eq!(reused.status(), 400);
+    assert_eq!(reused.headers()[header::CACHE_CONTROL], "no-store");
     assert_eq!(
         json(reused).await,
         serde_json::json!({"error": "invalid_grant"})
@@ -520,6 +557,7 @@ async fn only_ergo_with_its_secret_may_introspect() {
     ] {
         let response = site.introspect_as(&credentials, &token).await;
         assert_eq!(response.status(), 401, "{credentials}");
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
         assert_eq!(
             response.headers()[header::WWW_AUTHENTICATE],
             "Basic realm=\"concierge\""
