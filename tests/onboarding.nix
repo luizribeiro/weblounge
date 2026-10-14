@@ -5,14 +5,6 @@ vmTest ''
   frank = {"account": "frank", "password": "copper-meadow-94"}
   erins_browser, franks_browser = Browser("erin"), Browser("frank")
 
-  def invite_path(link):
-      return link.strip().removeprefix(f"https://{members}")
-
-  def sign_up(browser, path, person, *flags):
-      fields = [f"nick={person['account']}", f"email={person['account']}@example.org",
-                f"password={person['password']}", f"confirmation={person['password']}"]
-      return browser.post(path, *fields, flags=list(flags))
-
   credenza.wait_for_unit("nginx.service")
   credenza.wait_for_unit("concierge.service")
   credenza.wait_for_open_port(8080)
@@ -20,13 +12,13 @@ vmTest ''
   credenza.wait_for_open_port(8089)
 
   with subtest("an admin mints a root invite and the invitee opens it over HTTPS"):
-      path = invite_path(concierge_admin("invite", "create", "--root"))
-      page = erins_browser.get(path, "-f")
-      assert "<h1>You're invited.</h1>" in page, page
-      assert 'autocomplete="new-password"' in page, page
+      link = concierge_admin("invite", "create", "--root")
+      opened = erins_browser.get(link.strip().removeprefix(f"https://{members}"), "-L", "-f")
+      assert "<h1>You're invited.</h1>" in opened, opened
+      assert 'name="code"' in opened and 'autocomplete="new-password"' in opened, opened
 
   with subtest("signing up answers with the welcome page, uncached, and signs the new member in"):
-      response = sign_up(erins_browser, path, erin, "-i")
+      response = erins_browser.sign_up(link, **erin, flags=["-i"])
       headers, page = response.split("\r\n\r\n", 1)
       assert " 200" in headers.splitlines()[0], headers
       assert "cache-control: no-store" in headers.lower(), headers
@@ -37,8 +29,9 @@ vmTest ''
       home = erins_browser.get("/", "-f")
       assert "Pull up a chair, erin." in home, home
 
-  with subtest("the used invite link stops working"):
-      assert erins_browser.get(path, *outcome) == "404 "
+  with subtest("the used invite's code stops working"):
+      refused = Browser("latecomer").sign_up(link, "latecomer", "pewter-harbor-58", flags=["-w", "\n%{http_code}"])
+      assert refused.endswith("\n422") and "This invite doesn&#39;t work." in refused, refused
 
   with subtest("the new member signs in to the website with the password they chose"):
       assert erins_browser.post("/signout").startswith("303 ")
@@ -50,8 +43,8 @@ vmTest ''
       assert re.search(r"^:erin!\S+ JOIN #lounge", session, re.M), session
 
   with subtest("the new member invites someone, who joins under them"):
-      _, link = erins_browser.create_invite()
-      assert sign_up(franks_browser, invite_path(link), frank, *outcome) == "200 "
+      _, franks_link = erins_browser.create_invite()
+      assert franks_browser.sign_up(franks_link, **frank) == "200 "
       tab = erins_browser.get("/invites", "-f")
       assert "<li>frank</li>" in tab, tab
       assert "frank" not in concierge_admin("member", "reconcile")
@@ -65,6 +58,6 @@ vmTest ''
 
   with subtest("the passwords and invite codes never reach the journal"):
       credenza.succeed("journalctl --sync")
-      for secret in [erin["password"], frank["password"], new_password, path.rsplit("/", 1)[1]]:
+      for secret in [erin["password"], frank["password"], new_password, invite_code(link), invite_code(franks_link)]:
           credenza.fail(f"journalctl | grep -qF {secret}")
 ''

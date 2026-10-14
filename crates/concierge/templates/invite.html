@@ -16,7 +16,16 @@
         </section>
         <section class="card" aria-labelledby="signup-title">
           <h2 class="eyebrow" id="signup-title">Create your account</h2>
-          <form class="form" method="post" action="/invite/{{ code }}" data-signup>
+          <form class="form" method="post" action="/invite" data-signup>
+            <div class="field" data-invite-code>
+              <label for="code">Invite code</label>
+              <input id="code" name="code" value="{{ form.code }}" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="code-hint"{% if form.code_error.is_some() %} aria-invalid="true"{% endif %}>
+              {%- if let Some(error) = form.code_error %}
+              <p class="field-error" id="code-hint">{{ error }}</p>
+              {%- else %}
+              <p class="hint" id="code-hint">From your invite link: the part after the #.</p>
+              {%- endif %}
+            </div>
             <div class="field">
               <label for="nick">Nick</label>
               <input id="nick" name="nick" value="{{ form.nick }}" required maxlength="{{ nick_max_length }}" pattern="{{ nick_pattern }}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="nick-hint" data-availability="/signup/nick"{% if form.nick_error.is_some() %} aria-invalid="true"{% endif %}>

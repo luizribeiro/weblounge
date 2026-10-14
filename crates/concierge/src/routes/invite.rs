@@ -1,5 +1,6 @@
-//! The invite page: who's inviting, the signup form, and redeeming the
-//! invite into an Ergo account and a member.
+//! The invite page: the signup form, and redeeming the invite whose code
+//! it carries into an Ergo account and a member. Links carry the code in
+//! their fragment, which no server sees; the form posts it.
 
 use std::time::Instant;
 
@@ -8,7 +9,7 @@ use axum::{
     Form,
     extract::{Path, State},
     http::{HeaderValue, StatusCode, header},
-    response::Response,
+    response::{Redirect, Response},
 };
 use ergo_api::{Passphrase, Registration};
 use serde::Deserialize;
@@ -21,7 +22,7 @@ use crate::{
     config::IrcServer,
     db::{self, Claim, Invite, NewMember, Redemption},
     email::{self, Email},
-    invite_rules,
+    invite_code, invite_rules,
     nick::{self, Nick},
     oauth::Webchat,
     password_rules::{self, FieldErrors},
@@ -33,7 +34,6 @@ use crate::{
 #[template(path = "invite.html")]
 struct InvitePage<'a> {
     layout: Layout<'a>,
-    code: &'a str,
     inviter: Option<&'a str>,
     form: SignupForm<'a>,
     nick_max_length: usize,
@@ -46,9 +46,11 @@ struct InvitePage<'a> {
 /// What the form shows: what was typed, except passwords, and what's wrong.
 #[derive(Default)]
 struct SignupForm<'a> {
+    code: &'a str,
     nick: &'a str,
     email: &'a str,
     news: bool,
+    code_error: Option<String>,
     nick_error: Option<String>,
     email_error: Option<String>,
     password: FieldErrors,
@@ -68,6 +70,7 @@ struct Welcome<'a> {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Signup {
+    code: String,
     nick: String,
     email: String,
     password: String,
@@ -83,20 +86,20 @@ struct NewAccount {
     news: bool,
 }
 
-pub async fn show(
-    State(app): State<AppState>,
-    visitor: Visitor,
-    Path(code): Path<String>,
-) -> Response {
-    let invite = match open_invite(&app, &code).await {
-        Ok(Some(invite)) => invite,
-        Ok(None) => return gone(&app, &visitor),
-        Err(error) => return internal_error("Looking up an invite", error),
-    };
+pub async fn show(State(app): State<AppState>, visitor: Visitor) -> Response {
     if visitor.0.is_some() {
         return already_a_member(&app, &visitor);
     }
-    render(&page(&app, &invite, SignupForm::default()))
+    render(&page(&app, None, SignupForm::default()))
+}
+
+/// Where links that carry the code in their path still lead.
+pub async fn legacy_link(Path(code): Path<String>) -> Redirect {
+    if invite_code::is_url_safe(&code) {
+        Redirect::to(&format!("/invite#{code}"))
+    } else {
+        Redirect::to("/invite")
+    }
 }
 
 pub async fn redeem(
@@ -104,19 +107,21 @@ pub async fn redeem(
     visitor: Visitor,
     platform: VisitorPlatform,
     address: ClientAddress,
-    Path(code): Path<String>,
     Form(signup): Form<Signup>,
 ) -> Response {
-    let invite = match open_invite(&app, &code).await {
-        Ok(Some(invite)) => invite,
-        Ok(None) => return gone(&app, &visitor),
-        Err(error) => return internal_error("Looking up an invite", error),
-    };
     if visitor.0.is_some() {
         return already_a_member(&app, &visitor);
     }
-    let refuse = |form| render_with(StatusCode::UNPROCESSABLE_ENTITY, &page(&app, &invite, form));
-    let account = match validate(&signup) {
+    let code = invite_code::from_input(&signup.code);
+    let invite = match open_invite(&app, code).await {
+        Ok(invite) => invite,
+        Err(error) => return internal_error("Looking up an invite", error),
+    };
+    let inviter = invite
+        .as_ref()
+        .and_then(|invite| invite.created_by.as_deref());
+    let refuse = |form| render_with(StatusCode::UNPROCESSABLE_ENTITY, &page(&app, inviter, form));
+    let account = match validate(&signup, invite.is_some()) {
         Ok(account) => account,
         Err(form) => return refuse(*form),
     };
@@ -126,7 +131,7 @@ pub async fn redeem(
             nick_error: Some(rate_limit::TRY_LATER.to_owned()),
             ..form_for(&signup)
         };
-        return render_with(StatusCode::TOO_MANY_REQUESTS, &page(&app, &invite, form));
+        return render_with(StatusCode::TOO_MANY_REQUESTS, &page(&app, inviter, form));
     }
     let taken = || SignupForm {
         nick_error: Some(format!("{} is taken.", account.nick)),
@@ -138,9 +143,14 @@ pub async fn redeem(
         Err(error) => return internal_error("Looking up a name", error),
     }
     let now = db::now();
-    let claim = match app.db.claim_invite(&code, now).await {
+    let claim = match app.db.claim_invite(code, now).await {
         Ok(Some(claim)) => claim,
-        Ok(None) => return gone(&app, &visitor),
+        Ok(None) => {
+            return refuse(SignupForm {
+                code_error: Some(unusable_code()),
+                ..form_for(&signup)
+            });
+        }
         Err(error) => return internal_error("Claiming an invite", error),
     };
     match create_account(&app, &claim, &account, now).await {
@@ -223,18 +233,21 @@ async fn create_account(
     }
 }
 
-fn validate(signup: &Signup) -> Result<NewAccount, Box<SignupForm<'_>>> {
+/// Checks `signup` against every rule, including that its invite is open.
+fn validate(signup: &Signup, invite_open: bool) -> Result<NewAccount, Box<SignupForm<'_>>> {
+    let code_error = (!invite_open).then(unusable_code);
     let nick = Nick::parse(&signup.nick);
     let email = Email::parse(&signup.email);
     let password = password_rules::check(&signup.password, &signup.confirmation);
-    match (nick, email, password) {
-        (Ok(nick), Ok(email), Ok(password)) => Ok(NewAccount {
+    match (code_error, nick, email, password) {
+        (None, Ok(nick), Ok(email), Ok(password)) => Ok(NewAccount {
             nick,
             email,
             password,
             news: signup.news.is_some(),
         }),
-        (nick, email, password) => Err(Box::new(SignupForm {
+        (code_error, nick, email, password) => Err(Box::new(SignupForm {
+            code_error,
             nick_error: nick.err().map(|error| error.to_string()),
             email_error: email.err().map(|error| error.to_string()),
             password: password.err().map(FieldErrors::from).unwrap_or_default(),
@@ -246,6 +259,7 @@ fn validate(signup: &Signup) -> Result<NewAccount, Box<SignupForm<'_>>> {
 /// The form as typed, passwords left out.
 fn form_for(signup: &Signup) -> SignupForm<'_> {
     SignupForm {
+        code: &signup.code,
         nick: &signup.nick,
         email: &signup.email,
         news: signup.news.is_some(),
@@ -288,11 +302,10 @@ async fn open_invite(app: &App, code: &str) -> sqlx::Result<Option<Invite>> {
     Ok(invite.filter(|invite| invite.status(db::now()) == invite_rules::Status::Open))
 }
 
-fn page<'a>(app: &'a App, invite: &'a Invite, form: SignupForm<'a>) -> InvitePage<'a> {
+fn page<'a>(app: &'a App, inviter: Option<&'a str>, form: SignupForm<'a>) -> InvitePage<'a> {
     InvitePage {
         layout: Layout::new(app, None),
-        code: &invite.code,
-        inviter: invite.created_by.as_deref(),
+        inviter,
         form,
         nick_max_length: nick::MAX_LENGTH,
         nick_pattern: nick::html_pattern(),
@@ -312,19 +325,12 @@ fn message(
     super::message(app, visitor, status, "Invitation", title, lines)
 }
 
-/// The one answer for every link that can't be redeemed, whatever the
-/// reason, so a link gives nothing away.
-fn gone(app: &App, visitor: &Visitor) -> Response {
-    let why = format!(
-        "Invites work once and expire after {}. Ask for a new one.",
+/// The one answer for every code that can't be redeemed, whatever the
+/// reason, so a code gives nothing away.
+fn unusable_code() -> String {
+    format!(
+        "This invite doesn't work. Invites work once and expire after {}; ask for a new one.",
         invite_rules::in_words(invite_rules::LIFETIME)
-    );
-    message(
-        app,
-        visitor,
-        StatusCode::NOT_FOUND,
-        "This invite link doesn't work.",
-        &[&why],
     )
 }
 

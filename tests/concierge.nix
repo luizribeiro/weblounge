@@ -125,8 +125,7 @@ vmTest {
 
     with subtest("the invite tree lists a new member under whoever invited them"):
         _, link = browser.create_invite()
-        fields = ["nick=ivy", "email=ivy@example.org", "password=ivy-chose-this-one", "confirmation=ivy-chose-this-one"]
-        assert Browser("ivy").post(link.removeprefix(f"https://{members}"), *fields) == "200 "
+        assert Browser("ivy").sign_up(link, "ivy", "ivy-chose-this-one") == "200 "
         tree = browser.get("/invites", "-f")
         assert re.search(r'aria-current="true">Dana</strong>.*?<ul>\s*<li>\s*<span>ivy</span>', tree, re.S), tree
 

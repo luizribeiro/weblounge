@@ -216,12 +216,11 @@ vmTest ''
       assert limited == "429 ", limited
 
   def mint_invite():
-      link = credenza.succeed("su - luiz -c 'concierge-admin invite create --root'").strip()
-      return link.removeprefix(f"https://{members}")
+      return credenza.succeed("su - luiz -c 'concierge-admin invite create --root'").strip()
 
   with subtest("nginx logs invite links, and pages that link from one, without the code"):
-      path = mint_invite()
-      code = path.rsplit("/", 1)[1]
+      path = mint_invite().removeprefix(f"https://{members}")
+      code = invite_code(path)
       https(members, path, "-f", "-o", "/dev/null")
       https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}{path}")
       https(members, f"/signin?next=%2Finvite%2F{code}", "-f", "-o", "/dev/null")
@@ -229,33 +228,33 @@ vmTest ''
           https(members, spelling, "--path-as-is", "-o", "/dev/null")
       https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}/%69nvite/{code}")
       access_log = credenza.succeed("cat /var/log/nginx/access.log")
-      assert re.search(r'"GET /invite/\[redacted\] HTTP/[\d.]+" 200', access_log), access_log
+      assert re.search(r'"GET /invite/\[redacted\] HTTP/[\d.]+" 303', access_log), access_log
       assert code not in access_log, access_log
       credenza.succeed("journalctl --sync")
       credenza.fail(f"journalctl | grep -qF {code}")
 
-  def sign_up(path, nick, *headers):
-      flags = [arg for header in headers for arg in ["-H", header]]
-      fields = [f"nick={nick}", f"email={nick}@example.org", "password=lantern-orchard-71", "confirmation=lantern-orchard-71"]
-      return https(members, path, "-o", "/dev/null", "-w", "%{http_code}", *flags,
+  def sign_up(link, nick, origin, flags=("-o", "/dev/null", "-w", "%{http_code}")):
+      fields = [f"code={invite_code(link)}", f"nick={nick}", f"email={nick}@example.org",
+                "password=lantern-orchard-71", "confirmation=lantern-orchard-71"]
+      return https(members, "/invite", "-H", f"Origin: {origin}", *flags,
                    *[arg for field in fields for arg in ["--data-urlencode", field]])
 
   with subtest("a signup posted from another origin is refused, and the invite still works"):
-      path = mint_invite()
-      assert sign_up(path, "eve", "Origin: https://evil.example") == "403"
-      assert https(members, path, "-o", "/dev/null", "-w", "%{http_code}") == "200"
+      link = mint_invite()
+      assert sign_up(link, "eve", "https://evil.example") == "403"
+      assert sign_up(link, "eve", f"https://{members}") == "200"
 
-  with subtest("used, expired and unknown invite links all get the same 404"):
+  with subtest("used, expired and unknown codes all get the same answer"):
       used, expired = mint_invite(), mint_invite()
-      assert sign_up(used, "trudy", f"Origin: https://{members}") == "200"
-      code = expired.rsplit("/", 1)[1]
+      assert sign_up(used, "trudy", f"https://{members}") == "200"
       expire = ("import sqlite3; db = sqlite3.connect('/var/lib/private/concierge/concierge.db'); "
-                f"db.execute(\"UPDATE invites SET created_at = 0, expires_at = 1 WHERE code = '{code}'\"); db.commit()")
+                f"db.execute(\"UPDATE invites SET created_at = 0, expires_at = 1 WHERE code = '{invite_code(expired)}'\"); db.commit()")
       credenza.succeed(f"${pkgs.python3}/bin/python3 -c {shlex.quote(expire)}")
-      answers = [https(members, path, "-w", "\n%{http_code}") for path in [used, expired, "/invite/q7Hx2mZp9vLcT4wRfBa-_w"]]
-      assert all(answer.endswith("\n404") for answer in answers), answers
-      assert len(set(answers)) == 1, answers
-      assert "This invite link doesn&#39;t work." in answers[0], answers[0]
+      answers = [sign_up(link, "mallet", f"https://{members}", flags=("-w", "\n%{http_code}"))
+                 for link in [used, expired, "q7Hx2mZp9vLcT4wRfBa-_w"]]
+      assert all(answer.endswith("\n422") for answer in answers), answers
+      errors = {error for answer in answers for error in re.findall(r'id="code-hint">([^<]*)<', answer)}
+      assert len(errors) == 1 and "This invite doesn&#39;t work." in errors.pop(), answers
 
   # concierge's rate_limit::LOOKUPS_PER_ADDRESS.
   lookups_per_address = 60
@@ -264,8 +263,8 @@ vmTest ''
       def lookup(n):
           return https(members, "/signup/nick", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Origin: https://{members}",
                        "-H", f"X-Real-IP: 198.51.100.{n % 250}", "--data", "nick=bob")
-      # The signup above counted as one.
-      allowed = lookups_per_address - 1
+      # eve's and trudy's signups above counted as one each.
+      allowed = lookups_per_address - 2
       statuses = [lookup(n) for n in range(allowed + 1)]
       assert statuses == ["200"] * allowed + ["429"], statuses
 ''

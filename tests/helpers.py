@@ -48,6 +48,10 @@ def concierge_admin(*args):
     return credenza.succeed(concierge_admin_command(*args))
 
 
+def invite_code(link):
+    return re.split(r"[#/]", link.strip())[-1]
+
+
 class Browser:
     """Someone visiting members.weblounge.org from the client, with their own cookies."""
 
@@ -64,6 +68,12 @@ class Browser:
 
     def sign_in(self, account, password):
         return self.post("/signin", f"nick={account}", f"password={password}")
+
+    def sign_up(self, link, account, password, flags=outcome):
+        """Fills in the invite page with the code from `link`, as its script does."""
+        fields = [f"code={invite_code(link)}", f"nick={account}", f"email={account}@example.org",
+                  f"password={password}", f"confirmation={password}"]
+        return self.post("/invite", *fields, flags=flags)
 
     def create_invite(self):
         """Answers with the page of a new invite and its link, which nothing shows again."""

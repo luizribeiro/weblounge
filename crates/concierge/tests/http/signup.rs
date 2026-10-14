@@ -11,7 +11,7 @@ use tokio::net::TcpListener;
 use crate::{Site, body_text, execute, session_cookie};
 
 const CODE: &str = "q7Hx2mZp9vLcT4wRfBa-_w";
-const INVITE: &str = "/invite/q7Hx2mZp9vLcT4wRfBa-_w";
+const INVITE: &str = "/invite";
 const NEW_PASSWORD: &str = "xylophone-quokka-42";
 
 fn signup<'a>(nick: &'a str, password: &'a str, confirmation: &'a str) -> Vec<(&'a str, &'a str)> {
@@ -21,6 +21,7 @@ fn signup<'a>(nick: &'a str, password: &'a str, confirmation: &'a str) -> Vec<(&
         ("password", password),
         ("confirmation", confirmation),
         ("news", "on"),
+        ("code", CODE),
     ]
 }
 
@@ -36,8 +37,8 @@ async fn with_invite_from_alice() -> Site {
 }
 
 async fn invite_is_open(site: &Site) -> bool {
-    let response = site.get(INVITE, None).await;
-    response.status() == 200
+    let invite = site.db.invite(CODE).await.unwrap().unwrap();
+    invite.status(concierge::db::now()) == concierge::invite_rules::Status::Open
 }
 
 #[tokio::test]
@@ -214,7 +215,7 @@ async fn two_redemptions_of_one_invite_cannot_both_succeed() {
 
     let mut statuses = [first.status().as_u16(), second.status().as_u16()];
     statuses.sort();
-    assert_eq!(statuses, [200, 404]);
+    assert_eq!(statuses, [200, 422]);
     assert_eq!(site.db.member_count().await.unwrap(), 2);
 }
 
@@ -287,7 +288,13 @@ async fn a_signed_in_member_redeems_nothing() {
 #[tokio::test]
 async fn an_unusable_invite_redeems_nothing() {
     let site = Site::start().await;
-    assert_eq!(site.post(INVITE, &bob(), None).await.status(), 404);
+    let response = site.post(INVITE, &bob(), None).await;
+    assert_eq!(response.status(), 422);
+    assert!(
+        body_text(response)
+            .await
+            .contains("This invite doesn&#39;t work.")
+    );
     assert_eq!(site.db.member("bob").await.unwrap(), None);
 }
 

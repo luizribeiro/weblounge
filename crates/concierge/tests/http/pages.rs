@@ -134,10 +134,7 @@ async fn only_built_assets_are_served() {
 
 #[tokio::test]
 async fn unknown_paths_are_not_found() {
-    assert_eq!(
-        Site::start().await.get("/invite/nope", None).await.status(),
-        404
-    );
+    assert_eq!(Site::start().await.get("/nope", None).await.status(), 404);
 }
 
 #[tokio::test]

@@ -45,9 +45,9 @@ async fn a_new_invite_shows_its_link_and_qr_code_once() {
     let tab = invites_tab(&site, &cookie).await;
     assert!(invite_links(&tab).is_empty(), "{tab}");
     assert!(tab.contains("Up to 3 open at a time."), "{tab}");
-    let path = link.strip_prefix(PUBLIC_URL).unwrap();
-    let invite = body_text(site.get(path, None).await).await;
-    assert!(invite.contains("alice saved you a seat."), "{invite}");
+    let code = link.rsplit('/').next().unwrap();
+    let invite = site.db.invite(code).await.unwrap().unwrap();
+    assert_eq!(invite.created_by.as_deref(), Some("alice"));
 }
 
 /// alice, signed in with the answered cookie, with as many open invites
