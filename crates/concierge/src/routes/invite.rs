@@ -1,6 +1,8 @@
 //! The invite page: who's inviting, the signup form, and redeeming the
 //! invite into an Ergo account and a member.
 
+use std::time::Instant;
+
 use askama::Template;
 use axum::{
     Form,
@@ -23,6 +25,7 @@ use crate::{
     nick::{self, Nick},
     password_rules::{self, Refusal, Rule},
     platform::VisitorPlatform,
+    rate_limit::{self, ClientAddress},
 };
 
 #[derive(Template)]
@@ -110,6 +113,7 @@ pub async fn redeem(
     State(app): State<AppState>,
     visitor: Visitor,
     platform: VisitorPlatform,
+    address: ClientAddress,
     Path(code): Path<String>,
     Form(signup): Form<Signup>,
 ) -> Response {
@@ -126,6 +130,14 @@ pub async fn redeem(
         Ok(account) => account,
         Err(form) => return refuse(*form),
     };
+    // Each attempt tells whether a nick is taken, as a lookup does.
+    if !app.lookups.allows(address.0, Instant::now()) {
+        let form = SignupForm {
+            nick_error: Some(rate_limit::TRY_LATER.to_owned()),
+            ..form_for(&signup)
+        };
+        return render_with(StatusCode::TOO_MANY_REQUESTS, &page(&app, &invite, form));
+    }
     let taken = || SignupForm {
         nick_error: Some(format!("{} is taken.", account.nick)),
         ..form_for(&signup)

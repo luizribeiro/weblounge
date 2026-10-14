@@ -21,7 +21,6 @@ use crate::{
 
 /// The same answer whether the account exists or not.
 const WRONG: &str = "Wrong nick or password.";
-const LIMITED: &str = "Too many attempts. Try again in 15 minutes.";
 const UNAVAILABLE: &str = "Can't check passwords right now. Try again in a minute.";
 /// Ergo's limit; anything longer can't be anyone's password.
 const MAX_PASSWORD_BYTES: usize = 300;
@@ -80,7 +79,7 @@ pub async fn submit(
     }
     let now = Instant::now();
     if !app.limiter.allows(nick, address.0, now) {
-        return refuse(StatusCode::TOO_MANY_REQUESTS, LIMITED);
+        return refuse(StatusCode::TOO_MANY_REQUESTS, rate_limit::TRY_LATER);
     }
     match authenticate(&app, nick, password).await {
         Ok(Some(member)) => {

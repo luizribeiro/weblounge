@@ -154,6 +154,39 @@ impl Limiter {
     }
 }
 
+/// What pages say when a limit is reached.
+pub const TRY_LATER: &str = "Too many attempts. Try again in 15 minutes.";
+
+/// Enough to try a few nicks while typing, too few to list the members.
+pub const LOOKUPS_PER_ADDRESS: usize = 60;
+
+/// Nick lookups in the last [`WINDOW`], by client address.
+pub struct LookupLimiter {
+    lookups: Recent<IpAddr>,
+}
+
+impl Default for LookupLimiter {
+    fn default() -> Self {
+        Self {
+            lookups: Recent::new(WINDOW),
+        }
+    }
+}
+
+impl LookupLimiter {
+    /// Whether another lookup from `address` may go ahead, counting it if so.
+    pub fn allows(&self, address: Option<IpAddr>, now: Instant) -> bool {
+        let Some(address) = address else {
+            return true;
+        };
+        let allowed = self.lookups.under(&address, LOOKUPS_PER_ADDRESS, now);
+        if allowed {
+            self.lookups.record(address, now);
+        }
+        allowed
+    }
+}
+
 fn account_key(account: &str) -> Key {
     Key::Account(account.to_ascii_lowercase())
 }
@@ -243,6 +276,18 @@ mod tests {
             fail(&limiter, &format!("guess{n}"), None, 1, now);
         }
         assert!(limiter.allows("someone", None, now));
+    }
+
+    #[test]
+    fn an_address_gets_sixty_lookups_per_window() {
+        let (lookups, start) = (LookupLimiter::default(), Instant::now());
+        for _ in 0..LOOKUPS_PER_ADDRESS {
+            assert!(lookups.allows(HOME, start));
+        }
+        assert!(!lookups.allows(HOME, start));
+        assert!(lookups.allows(CAFE, start));
+        assert!(lookups.allows(None, start));
+        assert!(lookups.allows(HOME, start + WINDOW));
     }
 
     #[test]

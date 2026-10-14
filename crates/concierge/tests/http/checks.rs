@@ -1,8 +1,11 @@
 use axum::http::header;
-use concierge::password_rules::{self, MAX_BYTES, MIN_LENGTH};
+use concierge::{
+    password_rules::{self, MAX_BYTES, MIN_LENGTH},
+    rate_limit::LOOKUPS_PER_ADDRESS,
+};
 use serde_json::Value;
 
-use crate::{Site, body_text};
+use crate::{PUBLIC_URL, Site, body_text};
 
 async fn rules(site: &Site) -> Value {
     let response = site.get("/password-rules.json", None).await;
@@ -49,4 +52,65 @@ async fn the_page_gets_the_rules_the_server_checks() {
             "{password:?}"
         );
     }
+}
+
+async fn lookup(site: &Site, nick: &str, address: &str) -> (u16, String) {
+    let headers = [
+        (header::ORIGIN.as_str(), PUBLIC_URL),
+        ("x-real-ip", address),
+    ];
+    let response = site
+        .post_with("/signup/nick", &[("nick", nick)], None, &headers)
+        .await;
+    (response.status().as_u16(), body_text(response).await)
+}
+
+fn status(answer: &str) -> String {
+    format!(r#"{{"status":"{answer}"}}"#)
+}
+
+#[tokio::test]
+async fn says_whether_a_nick_is_free_and_nothing_more() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.register("ergo-only").await;
+    site.execute(
+        "INSERT INTO members (account, joined_at, invite_quota, removed_at) VALUES ('gone', 0, 0, 1)",
+    )
+    .await;
+    for (nick, answer) in [
+        ("bob", "available"),
+        ("ALICE", "taken"),
+        ("ergo-only", "taken"),
+        ("Gone", "taken"),
+        ("2pac", "invalid"),
+        ("NickServ", "invalid"),
+        ("", "invalid"),
+    ] {
+        assert_eq!(
+            lookup(&site, nick, "192.0.2.7").await,
+            (200, status(answer)),
+            "{nick}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_address_gets_a_limited_number_of_lookups() {
+    let site = Site::start().await;
+    for _ in 0..LOOKUPS_PER_ADDRESS {
+        assert_eq!(lookup(&site, "bob", "192.0.2.7").await.0, 200);
+    }
+    assert_eq!(lookup(&site, "bob", "192.0.2.7").await.0, 429);
+    assert_eq!(lookup(&site, "bob", "198.51.100.9").await.0, 200);
+}
+
+#[tokio::test]
+async fn lookups_from_other_origins_are_refused() {
+    let site = Site::start().await;
+    let headers = [(header::ORIGIN.as_str(), "https://evil.example")];
+    let response = site
+        .post_with("/signup/nick", &[("nick", "bob")], None, &headers)
+        .await;
+    assert_eq!(response.status(), 403);
 }

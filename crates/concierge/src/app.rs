@@ -16,7 +16,7 @@ use crate::{
     config::IrcServer,
     csrf,
     db::Db,
-    rate_limit::Limiter,
+    rate_limit::{Limiter, LookupLimiter},
     routes, session,
 };
 
@@ -27,6 +27,7 @@ pub struct App {
     pub ergo: Client,
     pub sessions: session::Hasher,
     pub limiter: Limiter,
+    pub lookups: LookupLimiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
     /// Where members point their IRC clients.
@@ -46,6 +47,7 @@ pub fn router(app: App) -> Router {
             get(routes::signin::show).post(routes::signin::submit),
         )
         .route("/signout", post(routes::signin::sign_out))
+        .route("/signup/nick", post(routes::checks::nick))
         .route("/password-rules.json", get(routes::checks::password_rules))
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))

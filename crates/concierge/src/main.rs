@@ -7,7 +7,7 @@ use concierge::{
     assets::Assets,
     config::Config,
     db::{self, Db},
-    rate_limit::Limiter,
+    rate_limit::{Limiter, LookupLimiter},
     session,
 };
 use tokio::net::TcpListener;
@@ -33,6 +33,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         ergo: config.ergo_client()?,
         sessions: session::Hasher::new(&config.read_session_key()?),
         limiter: Limiter::default(),
+        lookups: LookupLimiter::default(),
         public_url: config.public_url.clone(),
         irc_server: config.irc_server.clone(),
     };

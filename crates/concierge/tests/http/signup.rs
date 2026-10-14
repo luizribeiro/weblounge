@@ -307,3 +307,20 @@ async fn the_welcome_page_leads_with_clients_for_the_visitors_platform() {
         }
     }
 }
+
+#[tokio::test]
+async fn signup_attempts_count_as_nick_lookups() {
+    let site = with_invite_from_alice().await;
+    let headers = [
+        (header::ORIGIN.as_str(), crate::PUBLIC_URL),
+        ("x-real-ip", "192.0.2.7"),
+    ];
+    for _ in 0..concierge::rate_limit::LOOKUPS_PER_ADDRESS {
+        site.post_with("/signup/nick", &[("nick", "bob")], None, &headers)
+            .await;
+    }
+    let response = site.post_with(INVITE, &bob(), None, &headers).await;
+    assert_eq!(response.status(), 429);
+    assert!(body_text(response).await.contains("Too many attempts."));
+    assert!(invite_is_open(&site).await);
+}

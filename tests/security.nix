@@ -184,4 +184,14 @@ vmTest ''
       assert code not in access_log, access_log
       credenza.succeed("journalctl --sync")
       credenza.fail(f"journalctl | grep -qF {code}")
+
+  # concierge's rate_limit::LOOKUPS_PER_ADDRESS.
+  lookups_per_address = 60
+
+  with subtest("nick lookups are rate-limited per address, whatever X-Real-IP says"):
+      def lookup(n):
+          return https(members, "/signup/nick", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Origin: https://{members}",
+                       "-H", f"X-Real-IP: 198.51.100.{n % 250}", "--data", "nick=bob")
+      statuses = [lookup(n) for n in range(lookups_per_address + 1)]
+      assert statuses == ["200"] * lookups_per_address + ["429"], statuses
 ''

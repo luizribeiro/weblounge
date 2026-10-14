@@ -18,11 +18,11 @@
           <form class="form" method="post" action="/invite/{{ code }}" data-signup>
             <div class="field">
               <label for="nick">Nick</label>
-              <input id="nick" name="nick" value="{{ form.nick }}" required maxlength="{{ nick_max_length }}" pattern="{{ nick_pattern }}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="nick-hint"{% if form.nick_error.is_some() %} aria-invalid="true"{% endif %}>
+              <input id="nick" name="nick" value="{{ form.nick }}" required maxlength="{{ nick_max_length }}" pattern="{{ nick_pattern }}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="nick-hint" data-availability="/signup/nick"{% if form.nick_error.is_some() %} aria-invalid="true"{% endif %}>
               {%- if let Some(error) = form.nick_error %}
-              <p class="field-error" id="nick-hint" data-nick-status>{{ error }}</p>
+              <p class="field-error" id="nick-hint" data-nick-status data-hint="Permanent. {{ nick_rule }}">{{ error }}</p>
               {%- else %}
-              <p class="hint" id="nick-hint" data-nick-status>Permanent. {{ nick_rule }}</p>
+              <p class="hint" id="nick-hint" data-nick-status data-hint="Permanent. {{ nick_rule }}">Permanent. {{ nick_rule }}</p>
               {%- endif %}
             </div>
             <div class="field">
