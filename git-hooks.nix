@@ -17,6 +17,11 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
     };
     shellcheck.enable = true;
     yamllint.enable = true;
+    biome = {
+      enable = true;
+      types_or = [ "ts" "css" "json" ];
+      settings.flags = "--no-errors-on-unmatched";
+    };
 
     flake-check = {
       enable = true;
