@@ -14,6 +14,7 @@ pkgs.mkShell ({
     rust-analyzer
     rustc
     rustfmt
+    sops
     sqlx-cli
     typescript
   ]);

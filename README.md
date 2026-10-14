@@ -182,8 +182,9 @@ just dns preview   # what would change at deSEC
 just dns push      # make deSEC match the repository
 ```
 
-Both read a deSEC API token from `~/.config/weblounge/desec-token`.
-`push` also deletes records the repository doesn't have.
+Both run dnscontrol with the deSEC API token from `secrets/dns.yaml`,
+which sops decrypts with luiz's GPG key; `sops secrets/dns.yaml` edits
+it. `push` also deletes records the repository doesn't have.
 
 ## Layout
 
