@@ -9,6 +9,9 @@ let
     config.security.acme.certs;
 in
 {
+  # Where nixpkgs' ACME module keeps the CA it signs the stand-ins with.
+  weblounge.selfSignedCa = "/var/lib/acme/.minica/cert.pem";
+
   systemd.services = disablePerCert (cert: "acme-order-renew-${cert}");
   systemd.timers = disablePerCert (cert: "acme-renew-${cert}");
 }

@@ -20,6 +20,11 @@ in
       default = 6697;
       description = "The port IRC clients reach Ergo's TLS listener on, as members are told to connect.";
     };
+    selfSignedCa = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "The CA behind this machine's certificates when no public CA issued them, for its own services to trust.";
+    };
     origin = lib.mkOption {
       type = lib.types.functionTo lib.types.str;
       readOnly = true;
