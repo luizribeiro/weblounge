@@ -4,7 +4,7 @@ import shlex
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from driver import client, credenza, start_all
+    from driver import client, credenza, start_all, tools
 
 
 def ergo_api_token():
@@ -50,6 +50,12 @@ def concierge_admin_command(*args):
 
 def concierge_admin(*args):
     return credenza.succeed(concierge_admin_command(*args))
+
+
+def concierge_sql(query):
+    return credenza.succeed(
+        shlex.join([tools["sqlite3"], "-readonly", "/var/lib/private/concierge/concierge.db", query])
+    )
 
 
 def invite_code(link):
