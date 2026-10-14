@@ -59,6 +59,7 @@ in
         };
       };
       channels.auto-join = [ "#lounge" ];
+      history.retention.allow-individual-delete = true;
       api = {
         enabled = true;
         listener = "127.0.0.1:8089";

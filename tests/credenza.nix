@@ -153,6 +153,10 @@ pkgs.testers.runNixOSTest {
         assert re.search(r" 353 bob = #lounge :.*\balice\b", seen), seen
         assert " 301 bob alice " in seen, seen
 
+    with subtest("members may delete their own messages from history"):
+        reply = irc("PRIVMSG HistServ :DELETE #lounge no-such-message", **alice)
+        assert "NOTICE alice :Could not delete message" in reply, reply
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()
