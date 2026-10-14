@@ -44,6 +44,12 @@ pkgs.testers.runNixOSTest {
     def irc(*commands, machine=client, **options):
         return machine.succeed(irc_command(*commands, **options))
 
+    def assert_client_address_absent(logs):
+        addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
+        patterns = shlex.join(arg for address in addresses for arg in ["-e", address])
+        credenza.succeed("journalctl --sync")
+        credenza.fail(f"{logs} | grep -qF {patterns}")
+
     alice = {"account": "alice", "password": "correct-horse"}
     bob = {"account": "bob", "password": "battery-staple"}
     carol = {"account": "carol", "password": "tr0ub4dor-and-3"}
@@ -78,12 +84,9 @@ pkgs.testers.runNixOSTest {
             client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")
 
     with subtest("nginx logs requests without the client's address, even when they fail"):
-        client_addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
         client.succeed("curl -sk -o /dev/null https://credenza/no-such-page")
         credenza.succeed("grep -q 'GET /no-such-page HTTP/[0-9.]*\" 404' /var/log/nginx/access.log")
-        credenza.succeed("journalctl --sync")
-        patterns = shlex.join(arg for address in client_addresses for arg in ["-e", address])
-        credenza.fail(f"{{ cat /var/log/nginx/*; journalctl -u nginx; }} | grep -qF {patterns}")
+        assert_client_address_absent("{ cat /var/log/nginx/*; journalctl -u nginx; }")
 
     with subtest("ergo serves IRC over TLS on 6697 with irc.weblounge.org's certificate"):
         credenza.wait_for_unit("ergochat.service")
@@ -188,6 +191,11 @@ pkgs.testers.runNixOSTest {
         assert json.loads(body)["alwaysOn"] == "off", body
         body, _ = ergo_api("ns/saget", token, accountName=carol["account"])
         assert json.loads(body)["alwaysOn"] == "off", body
+
+    with subtest("the journal keeps no client addresses from IRC logins, refused or not"):
+        irc(**alice)
+        irc()
+        assert_client_address_absent("journalctl")
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")

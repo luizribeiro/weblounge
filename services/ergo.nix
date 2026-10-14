@@ -70,6 +70,12 @@ in
       };
       # nixpkgs' ergo ships no translations for the default path to find.
       languages.enabled = false;
+      # connect-ip lines carry client addresses, which we promise not to keep.
+      logging = [{
+        method = "stderr";
+        type = "* -userinput -useroutput -connect-ip";
+        level = "info";
+      }];
     };
 
     services.ergochat = {
