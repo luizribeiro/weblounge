@@ -34,6 +34,7 @@ async fn saves_the_settings_and_says_so() {
     let page = body_text(site.get("/account?saved", Some(&cookie)).await).await;
     assert!(page.contains("Saved."), "{page}");
     assert!(page.contains(r#"id="email-and-news""#), "{page}");
+    assert!(!page.contains("IRC settings saved."), "{page}");
     assert!(page.contains(r#"value="alice@example.net""#), "{page}");
     assert!(
         page.contains(r#"<input name="news" type="checkbox" checked>"#),

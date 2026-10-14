@@ -111,13 +111,13 @@ vmTest ''
       session = irc(account="Dana", password=password)
       assert " 903 " in session, session
 
-  with subtest("a member turns always-on off on the IRC tab, and Ergo has it"):
+  with subtest("a member turns always-on off on the Account tab, and Ergo has it"):
       saved = browser.post("/irc-settings", "auto_away=on")
-      assert saved == f"303 https://{members}/irc?saved", saved
+      assert saved == f"303 https://{members}/account?irc#irc-settings", saved
       body, _ = ergo_api("ns/saget", accountName="Dana")
       settings = json.loads(body)
       assert (settings["alwaysOn"], settings["autoAway"]) == ("off", "default"), body
-      tab = browser.get("/irc?saved", "-f")
+      tab = browser.get("/account?irc", "-f")
       assert '<input name="always_on" type="checkbox">' in tab, tab
       assert '<input name="auto_away" type="checkbox" checked>' in tab, tab
       assert "Both on by default." in tab, tab

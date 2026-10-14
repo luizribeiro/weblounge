@@ -1,4 +1,5 @@
-//! The Account tab: the member's email, news setting and password.
+//! The Account tab: the member's password, email, news setting and how
+//! Ergo treats them while no client is open.
 
 use askama::Template;
 use axum::{
@@ -9,7 +10,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{Flash, Layout, Tab, internal_error, render_with};
+use super::{Flash, Layout, Tab, internal_error, presence::Presence, render_with};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
@@ -28,6 +29,10 @@ struct Account<'a> {
     password: PasswordForm,
     email_max_length: usize,
     email_pattern: &'a str,
+    /// The IRC settings, or why they can't be shown.
+    presence: Result<Presence, &'static str>,
+    defaults: Presence,
+    irc_error: Option<&'static str>,
 }
 
 #[derive(Deserialize, Default)]
@@ -57,12 +62,20 @@ pub struct Forms<'a> {
     flash: Flash,
     settings: Option<SettingsForm<'a>>,
     password: PasswordForm,
+    irc_error: Option<&'static str>,
 }
 
 impl Forms<'_> {
     pub fn password(password: PasswordForm) -> Self {
         Self {
             password,
+            ..Self::default()
+        }
+    }
+
+    pub fn irc_error(error: &'static str) -> Self {
+        Self {
+            irc_error: Some(error),
             ..Self::default()
         }
     }
@@ -77,7 +90,7 @@ pub async fn show(
         flash,
         ..Forms::default()
     };
-    page(&app, &me.member, StatusCode::OK, forms)
+    page(&app, &me.member, StatusCode::OK, forms).await
 }
 
 pub async fn update(
@@ -98,7 +111,7 @@ pub async fn update(
                 }),
                 ..Forms::default()
             };
-            return page(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms);
+            return page(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms).await;
         }
     };
     match app.db.update_settings(account, email.as_str(), news).await {
@@ -108,12 +121,19 @@ pub async fn update(
 }
 
 /// The Account tab of `member`, with `forms` filled in over what's stored.
-pub fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
+pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
     let settings = forms.settings.unwrap_or_else(|| SettingsForm {
         email: member.email.as_deref().unwrap_or(""),
         news: member.news_opt_in,
         email_error: None,
     });
+    let presence = match app.ergo.settings(member.account.as_str()).await {
+        Ok(settings) => Ok(Presence::of(&settings, app.presence_defaults)),
+        Err(error) => {
+            eprintln!("Reading IRC settings failed: {error}");
+            Err("Can't reach the chat server.")
+        }
+    };
     let page = Account {
         layout: Layout::new(app, Some(&member.account)).on(Tab::Account),
         nick: &member.account,
@@ -122,6 +142,9 @@ pub fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) ->
         password: forms.password,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
+        irc_error: forms.irc_error.filter(|_| presence.is_ok()),
+        presence,
+        defaults: app.presence_defaults,
     };
     render_with(status, &page)
 }

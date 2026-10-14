@@ -53,29 +53,30 @@ pub async fn change(
                 new: refusal.into(),
                 ..PasswordForm::default()
             };
-            return refuse(StatusCode::UNPROCESSABLE_ENTITY, form);
+            return refuse(StatusCode::UNPROCESSABLE_ENTITY, form).await;
         }
     };
     if !(1..=password_rules::MAX_BYTES).contains(&change.current.len()) {
-        return refuse(StatusCode::UNAUTHORIZED, current_error(WRONG));
+        return refuse(StatusCode::UNAUTHORIZED, current_error(WRONG)).await;
     }
     let now = Instant::now();
     if !app.limiter.allows(account, address.0, now) {
         let form = current_error(rate_limit::TRY_LATER);
-        return refuse(StatusCode::TOO_MANY_REQUESTS, form);
+        return refuse(StatusCode::TOO_MANY_REQUESTS, form).await;
     }
     match verify(&app, account, &change.current).await {
         Ok(true) => app.limiter.record_success(account),
         Ok(false) => {
             app.limiter.record_failure(account, address.0, now);
-            return refuse(StatusCode::UNAUTHORIZED, current_error(WRONG));
+            return refuse(StatusCode::UNAUTHORIZED, current_error(WRONG)).await;
         }
         Err(error) => {
             eprintln!("Checking a password failed: {error}");
             return refuse(
                 StatusCode::SERVICE_UNAVAILABLE,
                 current_error(ERGO_UNAVAILABLE),
-            );
+            )
+            .await;
         }
     }
     if let Err(error) = app.ergo.set_password(account, &new).await {
@@ -83,7 +84,8 @@ pub async fn change(
         return refuse(
             StatusCode::SERVICE_UNAVAILABLE,
             current_error(ERGO_UNAVAILABLE),
-        );
+        )
+        .await;
     }
     match app.db.end_other_sessions(account, &me.token_hash).await {
         Ok(_) => Redirect::to("/account?password#change-password").into_response(),

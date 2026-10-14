@@ -1,4 +1,4 @@
-//! Ergo's always-on and auto-away, as two switches on the IRC tab.
+//! Ergo's always-on and auto-away, as two switches on the Account tab.
 //!
 //! Ergo keeps each as default, on or off, and default follows the
 //! network's multiclient settings: on under opt-out, off under opt-in.
@@ -14,7 +14,10 @@ use axum::{
 use ergo_api::{Preference, Settings, SettingsChanges};
 use serde::Deserialize;
 
-use super::{ERGO_UNAVAILABLE, Flash, irc};
+use super::{
+    ERGO_UNAVAILABLE,
+    account::{self, Forms},
+};
 use crate::{app::AppState, auth::CurrentMember};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,18 +92,12 @@ pub async fn update(
     let account = me.member.account.as_str();
     let changes = presence.changes(app.presence_defaults);
     match app.ergo.update_settings(account, changes).await {
-        Ok(_) => Redirect::to("/irc?saved").into_response(),
+        Ok(_) => Redirect::to("/account?irc#irc-settings").into_response(),
         Err(error) => {
             eprintln!("Changing IRC settings failed: {error}");
             let status = StatusCode::SERVICE_UNAVAILABLE;
-            irc::page(
-                &app,
-                &me.member,
-                status,
-                Flash::default(),
-                Some(ERGO_UNAVAILABLE),
-            )
-            .await
+            let forms = Forms::irc_error(ERGO_UNAVAILABLE);
+            account::page(&app, &me.member, status, forms).await
         }
     }
 }

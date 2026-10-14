@@ -95,6 +95,7 @@ pub struct Flash {
     pub saved: Option<String>,
     pub invited: Option<String>,
     pub password: Option<String>,
+    pub irc: Option<String>,
 }
 
 #[derive(Template)]
