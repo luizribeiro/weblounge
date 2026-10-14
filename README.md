@@ -35,9 +35,11 @@ show up on the next manual reload.
 
 Concierge, the members' site at `members.weblounge.org`, is a Rust app in
 `crates/concierge`: axum, with askama templates in its `templates/`. Its
-stylesheet, `web/styles/members.css`, builds on the landing page's tokens,
-and esbuild gives every asset a hashed name that concierge looks up in the
-build's manifest.
+stylesheet, `web/styles/members.css`, builds on the landing page's tokens
+and the components in `web/styles/components/`, and esbuild gives every
+asset a hashed name that concierge looks up in the build's manifest. Both
+sites draw the wordmark from `web/images/wordmark.svg` with `<use>`, and
+concierge's header mark is the favicon's `#mark`.
 
 ```sh
 just concierge dev                            # run it on http://localhost:8080
