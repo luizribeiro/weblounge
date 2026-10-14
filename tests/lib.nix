@@ -21,7 +21,7 @@ pkgs.testers.runNixOSTest {
         "-device virtio-net-pci,netdev=wan,mac=00:16:3c:1a:01:be"
       ];
     };
-    client.environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.openssl ircClient ];
+    client.environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ];
   };
 
   testScript = ''

@@ -5,6 +5,7 @@ vmTest ''
   from html.parser import HTMLParser
 
   mallory = {"account": "mallory", "password": "an-insider-gone-bad"}
+  tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
   sites = ["weblounge.org", "members.weblounge.org", "irc.weblounge.org"]
   directives_pages_need = {
       "weblounge.org": {"script-src", "style-src", "img-src"},
@@ -52,14 +53,23 @@ vmTest ''
   credenza.wait_for_unit("ergochat.service")
   credenza.wait_for_open_port(6697)
 
-  with subtest("firewall drops ports nothing should listen on"):
+  with subtest("only SSH, HTTP, HTTPS and IRC over TLS are reachable, even with a stray listener up"):
       credenza.succeed("systemd-run --unit=stray-listener -- ${pkgs.python3}/bin/python3 -m http.server 9000")
       credenza.wait_for_open_port(9000)
-      client.succeed("nc -z credenza 22")
-      client.fail("curl -sf --max-time 3 http://credenza:9000/")
+      scan = client.succeed("nmap -Pn -n -p- --min-rate 20000 --max-retries 1 --open -oG - credenza")
+      assert set(re.findall(r"(\d+)/open/tcp", scan)) == {"22", "80", "443", "6697"}, scan
 
   with subtest("there's no plaintext IRC"):
       credenza.fail("ss -Htln | grep -q ':6667 '")
+      client.fail("nc -z -w 3 credenza 6667")
+
+  with subtest("HTTPS and IRC refuse TLS older than 1.2"):
+      for port in [443, 6697]:
+          for version in ["tls1", "tls1_1"]:
+              _, output = client.execute(f"{tls_handshake} credenza:{port} -{version} 2>&1")
+              assert "alert protocol version" in output, (port, version, output)
+          for version in ["tls1_2", "tls1_3"]:
+              client.succeed(f"{tls_handshake} credenza:{port} -{version}")
 
   with subtest("ergo's API and concierge listen on credenza's loopback only"):
       assert_loopback_only(8089, "/v1/status")
