@@ -16,8 +16,10 @@ let
     withWebkit = false;
     withFfmpeg = false;
   };
+  browserModule = pkgs.writeTextDir "browser.py" (builtins.readFile ./browser.py);
   browserCommand = command: script: pkgs.writeShellScriptBin command ''
-    PLAYWRIGHT_BROWSERS_PATH=${playwrightBrowsers} exec ${python}/bin/python3 ${script} "$@"
+    PLAYWRIGHT_BROWSERS_PATH=${playwrightBrowsers} PYTHONPATH=${browserModule} \
+      exec ${python}/bin/python3 ${script} "$@"
   '';
 in
 pkgs.testers.runNixOSTest {

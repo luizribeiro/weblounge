@@ -1,0 +1,34 @@
+"""Headless Chromium on the client, signed in on members.weblounge.org, for
+the tests' Playwright scripts. Fails on any console error, which is where
+CSP violations go."""
+
+from contextlib import contextmanager
+
+from playwright.sync_api import expect, sync_playwright
+
+MEMBERS = "https://members.weblounge.org"
+TIMEOUT_MS = 30_000
+
+
+@contextmanager
+def signed_in(nick, password):
+    errors = []
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            args=["--host-resolver-rules=MAP *.weblounge.org credenza"],
+        )
+        page = browser.new_page(ignore_https_errors=True)
+        page.set_default_timeout(TIMEOUT_MS)
+        expect.set_options(timeout=TIMEOUT_MS)
+        page.on("console", lambda message: message.type == "error"
+                and errors.append(message.text))
+
+        page.goto(f"{MEMBERS}/signin")
+        page.fill("#nick", nick)
+        page.fill("#password", password)
+        page.click("button[type=submit]")
+        page.wait_for_url(f"{MEMBERS}/")
+        yield page
+        browser.close()
+    if errors:
+        raise SystemExit("console errors:\n" + "\n".join(errors))
