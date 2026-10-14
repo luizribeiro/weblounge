@@ -2,8 +2,11 @@ use std::{fmt, net::SocketAddr, path::PathBuf};
 
 use anyhow::Context;
 use axum::http::Uri;
+use ergo_api::{Client, Url};
 
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
+pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
+const DEFAULT_ERGO_API: &str = "http://127.0.0.1:8089";
 const DATABASE: &str = "concierge.db";
 const MIN_SESSION_KEY_BYTES: usize = 32;
 
@@ -11,6 +14,7 @@ const MIN_SESSION_KEY_BYTES: usize = 32;
 pub struct Config {
     pub listen: SocketAddr,
     pub public_url: String,
+    pub ergo_api: Url,
     pub assets_dir: PathBuf,
     pub state_dir: PathBuf,
     pub credentials_dir: PathBuf,
@@ -58,6 +62,7 @@ impl Config {
 
         let listen = require("CONCIERGE_LISTEN")?;
         let public_url = require("CONCIERGE_PUBLIC_URL")?;
+        let ergo_api = var("CONCIERGE_ERGO_API").unwrap_or_else(|| DEFAULT_ERGO_API.into());
         Ok(Self {
             listen: listen.parse().map_err(|_| {
                 invalid(
@@ -73,6 +78,13 @@ impl Config {
                     "expected an http(s) origin, without a path",
                 )
             })?,
+            ergo_api: parse_http_url(&ergo_api).ok_or_else(|| {
+                invalid(
+                    "CONCIERGE_ERGO_API",
+                    ergo_api.clone(),
+                    "expected a plain http URL",
+                )
+            })?,
             assets_dir: require("CONCIERGE_ASSETS")?.into(),
             state_dir: require("STATE_DIRECTORY")?.into(),
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
@@ -84,18 +96,35 @@ impl Config {
     }
 
     pub fn read_session_key(&self) -> anyhow::Result<Vec<u8>> {
-        let path = self.credentials_dir.join(SESSION_KEY_CREDENTIAL);
-        let key = std::fs::read_to_string(&path)
-            .with_context(|| format!("can't read {}", path.display()))?;
-        let key = key.trim();
+        let key = self.read_credential(SESSION_KEY_CREDENTIAL)?;
         anyhow::ensure!(
             key.len() >= MIN_SESSION_KEY_BYTES,
-            "{} holds {} bytes; a session key needs at least {MIN_SESSION_KEY_BYTES}",
-            path.display(),
+            "the {SESSION_KEY_CREDENTIAL} credential holds {} bytes; a session key needs at least {MIN_SESSION_KEY_BYTES}",
             key.len()
         );
-        Ok(key.as_bytes().to_vec())
+        Ok(key.into_bytes())
     }
+
+    /// A client for Ergo's API, with the token from the credentials.
+    pub fn ergo_client(&self) -> anyhow::Result<Client> {
+        let token = self.read_credential(ERGO_API_TOKEN_CREDENTIAL)?;
+        anyhow::ensure!(
+            !token.is_empty(),
+            "the {ERGO_API_TOKEN_CREDENTIAL} credential is empty"
+        );
+        Ok(Client::new(self.ergo_api.clone(), token))
+    }
+
+    fn read_credential(&self, name: &str) -> anyhow::Result<String> {
+        let path = self.credentials_dir.join(name);
+        let value = std::fs::read_to_string(&path)
+            .with_context(|| format!("can't read {}", path.display()))?;
+        Ok(value.trim().to_owned())
+    }
+}
+
+fn parse_http_url(url: &str) -> Option<Url> {
+    Url::parse(url).ok().filter(|url| url.scheme() == "http")
 }
 
 fn parse_origin(url: &str) -> Option<String> {
@@ -132,6 +161,10 @@ mod tests {
         Config::from_vars(|name| vars.get(name).copied().flatten().map(str::to_owned))
     }
 
+    fn ergo_api(url: &str) -> Result<Url, ConfigError> {
+        parse_with(&[("CONCIERGE_ERGO_API", Some(url))]).map(|config| config.ergo_api)
+    }
+
     fn public_url(url: &str) -> Result<String, ConfigError> {
         parse_with(&[("CONCIERGE_PUBLIC_URL", Some(url))]).map(|config| config.public_url)
     }
@@ -143,6 +176,7 @@ mod tests {
             Ok(Config {
                 listen: "127.0.0.1:8080".parse().unwrap(),
                 public_url: "https://members.weblounge.org".into(),
+                ergo_api: "http://127.0.0.1:8089".parse().unwrap(),
                 assets_dir: "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members"
                     .into(),
                 state_dir: "/var/lib/concierge".into(),
@@ -169,6 +203,24 @@ mod tests {
         ] {
             assert!(
                 matches!(public_url(url), Err(ConfigError::Invalid { .. })),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn reaches_ergo_wherever_its_api_listens() {
+        assert_eq!(
+            ergo_api("http://127.0.0.1:18089"),
+            Ok("http://127.0.0.1:18089".parse().unwrap())
+        );
+    }
+
+    #[test]
+    fn rejects_ergo_api_urls_that_are_not_plain_http() {
+        for url in ["127.0.0.1:8089", "https://127.0.0.1:8089"] {
+            assert!(
+                matches!(ergo_api(url), Err(ConfigError::Invalid { .. })),
                 "{url}"
             );
         }
@@ -215,5 +267,18 @@ mod tests {
         std::fs::write(dir.path().join(SESSION_KEY_CREDENTIAL), "hunter2\n").unwrap();
         let error = config.read_session_key().unwrap_err().to_string();
         assert!(error.contains("holds 7 bytes"), "{error}");
+    }
+
+    #[test]
+    fn builds_an_ergo_client_from_the_generated_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_with_credentials(dir.path());
+        assert!(config.ergo_client().is_err());
+        std::fs::write(dir.path().join(ERGO_API_TOKEN_CREDENTIAL), "\n").unwrap();
+        let error = config.ergo_client().unwrap_err().to_string();
+        assert!(error.contains("is empty"), "{error}");
+        std::fs::write(dir.path().join(ERGO_API_TOKEN_CREDENTIAL), "5e5a1c\n").unwrap();
+        let client = config.ergo_client().unwrap();
+        assert!(format!("{client:?}").contains("http://127.0.0.1:8089/"));
     }
 }

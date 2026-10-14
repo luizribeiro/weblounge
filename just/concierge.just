@@ -8,8 +8,9 @@ dev port="8080":
   set -euo pipefail
   dev="$PWD/{{dev_dir}}"
   mkdir -p "$dev/state" "$dev/credentials"
-  key="$dev/credentials/session-key"
-  [ -e "$key" ] || od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$key"
+  for secret in session-key ergo-api-token; do
+    [ -e "$dev/credentials/$secret" ] || od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$dev/credentials/$secret"
+  done
   nix run .#web.watchMembers -- web "$dev/assets" &
   trap 'kill $!' EXIT
   until [ -e "$dev/assets/manifest.json" ]; do sleep 0.2; done

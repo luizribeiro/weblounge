@@ -7,7 +7,7 @@ use tokio::net::TcpListener;
 enum Command {
     /// Serve the site on CONCIERGE_LISTEN.
     Serve,
-    /// Show the configuration, state directory and secrets this process sees.
+    /// Show the configuration, state, secrets, database and Ergo this process sees.
     Status,
 }
 
@@ -17,12 +17,15 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     match command {
         Command::Serve => serve(config).await,
-        Command::Status => status::report(&config).map(|report| print!("{report}")),
+        Command::Status => status::report(&config)
+            .await
+            .map(|report| print!("{report}")),
     }
 }
 
 async fn serve(config: Config) -> anyhow::Result<()> {
     config.read_session_key()?;
+    config.ergo_client()?;
     Db::open(&config.database_path()).await?;
     let assets = Assets::load(&config.assets_dir)?;
     let listener = TcpListener::bind(config.listen).await?;

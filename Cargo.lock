@@ -323,6 +323,7 @@ dependencies = [
  "askama",
  "axum",
  "clap",
+ "ergo-api",
  "http-body-util",
  "serde",
  "serde_json",

@@ -46,6 +46,15 @@ impl Db {
         .fetch_one(&self.pool)
         .await
     }
+
+    /// Members who haven't been removed.
+    pub async fn member_count(&self) -> sqlx::Result<i64> {
+        sqlx::query_scalar!(
+            r#"SELECT COUNT(*) AS "count!: i64" FROM members WHERE removed_at IS NULL"#
+        )
+        .fetch_one(&self.pool)
+        .await
+    }
 }
 
 #[cfg(test)]

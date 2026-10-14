@@ -34,7 +34,7 @@ let
   };
 in
 {
-  imports = [ ./loopback.nix ./nginx.nix ./secrets.nix ];
+  imports = [ ./ergo.nix ./loopback.nix ./nginx.nix ./secrets.nix ];
 
   options.weblounge.concierge.listen = lib.mkOption {
     type = lib.types.str;
@@ -46,6 +46,7 @@ in
     weblounge.loopbackListeners.Concierge = cfg.listen;
 
     weblounge.secrets.session-key.loadedBy = [ "concierge" ];
+    weblounge.secrets.ergo-api-token.loadedBy = [ "concierge" ];
 
     systemd.services.concierge = {
       description = "Concierge, the members' site";
@@ -60,6 +61,7 @@ in
         Environment = [
           "CONCIERGE_LISTEN=${cfg.listen}"
           "CONCIERGE_PUBLIC_URL=${publicUrl}"
+          "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
           "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"
         ];
 
