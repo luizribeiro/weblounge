@@ -1,10 +1,11 @@
 { lib, ... }:
 
 let
+  httpsPort = 10443;
   forwardedPorts = {
     "10022" = 22;
     "10080" = 80;
-    "10443" = 443;
+    ${toString httpsPort} = 443;
     "16697" = 6697;
   };
 in
@@ -14,6 +15,7 @@ in
 
     # Browsers resolve *.localhost to loopback, where the ports are forwarded.
     weblounge.domain = "weblounge.localhost";
+    weblounge.httpsPort = httpsPort;
 
     virtualisation = {
       cores = 2;

@@ -44,6 +44,17 @@ pkgs.testers.runNixOSTest {
     def irc(*commands, machine=client, **options):
         return machine.succeed(irc_command(*commands, **options))
 
+    def https(name, path="/", *flags):
+        address = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
+        return client.succeed(shlex.join(
+            ["curl", "-sk", "--resolve", f"{name}:443:{address}", *flags, f"https://{name}{path}"]
+        ))
+
+    def assert_loopback_only(port, path):
+        listeners = credenza.succeed(f"ss -Htln 'sport = :{port}'")
+        assert listeners.split()[3] == f"127.0.0.1:{port}" and listeners.count("\n") == 1, listeners
+        client.fail(f"curl -s --max-time 3 http://credenza:{port}{path}")
+
     def assert_client_address_absent(logs):
         addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
         patterns = shlex.join(arg for address in addresses for arg in ["-e", address])
@@ -108,10 +119,7 @@ pkgs.testers.runNixOSTest {
         assert credenza.succeed("systemctl show -P MainPID ergochat") == pid
 
     with subtest("irc.weblounge.org in a browser redirects to the landing page"):
-        address = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
-        redirect = client.succeed(
-            f"curl -sk --resolve irc.weblounge.org:443:{address} -o /dev/null -w '%{{redirect_url}}' https://irc.weblounge.org/"
-        )
+        redirect = https("irc.weblounge.org", "/", "-o", "/dev/null", "-w", "%{redirect_url}")
         assert redirect == "https://weblounge.org/", redirect
 
     with subtest("a client that doesn't log in with SASL is turned away, even from loopback"):
@@ -127,9 +135,7 @@ pkgs.testers.runNixOSTest {
         assert status == "200" and '"success":true' in body, (status, body)
         _, status = ergo_api("status", "not-the-token")
         assert status == "401", status
-        listeners = credenza.succeed("ss -Htln 'sport = :8089'")
-        assert listeners.split()[3] == "127.0.0.1:8089" and listeners.count("\n") == 1, listeners
-        client.fail("curl -s --max-time 3 http://credenza:8089/v1/status")
+        assert_loopback_only(8089, "/v1/status")
 
     with subtest("the API token stays out of the Nix store and readable by root alone"):
         modes = credenza.succeed("stat -c '%a %U' /var/lib/weblounge-secrets /var/lib/weblounge-secrets/ergo-api-token")
@@ -191,6 +197,32 @@ pkgs.testers.runNixOSTest {
         assert json.loads(body)["alwaysOn"] == "off", body
         body, _ = ergo_api("ns/saget", token, accountName=carol["account"])
         assert json.loads(body)["alwaysOn"] == "off", body
+
+    with subtest("members.weblounge.org serves concierge's page in the shared styles"):
+        credenza.wait_for_unit("concierge.service")
+        credenza.wait_for_open_port(8080)
+        page = https("members.weblounge.org", "/", "-f")
+        assert "Members' entrance." in page, page
+        stylesheet = re.search(r'href="(/assets/members-[A-Z0-9]+\.css)"', page)
+        assert stylesheet, page
+        css = https("members.weblounge.org", stylesheet[1], "-f")
+        assert "--paper:" in css, css
+
+    with subtest("concierge serves the assets its page links, under hashed names cached for good"):
+        member_assets = re.findall(r'href="(/assets/[^"]+)"', page)
+        for asset in member_assets:
+            assert re.fullmatch(r"/assets/\w+-[A-Z0-9]{8}\.\w+", asset), asset
+            headers = https("members.weblounge.org", asset, "-fI").lower()
+            assert "cache-control: public, max-age=31536000, immutable" in headers, headers
+        types = {https("members.weblounge.org", asset, "-f", "-o", "/dev/null", "-w", "%{content_type}") for asset in member_assets}
+        assert types == {"text/css", "image/svg+xml"}, (member_assets, types)
+
+    with subtest("concierge answers health checks"):
+        health = https("members.weblounge.org", "/healthz", "-f")
+        assert health == "ok", health
+
+    with subtest("concierge listens on credenza's loopback only"):
+        assert_loopback_only(8080, "/healthz")
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")

@@ -45,7 +45,8 @@
             })
             {
               credenza = ./tests/credenza.nix;
-              ergo-api-loopback = ./tests/ergo-api-loopback.nix;
+              loopback-listeners = ./tests/loopback-listeners.nix;
+              public-names = ./tests/public-names.nix;
             };
         }
       ];
