@@ -12,6 +12,9 @@ in
   virtualisation.vmVariant = {
     imports = [ ./offline-acme.nix ];
 
+    # Browsers resolve *.localhost to loopback, where the ports are forwarded.
+    weblounge.domain = "weblounge.localhost";
+
     virtualisation = {
       cores = 2;
       memorySize = 2048;

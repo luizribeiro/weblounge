@@ -1,12 +1,15 @@
 { config, pkgs, ... }:
 
+let
+  inherit (config.weblounge) domain;
+in
 {
   imports = [ ./nginx.nix ];
 
-  services.nginx.virtualHosts."weblounge.org" = {
+  services.nginx.virtualHosts.${domain} = {
     default = true;
     serverAliases = [
-      "www.weblounge.org"
+      "www.${domain}"
       config.networking.fqdn
     ];
     enableACME = true;

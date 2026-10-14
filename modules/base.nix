@@ -1,5 +1,4 @@
 {
-  networking.domain = "weblounge.org";
   networking.firewall.enable = true;
 
   services.openssh = {

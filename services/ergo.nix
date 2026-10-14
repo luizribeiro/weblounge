@@ -3,7 +3,8 @@
 let
   cfg = config.weblounge.ergo;
   yaml = pkgs.formats.yaml { };
-  serverName = "irc.weblounge.org";
+  inherit (config.weblounge) domain;
+  serverName = "irc.${domain}";
   credentials = "/run/credentials/ergochat.service";
 
   # default.yaml's listeners, WebIRC gateway and admin oper are live
@@ -62,7 +63,7 @@ in
       history.retention.allow-individual-delete = true;
       webpush = {
         enabled = true;
-        subscriber = "https://weblounge.org";
+        subscriber = "https://${domain}";
       };
       api = {
         enabled = true;
@@ -111,7 +112,7 @@ in
     services.nginx.virtualHosts.${serverName} = {
       enableACME = true;
       forceSSL = true;
-      globalRedirect = config.networking.domain;
+      globalRedirect = domain;
     };
 
     networking.firewall.allowedTCPPorts = [ 6697 ];
