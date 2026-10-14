@@ -8,10 +8,6 @@ vmTest ''
           ["${pkgs.sqlite}/bin/sqlite3", "-readonly", "/var/lib/private/concierge/concierge.db", query]
       ))
 
-  def files_containing(text):
-      credenza.succeed("sync")
-      return credenza.succeed(f"grep -rlaF {shlex.quote(text)} /var/lib /var/log || true").split()
-
   grace = {"account": "grace", "password": "willow-harbor-58"}
   graces_browser = Browser("grace")
   email = "grace@example.org"
@@ -64,7 +60,8 @@ vmTest ''
   with subtest("leaving: an admin deletes the account, its email leaves the disk, and IRC stops taking it"):
       assert " 903 " in irc(**grace)
       concierge_admin("member", "delete", "grace")
-      assert files_containing(email) == [], files_containing(email)
+      found = files_containing(email)
+      assert found == [], found
       client.fail(irc_command(**grace))
       assert graces_browser.get("/", *outcome) == f"303 https://{members}/signin"
 
@@ -85,7 +82,8 @@ vmTest ''
       assert said_in_channel in lounge_history()
 
   with subtest("messages: direct messages never reach the disk"):
-      assert files_containing(said_in_private) == [], files_containing(said_in_private)
+      found = files_containing(said_in_private)
+      assert found == [], found
 
   # Moves the clock, so it goes last.
   with subtest("messages: a week on, channel messages leave the disk"):
@@ -94,9 +92,10 @@ vmTest ''
       credenza.succeed("systemctl restart ergochat")
       credenza.wait_for_open_port(6697)
       credenza.wait_until_succeeds(
-          f"systemctl start ergo-history-vacuum && ! grep -rqaF {said_in_channel} /var/lib/private/ergo", timeout=60
+          f"systemctl start ergo-history-vacuum && ! grep -rqaF {shlex.quote(said_in_channel)} /var/lib/private/ergo", timeout=60
       )
-      assert files_containing(said_in_channel) == [], files_containing(said_in_channel)
+      found = files_containing(said_in_channel)
+      assert found == [], found
       assert said_in_channel not in lounge_history()
       owners = credenza.succeed("stat -c %u /var/lib/private/ergo /var/lib/private/ergo/ergo_history.db*").split()
       assert len(set(owners)) == 1, owners

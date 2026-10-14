@@ -89,21 +89,24 @@ def add_member(account, password, admin=False):
     assert signed_up == "200 ", signed_up
 
 
-def client_address_patterns():
-    addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
-    return shlex.join(arg for address in addresses for arg in ["-e", address])
+def client_addresses():
+    return set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
+
+
+def patterns(texts):
+    return shlex.join(arg for text in texts for arg in ["-e", text])
 
 
 def assert_client_address_absent(logs):
     credenza.succeed("journalctl --sync")
-    credenza.fail(f"{logs} | grep -qF {client_address_patterns()}")
+    credenza.fail(f"{logs} | grep -qF {patterns(client_addresses())}")
 
 
-def files_naming_client_address():
-    """Files under /var/lib and /var/log, the journal's aside, that name the client."""
+def files_containing(*texts):
+    """Files under /var/lib and /var/log, the journal's aside, that hold any of texts."""
     credenza.succeed("sync")
     return credenza.succeed(
-        f"grep -rlaF --exclude-dir=journal {client_address_patterns()} /var/lib /var/log || true"
+        f"grep -rlaF --exclude-dir=journal {patterns(texts)} /var/lib /var/log || true"
     ).split()
 
 

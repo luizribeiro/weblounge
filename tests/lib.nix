@@ -57,6 +57,7 @@ pkgs.testers.runNixOSTest {
         assert_client_address_absent("journalctl | grep -vE ' sshd(-session|-auth)?\\[[0-9]+\\]: '")
 
     with subtest("after everything above, no file on credenza names a client address"):
-        assert files_naming_client_address() == [], files_naming_client_address()
+        found = files_containing(*client_addresses())
+        assert found == [], found
   '';
 }
