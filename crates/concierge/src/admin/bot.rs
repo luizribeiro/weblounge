@@ -164,8 +164,8 @@ fn ensure_live(bot: &Bot) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Registers the Ergo account `name` with `password` and records it as a
-/// bot of `owner`, answering its name.
+/// Records `name` as a bot of `owner` and registers its Ergo account with
+/// `password`, answering its name.
 async fn register(
     admin: &Admin,
     owner: &Member,
@@ -178,14 +178,8 @@ async fn register(
     if admin.db.name_held(nick.as_str()).await? {
         return Err(taken());
     }
-    let registration = admin
-        .ergo
-        .register(nick.clone(), password)
-        .await
-        .with_context(|| format!("Ergo didn't create {nick}"))?;
-    if registration == Registration::NameTaken {
-        return Err(taken());
-    }
+    // Recorded first, so an account Ergo creates always has its row; the
+    // row goes again if Ergo creates nothing.
     admin
         .db
         .insert_bot(&NewBot {
@@ -194,8 +188,15 @@ async fn register(
             note,
             created_at: db::now(),
         })
-        .await
-        .with_context(|| format!("Ergo created {nick}, but recording it as a bot failed"))?;
+        .await?;
+    let registration = admin.ergo.register(nick.clone(), password).await;
+    if !matches!(registration, Ok(Registration::Created)) {
+        admin.db.forget_bot(nick.as_str()).await?;
+    }
+    match registration.with_context(|| format!("Ergo didn't create {nick}"))? {
+        Registration::Created => {}
+        Registration::NameTaken => return Err(taken()),
+    }
     stay_offline_when_stopped(admin, nick.as_str())
         .await
         .with_context(|| {

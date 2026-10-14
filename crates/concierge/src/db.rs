@@ -740,6 +740,14 @@ impl Db {
         .await
     }
 
+    /// Drops the row of a bot Ergo never created, freeing its name.
+    pub async fn forget_bot(&self, account: &str) -> sqlx::Result<()> {
+        sqlx::query!("DELETE FROM bots WHERE account = ?", account)
+            .execute(&self.pool)
+            .await
+            .map(drop)
+    }
+
     /// Every bot's account, deleted ones included.
     pub async fn bot_accounts(&self) -> sqlx::Result<Vec<BotAccount>> {
         sqlx::query_as!(
@@ -1466,6 +1474,9 @@ pub(crate) mod tests {
         assert!(error.to_string().contains("FOREIGN KEY"), "{error}");
         let error = db.insert_bot(&bot("Dalek", "alice")).await.unwrap_err();
         assert!(error.to_string().contains("UNIQUE"), "{error}");
+        db.forget_bot("DALEK").await.unwrap();
+        assert!(!db.name_held("dalek").await.unwrap());
+        db.insert_bot(&bot("Dalek", "alice")).await.unwrap();
     }
 
     #[tokio::test]
