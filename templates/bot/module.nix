@@ -46,9 +46,12 @@ let
       };
 
       caFile = mkOption {
-        type = types.nullOr types.path;
+        type = types.nullOr types.str;
         default = null;
-        description = "A CA to trust besides the system's, such as a test server's self-signed one.";
+        description = ''
+          A CA to trust besides the system's, such as a test server's
+          self-signed one. Read by systemd, so it may be readable by root only.
+        '';
       };
     };
   };
@@ -64,12 +67,13 @@ let
       IRC_NICK = bot.nick;
       IRC_CHANNELS = lib.concatStringsSep "," bot.channels;
     } // lib.optionalAttrs (bot.caFile != null) {
-      IRC_CA_FILE = "${bot.caFile}";
+      IRC_CA_FILE = "%d/ca";
     };
 
     serviceConfig = {
       ExecStart = lib.getExe bot.package;
-      LoadCredential = "password:${bot.passwordFile}";
+      LoadCredential = [ "password:${bot.passwordFile}" ]
+        ++ lib.optional (bot.caFile != null) "ca:${bot.caFile}";
       Restart = "on-failure";
       RestartSec = 10;
 
