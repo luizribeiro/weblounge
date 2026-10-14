@@ -52,10 +52,9 @@ def concierge_admin(*args):
     return credenza.succeed(concierge_admin_command(*args))
 
 
-def concierge_sql(query):
-    return credenza.succeed(
-        shlex.join([tools["sqlite3"], "-readonly", "/var/lib/private/concierge/concierge.db", query])
-    )
+def concierge_sql(query, *, write=False):
+    readonly = [] if write else ["-readonly"]
+    return credenza.succeed(shlex.join([tools["sqlite3"], *readonly, "/var/lib/private/concierge/concierge.db", query]))
 
 
 def invite_code(link):
