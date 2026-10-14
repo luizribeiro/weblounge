@@ -88,8 +88,8 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
 /// A member's invites, as the Invites tab shows them.
 pub struct Invites {
     pub invitees: Vec<Invitee>,
-    /// `None` for admins, who have no quota.
-    pub remaining: Option<i64>,
+    /// How many more may be open now.
+    pub remaining: i64,
 }
 
 impl Invites {
@@ -105,8 +105,6 @@ impl Invites {
 
 fn inviter(member: &Member) -> Inviter {
     Inviter {
-        invite_quota: member.invite_quota,
-        is_admin: member.is_admin,
         removed: member.removed_at.is_some(),
     }
 }

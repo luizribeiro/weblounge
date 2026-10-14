@@ -6,17 +6,14 @@
       <h1>Invites</h1>
       <section class="card tab-card invites" aria-labelledby="invites-title">
         <h2 class="eyebrow" id="invites-title">Your invites</h2>
-        {%- match invites.remaining %}
-        {%- when Some(0) %}
-        <p class="muted">No invites left.</p>
+        {%- if invites.remaining == 0 %}
+        <p class="muted">You have {{ crate::invite_rules::MAX_OPEN }} open invites. Another frees up when one is used or expires.</p>
         {%- else %}
         <form method="post" action="/invites">
           <button class="button" type="submit">Invite someone</button>
-          <span class="muted">
-            {%- if let Some(left) = invites.remaining %}{{ left }} left{% else %}Admins have no quota.{% endif -%}
-          </span>
+          <span class="muted">Up to {{ crate::invite_rules::MAX_OPEN }} open at a time.</span>
         </form>
-        {%- endmatch %}
+        {%- endif %}
         {%- if !invites.invitees.is_empty() %}
         <h3 class="eyebrow">You invited</h3>
         <ul class="invitees">
