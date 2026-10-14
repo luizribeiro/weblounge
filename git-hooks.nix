@@ -15,6 +15,7 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
         noLambdaPatternNames = true;
       };
     };
+    rustfmt.enable = true;
     shellcheck.enable = true;
     yamllint.enable = true;
     biome = {
