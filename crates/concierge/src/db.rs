@@ -66,6 +66,42 @@ pub struct NewSession<'a> {
     pub expires_at: i64,
 }
 
+pub struct NewAuthorizationCode<'a> {
+    pub code_hash: &'a [u8],
+    /// The session that approved it, whose member it signs in.
+    pub session_hash: &'a [u8],
+    pub client_id: &'a str,
+    pub redirect_uri: &'a str,
+    pub code_challenge: &'a str,
+    pub expires_at: i64,
+}
+
+/// An authorization code, taken out of the database by its one use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthorizationCode {
+    pub session_hash: Vec<u8>,
+    pub client_id: String,
+    pub redirect_uri: String,
+    pub code_challenge: String,
+    pub expires_at: i64,
+}
+
+pub struct NewAccessToken<'a> {
+    pub token_hash: &'a [u8],
+    pub session_hash: &'a [u8],
+    pub client_id: &'a str,
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
+/// A live access token, of a member who hasn't been removed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccessToken {
+    pub account: String,
+    pub client_id: String,
+    pub expires_at: i64,
+}
+
 pub struct NewInvite<'a> {
     pub code: &'a str,
     /// `None` for a root invite.
@@ -510,6 +546,93 @@ impl Db {
         }
         transaction.commit().await?;
         Ok(Redemption::Redeemed)
+    }
+
+    /// Stores an authorization code, cleaning up expired ones while at it.
+    pub async fn insert_authorization_code(
+        &self,
+        code: &NewAuthorizationCode<'_>,
+        now: i64,
+    ) -> sqlx::Result<()> {
+        sqlx::query!("DELETE FROM oauth_codes WHERE expires_at <= ?", now)
+            .execute(&self.pool)
+            .await?;
+        sqlx::query!(
+            "INSERT INTO oauth_codes
+                 (code_hash, session_hash, client_id, redirect_uri, code_challenge, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            code.code_hash,
+            code.session_hash,
+            code.client_id,
+            code.redirect_uri,
+            code.code_challenge,
+            code.expires_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    /// Removes the code that hashes to `code_hash` and answers it, so no
+    /// code is used twice, even by requests racing each other.
+    pub async fn take_authorization_code(
+        &self,
+        code_hash: &[u8],
+    ) -> sqlx::Result<Option<AuthorizationCode>> {
+        sqlx::query_as!(
+            AuthorizationCode,
+            "DELETE FROM oauth_codes WHERE code_hash = ?
+             RETURNING session_hash, client_id, redirect_uri, code_challenge, expires_at",
+            code_hash
+        )
+        .fetch_optional(&self.pool)
+        .await
+    }
+
+    /// Stores an access token, cleaning up expired ones while at it.
+    pub async fn insert_access_token(&self, token: &NewAccessToken<'_>) -> sqlx::Result<()> {
+        sqlx::query!(
+            "DELETE FROM oauth_tokens WHERE expires_at <= ?",
+            token.created_at
+        )
+        .execute(&self.pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO oauth_tokens (token_hash, session_hash, client_id, created_at, expires_at)
+             VALUES (?, ?, ?, ?, ?)",
+            token.token_hash,
+            token.session_hash,
+            token.client_id,
+            token.created_at,
+            token.expires_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    /// The live token that hashes to `token_hash`, while its session lasts
+    /// and its member hasn't been removed.
+    pub async fn access_token(
+        &self,
+        token_hash: &[u8],
+        now: i64,
+    ) -> sqlx::Result<Option<AccessToken>> {
+        sqlx::query_as!(
+            AccessToken,
+            r#"SELECT members.account AS "account!", oauth_tokens.client_id,
+                      oauth_tokens.expires_at
+               FROM oauth_tokens
+               JOIN sessions ON sessions.token_hash = oauth_tokens.session_hash
+               JOIN members ON members.account = sessions.account
+               WHERE oauth_tokens.token_hash = ? AND oauth_tokens.expires_at > ?
+                 AND sessions.expires_at > ? AND members.removed_at IS NULL"#,
+            token_hash,
+            now,
+            now,
+        )
+        .fetch_optional(&self.pool)
+        .await
     }
 
     /// Members who haven't been removed.
@@ -958,6 +1081,137 @@ pub(crate) mod tests {
         let alice = db.member("alice").await.unwrap().unwrap();
         assert_eq!(alice.email.as_deref(), Some("alice@example.net"));
         assert_eq!((alice.email_verified_at, alice.news_opt_in), (None, false));
+    }
+
+    fn code<'a>(
+        session_hash: &'a [u8],
+        code_hash: &'a [u8],
+        expires_at: i64,
+    ) -> NewAuthorizationCode<'a> {
+        NewAuthorizationCode {
+            code_hash,
+            session_hash,
+            client_id: "gamja",
+            redirect_uri: "https://irc.weblounge.org/",
+            code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            expires_at,
+        }
+    }
+
+    fn token<'a>(
+        session_hash: &'a [u8],
+        token_hash: &'a [u8],
+        expires_at: i64,
+    ) -> NewAccessToken<'a> {
+        NewAccessToken {
+            token_hash,
+            session_hash,
+            client_id: "gamja",
+            created_at: 0,
+            expires_at,
+        }
+    }
+
+    #[tokio::test]
+    async fn an_authorization_code_can_be_taken_once() {
+        let (db, _dir) = with_sessions().await;
+        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+            .await
+            .unwrap();
+        let taken = db.take_authorization_code(b"\xc1").await.unwrap().unwrap();
+        assert_eq!(
+            taken,
+            AuthorizationCode {
+                session_hash: b"\xa1".to_vec(),
+                client_id: "gamja".into(),
+                redirect_uri: "https://irc.weblounge.org/".into(),
+                code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".into(),
+                expires_at: 60,
+            }
+        );
+        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
+        assert_eq!(db.take_authorization_code(b"\xff").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn expired_codes_are_cleaned_up_when_another_is_issued() {
+        let (db, _dir) = with_sessions().await;
+        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+            .await
+            .unwrap();
+        db.insert_authorization_code(&code(b"\xa1", b"\xc2", 120), 60)
+            .await
+            .unwrap();
+        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
+        assert!(db.take_authorization_code(b"\xc2").await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn an_access_token_names_its_member_until_it_expires() {
+        let (db, _dir) = with_sessions().await;
+        db.insert_access_token(&token(b"\xa2", b"\xd1", 150))
+            .await
+            .unwrap();
+        let live = db.access_token(b"\xd1", 149).await.unwrap();
+        assert_eq!(
+            live,
+            Some(AccessToken {
+                account: "alice".into(),
+                client_id: "gamja".into(),
+                expires_at: 150,
+            })
+        );
+        assert_eq!(db.access_token(b"\xd1", 150).await.unwrap(), None);
+        assert_eq!(db.access_token(b"\xff", 0).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn codes_and_tokens_end_with_their_session() {
+        let (db, _dir) = with_sessions().await;
+        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+            .await
+            .unwrap();
+        db.insert_access_token(&token(b"\xa1", b"\xd1", 300))
+            .await
+            .unwrap();
+        db.insert_access_token(&token(b"\xa2", b"\xd2", 300))
+            .await
+            .unwrap();
+        assert_eq!(
+            db.access_token(b"\xd1", 100).await.unwrap(),
+            None,
+            "a1 expired"
+        );
+        db.end_session(b"\xa1").await.unwrap();
+        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
+        assert!(db.access_token(b"\xd2", 0).await.unwrap().is_some());
+        db.end_sessions("alice").await.unwrap();
+        assert_eq!(db.access_token(b"\xd2", 0).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn a_token_needs_an_existing_session() {
+        let (db, _dir) = with_sessions().await;
+        assert!(
+            db.insert_access_token(&token(b"\xee", b"\xd1", 300))
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_removed_members_tokens_name_nobody() {
+        let (db, _dir) = with_sessions().await;
+        db.insert_access_token(&token(b"\xa2", b"\xd1", 300))
+            .await
+            .unwrap();
+        execute(
+            &db,
+            "UPDATE members SET invite_quota = 0, removed_at = 1 WHERE account = 'alice'",
+        )
+        .await
+        .unwrap();
+        assert_eq!(db.access_token(b"\xd1", 0).await.unwrap(), None);
     }
 
     #[tokio::test]

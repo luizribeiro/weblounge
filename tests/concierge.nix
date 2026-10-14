@@ -45,7 +45,7 @@ vmTest ''
           "public url: https://members.weblounge.org\n"
           f"state directory: /var/lib/concierge (writable by uid {service_uid})\n"
           "session key: 64 bytes\n"
-          "database: /var/lib/concierge/concierge.db (migration 20261014120000, 0 members)\n"
+          "database: /var/lib/concierge/concierge.db (migration 20261015120000, 0 members)\n"
           "ergo: http://127.0.0.1:8089/ answers, version 2.19.1\n"
       ), (service_uid, status)
       credenza.fail(concierge_admin_command("no-such-command"))
@@ -65,7 +65,7 @@ vmTest ''
       adopted = concierge_admin("member", "adopt", "dana", "--admin")
       assert adopted == "adopted Dana as an admin\n", adopted
       status = concierge_admin("status")
-      assert "(migration 20261014120000, 1 members)" in status, status
+      assert "(migration 20261015120000, 1 members)" in status, status
 
   with subtest("concierge-admin member grant-invites raises a member's invite quota"):
       granted = concierge_admin("member", "grant-invites", "dana", "3")
