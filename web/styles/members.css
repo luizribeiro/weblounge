@@ -5,6 +5,7 @@
 @import "./components/button.css";
 @import "./components/form.css";
 @import "./components/card.css";
+@import "./components/chair.css";
 
 .account-grid {
   display: grid;
@@ -17,6 +18,53 @@
 
   @media (min-width: 52rem) {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+.home {
+  display: grid;
+  grid-template-areas: "title" "chair" "actions";
+  gap: 1.5rem;
+
+  & h1 {
+    grid-area: title;
+    margin: 0;
+  }
+
+  @media (min-width: 52rem) {
+    grid-template-columns: 1fr minmax(0, 28rem);
+    grid-template-areas: "title chair" "actions chair";
+    grid-template-rows: 1fr 1fr;
+    column-gap: 4rem;
+
+    & h1 {
+      align-self: end;
+    }
+  }
+}
+
+.home-chair {
+  grid-area: chair;
+
+  & #chair {
+    width: min(100%, 22rem);
+    margin: 0 auto;
+
+    @media (min-width: 52rem) {
+      width: 100%;
+    }
+  }
+}
+
+.home-actions {
+  grid-area: actions;
+
+  & .open-chat {
+    margin-bottom: 0.5rem;
+  }
+
+  & .links a {
+    text-decoration: underline;
   }
 }
 

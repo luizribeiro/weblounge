@@ -6,7 +6,12 @@
 {% block content %}
       <section class="home" aria-labelledby="home-title">
         <h1 id="home-title">Pull up a chair, {{ nick }}.</h1>
-        {%- call components::open_chat(webchat) %}{% endcall %}
-        <p class="links"><a href="/clients">Use another client</a></p>
+        <div class="home-chair">
+{{ layout.assets.inline("chair.svg")?|safe }}
+        </div>
+        <div class="home-actions">
+          {%- call components::open_chat(webchat) %}{% endcall %}
+          <p class="links"><a href="/clients">Use another client</a></p>
+        </div>
       </section>
 {%- endblock %}

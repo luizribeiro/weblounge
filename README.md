@@ -39,7 +39,11 @@ stylesheet, `web/styles/members.css`, builds on the landing page's tokens
 and the components in `web/styles/components/`, and esbuild gives every
 asset a hashed name that concierge looks up in the build's manifest. Both
 sites draw the wordmark from `web/images/wordmark.svg` with `<use>`, and
-concierge's header mark is the favicon's `#mark`.
+concierge's header mark is the favicon's `#mark`. The network chair,
+`web/images/chair.svg`, is inlined by both: the landing page's build
+replaces `<!-- include images/chair.svg -->` with it, and the Home tab
+inlines concierge's built copy, so `scripts/chair` can animate it on
+either site.
 
 ```sh
 just concierge dev                            # run it on http://localhost:8080

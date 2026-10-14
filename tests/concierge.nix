@@ -87,6 +87,7 @@ vmTest ''
       assert signed_in == f"303 https://{members}/", signed_in
       home = browser.get("/", "-f")
       assert "Pull up a chair, Dana." in home, home
+      assert home.count("<circle ") == 53, home
       clients = browser.get("/clients", "-f")
       assert "<code>irc.weblounge.org</code>" in clients and "<code>6697</code>" in clients, clients
 

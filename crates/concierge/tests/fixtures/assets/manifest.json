@@ -25,6 +25,10 @@
     "images/wordmark.svg": {
       "bytes": 89,
       "imports": []
+    },
+    "images/chair.svg": {
+      "bytes": 99,
+      "imports": []
     }
   },
   "outputs": {
@@ -79,6 +83,17 @@
         }
       },
       "bytes": 89
+    },
+    "members/chair-K3J5NB2Q.svg": {
+      "imports": [],
+      "exports": [],
+      "entryPoint": "images/chair.svg",
+      "inputs": {
+        "images/chair.svg": {
+          "bytesInOutput": 99
+        }
+      },
+      "bytes": 99
     }
   }
 }

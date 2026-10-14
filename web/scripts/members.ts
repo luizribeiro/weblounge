@@ -1,3 +1,4 @@
+import { animateChair } from "./chair/animate";
 import "./password";
 import "./signup";
 
@@ -29,4 +30,9 @@ if (navigator.clipboard) {
     button.hidden = false;
     button.addEventListener("click", () => copy(button));
   }
+}
+
+const chair = document.getElementById("chair");
+if (chair instanceof SVGSVGElement) {
+  animateChair(chair);
 }

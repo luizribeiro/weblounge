@@ -75,6 +75,14 @@ impl Assets {
             .ok_or_else(|| askama::Error::custom(format!("no asset was built as {name}")))
     }
 
+    /// The text of the file built from an entry point, for drawings pages
+    /// inline so their scripts can animate them, such as `chair.svg`.
+    pub fn inline(&self, name: &str) -> askama::Result<&str> {
+        let url = self.url(name)?;
+        let file = &self.files[&url[URL_PREFIX.len()..]];
+        std::str::from_utf8(&file.body).map_err(askama::Error::custom)
+    }
+
     pub fn response(&self, file_name: &str) -> Option<Response> {
         self.files.get(file_name).map(|file| {
             let headers = [
@@ -139,6 +147,15 @@ mod tests {
     }
 
     #[test]
+    fn inlines_a_built_file_by_its_entry_point() {
+        let assets = fixture();
+        let chair = assets.inline("chair.svg").unwrap();
+        assert!(chair.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg" id="chair""#));
+        let error = assets.inline("sofa.svg").unwrap_err();
+        assert_eq!(error.to_string(), "no asset was built as sofa.svg");
+    }
+
+    #[test]
     fn names_a_missing_entry_point_in_the_error() {
         let error = fixture().url("invite.js").unwrap_err();
         assert_eq!(error.to_string(), "no asset was built as invite.js");
@@ -160,6 +177,7 @@ mod tests {
         assert_eq!(
             served,
             [
+                "chair-K3J5NB2Q.svg",
                 "favicon-E6HOAGDL.svg",
                 "members-7QK2WZ3D.js",
                 "members-N4AQSMXV.css",

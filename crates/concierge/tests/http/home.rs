@@ -28,3 +28,13 @@ async fn leads_to_other_clients_just_under_the_chat_and_nothing_else() {
         assert!(!main.contains(crowd), "{crowd}: {main}");
     }
 }
+
+#[tokio::test]
+async fn draws_the_landing_pages_chair_inline_for_the_script_to_animate() {
+    let page = home_of_alice().await;
+    let chair = page.find(r#"<svg xmlns="http://www.w3.org/2000/svg" id="chair""#);
+    assert!(
+        chair.is_some_and(|chair| chair < page.find(">Open chat<").unwrap()),
+        "{page}"
+    );
+}
