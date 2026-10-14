@@ -3,20 +3,21 @@
 use std::time::Instant;
 
 use axum::{
-    Json,
+    Form, Json,
     extract::{Query, Request, State},
     http::{HeaderValue, StatusCode, Uri, header},
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Serialize;
+use serde_json::json;
 
 use super::internal_error;
 use crate::{
     app::AppState,
     auth::{self, Visitor},
-    db::{self, NewAuthorizationCode},
-    oauth::{self, AuthorizationRequest, Refusal, WEBCHAT_CLIENT},
+    db::{self, NewAccessToken, NewAuthorizationCode},
+    oauth::{self, AuthorizationRequest, Refusal, TokenRequest, WEBCHAT_CLIENT},
     rate_limit::ClientAddress,
     session::Token,
 };
@@ -89,6 +90,67 @@ pub async fn authorize(
         return internal_error("Issuing an authorization code", error);
     }
     Redirect::to(&oauth::code_redirect(&authorization, code.as_str())).into_response()
+}
+
+/// Trades a code, with its PKCE verifier, for an access token that lasts
+/// as long as the session that approved the code. gamja keeps no refresh
+/// token and reuses its access token on every reconnection, so a token
+/// shorter than the session would cut members off mid-session.
+pub async fn token(
+    State(app): State<AppState>,
+    address: ClientAddress,
+    Form(request): Form<TokenRequest>,
+) -> Response {
+    if !app.oauth_requests.allows(address.0, Instant::now()) {
+        return token_error(StatusCode::TOO_MANY_REQUESTS, "temporarily_unavailable");
+    }
+    if request.grant_type != "authorization_code" {
+        return token_error(StatusCode::BAD_REQUEST, "unsupported_grant_type");
+    }
+    if request.client_id != WEBCHAT_CLIENT {
+        return token_error(StatusCode::UNAUTHORIZED, "invalid_client");
+    }
+    let Some(code) = Token::parse(&request.code) else {
+        return token_error(StatusCode::BAD_REQUEST, "invalid_grant");
+    };
+    let now = db::now();
+    let code = match app
+        .db
+        .take_authorization_code(&app.sessions.hash(&code))
+        .await
+    {
+        Ok(code) => code.filter(|code| request.redeems(code, now)),
+        Err(error) => return internal_error("Taking an authorization code", error),
+    };
+    let Some(code) = code else {
+        return token_error(StatusCode::BAD_REQUEST, "invalid_grant");
+    };
+    let session = match app.db.session(&code.session_hash, now).await {
+        Ok(Some(session)) => session,
+        Ok(None) => return token_error(StatusCode::BAD_REQUEST, "invalid_grant"),
+        Err(error) => return internal_error("Looking up a session", error),
+    };
+    let token = Token::generate();
+    let issued = NewAccessToken {
+        token_hash: &app.sessions.hash(&token),
+        session_hash: &code.session_hash,
+        client_id: WEBCHAT_CLIENT,
+        created_at: now,
+        expires_at: session.expires_at,
+    };
+    if let Err(error) = app.db.insert_access_token(&issued).await {
+        return internal_error("Issuing an access token", error);
+    }
+    let answer = json!({
+        "access_token": token.as_str(),
+        "token_type": "Bearer",
+        "expires_in": session.expires_at - now,
+    });
+    super::no_store(Json(answer).into_response()).await
+}
+
+fn token_error(status: StatusCode, error: &str) -> Response {
+    (status, Json(json!({ "error": error }))).into_response()
 }
 
 fn refuse(app: &crate::app::App, visitor: &Visitor, refusal: &Refusal) -> Response {

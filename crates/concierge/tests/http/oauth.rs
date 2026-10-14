@@ -4,7 +4,47 @@ use serde_json::Value;
 
 use crate::{PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
 
+impl Site {
+    /// Asks for a code as gamja does, with the session in `cookie`.
+    async fn authorization_code(&self, cookie: &str) -> String {
+        let response = self.get(&authorize_path(&[]), Some(cookie)).await;
+        code_in(location(&response))
+    }
+
+    /// Posts to the token endpoint from gamja's page, with changes to what
+    /// gamja sends.
+    async fn exchange(&self, code: &str, changes: &[(&str, &str)]) -> axum::response::Response {
+        self.exchange_from(code, changes, WEBCHAT_URL).await
+    }
+
+    async fn exchange_from(
+        &self,
+        code: &str,
+        changes: &[(&str, &str)],
+        origin: &str,
+    ) -> axum::response::Response {
+        let mut form = vec![
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("redirect_uri", REDIRECT_URI),
+            ("client_id", "gamja"),
+            ("code_verifier", VERIFIER),
+        ];
+        for (name, value) in changes {
+            form.retain(|(field, _)| field != name);
+            form.push((name, value));
+        }
+        let headers = [(header::ORIGIN.as_str(), origin)];
+        self.post_with("/oauth/token", &form, None, &headers).await
+    }
+}
+
+async fn json(response: axum::response::Response) -> Value {
+    serde_json::from_str(&body_text(response).await).unwrap()
+}
+
 /// RFC 7636, appendix B.
+const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
 const CHALLENGE: &str = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 const STATE: &str = "q7Hx2mZp9vLcT4wRfBa-_w";
 const REDIRECT_URI: &str = "https://irc.weblounge.org/";
@@ -235,4 +275,149 @@ async fn asking_for_a_code_renews_the_session() {
     let response = site.get(&authorize_path(&[]), Some(&cookie)).await;
     code_in(location(&response));
     assert!(site.session_expiry(&cookie).await.unwrap() > before);
+}
+
+#[tokio::test]
+async fn a_code_and_its_verifier_buy_a_token_that_lasts_as_long_as_the_session() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let code = site.authorization_code(&cookie).await;
+
+    let response = site.exchange(&code, &[]).await;
+
+    assert_eq!(response.status(), 200);
+    let headers = response.headers();
+    assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], WEBCHAT_URL);
+    assert_eq!(headers[header::CACHE_CONTROL], "no-store");
+    let session_left = site.session_expiry(&cookie).await.unwrap() - concierge::db::now();
+    let answer = json(response).await;
+    assert_eq!(answer["token_type"], "Bearer");
+    assert_eq!(answer["access_token"].as_str().unwrap().len(), 43);
+    let expires_in = answer["expires_in"].as_i64().unwrap();
+    assert!(
+        (session_left - 2..=session_left).contains(&expires_in),
+        "{answer}"
+    );
+    let stored: i64 = site.query_scalar("SELECT COUNT(*) FROM oauth_tokens").await;
+    assert_eq!(stored, 1);
+}
+
+#[tokio::test]
+async fn a_code_works_once_even_after_a_failed_try() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let code = site.authorization_code(&cookie).await;
+    assert_eq!(site.exchange(&code, &[]).await.status(), 200);
+    let reused = site.exchange(&code, &[]).await;
+    assert_eq!(reused.status(), 400);
+    assert_eq!(
+        json(reused).await,
+        serde_json::json!({"error": "invalid_grant"})
+    );
+
+    let code = site.authorization_code(&cookie).await;
+    let wrong = "eBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    assert_eq!(
+        site.exchange(&code, &[("code_verifier", wrong)])
+            .await
+            .status(),
+        400
+    );
+    assert_eq!(site.exchange(&code, &[]).await.status(), 400);
+}
+
+#[tokio::test]
+async fn a_code_is_bound_to_its_verifier_redirect_and_client() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    for (change, status, error) in [
+        (
+            (
+                "code_verifier",
+                "eBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+            ),
+            400,
+            "invalid_grant",
+        ),
+        (("code_verifier", ""), 400, "invalid_grant"),
+        (
+            ("redirect_uri", "https://evil.example/"),
+            400,
+            "invalid_grant",
+        ),
+        (("client_id", "ergo"), 401, "invalid_client"),
+        (
+            ("grant_type", "refresh_token"),
+            400,
+            "unsupported_grant_type",
+        ),
+    ] {
+        let code = site.authorization_code(&cookie).await;
+        let response = site.exchange(&code, &[change]).await;
+        assert_eq!(response.status(), status, "{change:?}");
+        assert_eq!(json(response).await["error"], error, "{change:?}");
+    }
+    let made_up = site
+        .exchange("q7Hx2mZp9vLcT4wRfBa-_wq7Hx2mZp9vLcT4wRfBa-_", &[])
+        .await;
+    assert_eq!(made_up.status(), 400);
+    let stored: i64 = site.query_scalar("SELECT COUNT(*) FROM oauth_tokens").await;
+    assert_eq!(stored, 0);
+}
+
+#[tokio::test]
+async fn an_expired_code_buys_nothing() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let code = site.authorization_code(&cookie).await;
+    site.execute(&format!(
+        "UPDATE oauth_codes SET expires_at = expires_at - {CODE_LIFETIME}"
+    ))
+    .await;
+    assert_eq!(site.exchange(&code, &[]).await.status(), 400);
+}
+
+#[tokio::test]
+async fn a_code_dies_with_the_session_that_approved_it() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let code = site.authorization_code(&cookie).await;
+    site.post("/signout", &[], Some(&cookie)).await;
+    assert_eq!(site.exchange(&code, &[]).await.status(), 400);
+}
+
+#[tokio::test]
+async fn only_the_web_client_may_post_to_the_token_endpoint() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let code = site.authorization_code(&cookie).await;
+    for origin in ["https://evil.example", PUBLIC_URL, "null"] {
+        let response = site.exchange_from(&code, &[], origin).await;
+        assert_eq!(response.status(), 403, "{origin}");
+        assert!(
+            !response
+                .headers()
+                .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+            "{origin}"
+        );
+    }
+    let response = site.post_with("/oauth/token", &[], None, &[]).await;
+    assert_eq!(response.status(), 403);
+    assert_eq!(site.exchange(&code, &[]).await.status(), 200);
+}
+
+#[tokio::test]
+async fn our_own_pages_cannot_post_from_the_web_clients_origin() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let headers = [(header::ORIGIN.as_str(), WEBCHAT_URL)];
+    let form = [("nick", "alice"), ("password", crate::PASSWORD)];
+    let response = site.post_with("/signin", &form, None, &headers).await;
+    assert_eq!(response.status(), 403);
 }

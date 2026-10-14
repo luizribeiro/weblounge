@@ -9,6 +9,8 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
+use crate::db::AuthorizationCode;
+
 /// The web client, gamja: public, so it has no secret, and PKCE stands in.
 pub const WEBCHAT_CLIENT: &str = "gamja";
 /// Ergo, the only client allowed to introspect tokens.
@@ -144,6 +146,28 @@ pub fn code_redirect(authorization: &Authorization, code: &str) -> String {
         .append_pair("state", &authorization.state)
         .finish();
     format!("{}?{query}", authorization.redirect_uri)
+}
+
+/// The form the web client posts to the token endpoint.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct TokenRequest {
+    pub grant_type: String,
+    pub code: String,
+    pub redirect_uri: String,
+    pub client_id: String,
+    pub code_verifier: String,
+}
+
+impl TokenRequest {
+    /// Whether `code`, just taken from the database, was issued for this
+    /// very client, redirect URI and verifier, and hasn't expired.
+    pub fn redeems(&self, code: &AuthorizationCode, now: i64) -> bool {
+        code.expires_at > now
+            && code.client_id == self.client_id
+            && code.redirect_uri == self.redirect_uri
+            && verifies(&self.code_verifier, &code.code_challenge)
+    }
 }
 
 fn is_challenge(challenge: &str) -> bool {
@@ -375,6 +399,61 @@ mod tests {
                 authorization.state
             )
         );
+    }
+
+    const ISSUED: i64 = 1_760_000_000;
+
+    fn issued_code() -> AuthorizationCode {
+        AuthorizationCode {
+            session_hash: vec![0xa1],
+            client_id: "gamja".into(),
+            redirect_uri: "https://irc.weblounge.org/".into(),
+            code_challenge: CHALLENGE.into(),
+            expires_at: ISSUED + CODE_LIFETIME,
+        }
+    }
+
+    fn exchange() -> TokenRequest {
+        TokenRequest {
+            grant_type: "authorization_code".into(),
+            code: "c0de".into(),
+            redirect_uri: "https://irc.weblounge.org/".into(),
+            client_id: "gamja".into(),
+            code_verifier: VERIFIER.into(),
+        }
+    }
+
+    #[test]
+    fn a_code_is_redeemed_by_its_client_until_it_expires() {
+        let code = issued_code();
+        assert!(exchange().redeems(&code, ISSUED));
+        assert!(exchange().redeems(&code, ISSUED + CODE_LIFETIME - 1));
+        assert!(!exchange().redeems(&code, ISSUED + CODE_LIFETIME));
+    }
+
+    #[test]
+    fn a_code_is_bound_to_its_client_redirect_and_challenge() {
+        let code = issued_code();
+        for request in [
+            TokenRequest {
+                client_id: "ergo".into(),
+                ..exchange()
+            },
+            TokenRequest {
+                redirect_uri: "https://evil.example/".into(),
+                ..exchange()
+            },
+            TokenRequest {
+                code_verifier: CHALLENGE.into(),
+                ..exchange()
+            },
+            TokenRequest {
+                code_verifier: String::new(),
+                ..exchange()
+            },
+        ] {
+            assert!(!request.redeems(&code, ISSUED), "{request:?}");
+        }
     }
 
     #[test]

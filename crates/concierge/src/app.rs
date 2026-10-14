@@ -76,9 +76,18 @@ pub fn router(app: App) -> Router {
                 .layer(map_response(routes::no_store)),
         )
         .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
-    // The web client reads this from its own origin.
+    // The web client calls these from its own origin, so they sit outside
+    // the guard for our pages; the token endpoint takes posts from that
+    // origin alone, and PKCE and single-use codes protect it.
     let webchat_api = Router::new()
         .route(routes::oauth::METADATA_PATH, get(routes::oauth::metadata))
+        .route(
+            routes::oauth::TOKEN_PATH,
+            post(routes::oauth::token).layer(middleware::from_fn_with_state(
+                webchat_origin.clone(),
+                csrf::guard,
+            )),
+        )
         .layer(middleware::from_fn_with_state(
             webchat_origin,
             routes::oauth::allow_webchat,
