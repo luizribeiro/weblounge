@@ -49,6 +49,8 @@ func main() {
 	}
 	log.Printf("connected to %s as %s", cfg.server, irc.CurrentNick())
 
+	// Installed only once connected: a Quit during Connect would leave Loop
+	// waiting on a connection nothing closes.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -65,7 +67,13 @@ func onMessage(irc *ircevent.Connection, msg ircmsg.Message) {
 	switch strings.TrimSpace(msg.Params[1]) {
 	case "!ping":
 		if answer, ok := reply(msg, "pong"); ok {
-			irc.SendIRCMessage(answer)
+			send(irc, answer)
 		}
+	}
+}
+
+func send(irc *ircevent.Connection, msg ircmsg.Message) {
+	if err := irc.SendIRCMessage(msg); err != nil {
+		log.Printf("sending %s to %s: %v", msg.Command, msg.Params[0], err)
 	}
 }
