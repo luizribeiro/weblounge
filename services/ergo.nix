@@ -87,7 +87,15 @@ in
         };
       };
       channels.auto-join = [ "#lounge" ];
-      history.retention.allow-individual-delete = true;
+      history = {
+        persistent = {
+          enabled = true;
+          unregistered-channels = true;
+          direct-messages = "disabled";
+        };
+        retention.allow-individual-delete = true;
+      };
+      datastore.sqlite.enabled = true;
       webpush = {
         enabled = true;
         subscriber = "https://${domain}";

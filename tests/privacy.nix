@@ -67,4 +67,23 @@ vmTest ''
       assert files_containing(email) == [], files_containing(email)
       client.fail(irc_command(**grace))
       assert graces_browser.get("/", *outcome) == f"303 https://{members}/signin"
+
+  heidi = {"account": "heidi", "password": "quarry-lantern-36"}
+  ivan = {"account": "ivan", "password": "saffron-kettle-12"}
+  register(**heidi)
+  register(**ivan)
+  irc(**ivan)
+  said_in_channel, said_in_private = "the-canary-sings-in-the-lounge", "the-canary-whispers-to-ivan"
+
+  def lounge_history():
+      return irc("HISTORY #lounge 50", **heidi)
+
+  with subtest("messages: channel history survives a restart"):
+      irc(f"PRIVMSG #lounge :{said_in_channel}", f"PRIVMSG ivan :{said_in_private}", **heidi)
+      credenza.succeed("systemctl restart ergochat")
+      credenza.wait_for_open_port(6697)
+      assert said_in_channel in lounge_history()
+
+  with subtest("messages: direct messages never reach the disk"):
+      assert files_containing(said_in_private) == [], files_containing(said_in_private)
 ''
