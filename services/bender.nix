@@ -44,5 +44,9 @@ in
   systemd.services."weblounge-bot-${nick}" = {
     requires = [ "${account}.service" ];
     after = [ "${account}.service" ];
+    serviceConfig = {
+      IPAddressAllow = "localhost";
+      IPAddressDeny = "any";
+    };
   };
 }

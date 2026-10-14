@@ -13,6 +13,11 @@ def main_pid(unit):
     return credenza.succeed(f"systemctl show -P MainPID {unit}").strip()
 
 
+def in_cgroup_of(unit, command):
+    procs = f"/sys/fs/cgroup/system.slice/{unit}/cgroup.procs"
+    return f"sh -c 'echo $$ > {procs} && exec {command}'"
+
+
 with subtest("bender waits for its owner to be a member"):
     credenza.wait_for_unit("concierge.service")
     credenza.wait_until_fails("systemctl is-active bender-account.service", timeout=60)
@@ -48,3 +53,10 @@ with subtest("a deploy that changes concierge restarts it but leaves bender conn
     credenza.wait_for_unit("concierge.service")
     assert main_pid("concierge") != concierge
     assert main_pid("weblounge-bot-bender") == bender
+
+with subtest("bender reaches credenza's loopback alone, so a bad dependency can't send its password off"):
+    nginx = "curl -sk -o /dev/null --max-time 3 https://{}"
+    public = credenza.succeed("ip -4 -o addr show eth1 | awk '{print $4}' | cut -d/ -f1").strip()
+    credenza.succeed(in_cgroup_of("weblounge-bot-bender.service", nginx.format("127.0.0.1")))
+    credenza.fail(in_cgroup_of("weblounge-bot-bender.service", nginx.format(public)))
+    credenza.succeed(nginx.format(public))
