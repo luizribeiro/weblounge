@@ -87,17 +87,22 @@ vmTest ''
       assert found == [], found
 
   # Moves the clock, so it goes last.
-  with subtest("messages: a week on, channel messages leave the disk"):
+  with subtest("messages: a week on, channel messages leave the disk, and newer ones stay"):
       assert files_containing(said_in_channel) != []
       credenza.succeed("date -s '+8 days'")
       credenza.succeed("systemctl restart ergochat")
       credenza.wait_for_open_port(6697)
+      said_since = "the-canary-sings-a-week-later"
+      irc(f"PRIVMSG #lounge :{said_since}", **heidi)
       credenza.wait_until_succeeds(
-          f"systemctl start ergochat-vacuum && ! grep -rqaF {shlex.quote(said_in_channel)} /var/lib/private/ergo", timeout=60
+          f"systemctl start ergochat-vacuum && ! grep -rqaF {shlex.quote(said_in_channel)} /var/lib/private/ergo",
+          timeout=60,
       )
       found = files_containing(said_in_channel)
       assert found == [], found
-      assert said_in_channel not in lounge_history()
+      history = lounge_history()
+      assert said_in_channel not in history and said_since in history, history
+      assert files_containing(said_since) != []
       owners = credenza.succeed("stat -c %u /var/lib/private/ergo /var/lib/private/ergo/ergo_history.db*").split()
       assert len(set(owners)) == 1, owners
 ''
