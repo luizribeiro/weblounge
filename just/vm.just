@@ -17,6 +17,11 @@ reset host="credenza":
 ssh *args:
   ssh {{ssh_opts}} {{addr}} "$@"
 
+# Run a concierge admin command in the VM, e.g. just vm concierge status
+concierge *args:
+  #!/usr/bin/env bash
+  ssh {{ssh_opts}} {{addr}} concierge-admin "$(printf '%q ' "$@")"
+
 # Deploy the current tree into the running VM, the same way prod push does
 push host="credenza":
   NIX_SSHOPTS="{{ssh_opts}}" scripts/push .#nixosConfigurations.{{host}}.config.virtualisation.vmVariant.system.build.toplevel {{addr}}

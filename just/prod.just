@@ -1,4 +1,5 @@
 set working-directory := '..'
+set positional-arguments
 
 toplevel := ".config.system.build.toplevel"
 
@@ -13,3 +14,8 @@ push host="credenza":
 # First install onto a fresh server, WIPING ITS DISK, e.g. just prod install root@1.2.3.4
 install target host="credenza":
   nixos-anywhere --flake .#{{host}} {{target}}
+
+# Run a concierge admin command on credenza, e.g. just prod concierge status
+concierge *args:
+  #!/usr/bin/env bash
+  ssh "$(nix eval --raw .#nixosConfigurations.credenza.config.networking.fqdn)" concierge-admin "$(printf '%q ' "$@")"
