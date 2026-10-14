@@ -28,3 +28,13 @@ with subtest("a certificate order the CA refuses is tried again, not left for th
     credenza.wait_until_succeeds(f"test -e {attempted}", timeout=60)
     credenza.wait_until_succeeds(f"systemctl show -P Result {unit} | grep -qx success", timeout=60)
     assert credenza.succeed(f"systemctl show -P NRestarts {unit}").strip() == "1"
+
+with subtest("the kernel keeps io_uring, its addresses, ptrace and kexec from services"):
+    for setting, value in {
+        "kernel.io_uring_disabled": "2",
+        "kernel.kptr_restrict": "2",
+        "dev.tty.ldisc_autoload": "0",
+        "kernel.yama.ptrace_scope": "2",
+        "kernel.kexec_load_disabled": "1",
+    }.items():
+        assert credenza.succeed(f"sysctl -n {setting}").strip() == value, setting

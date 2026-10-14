@@ -28,6 +28,16 @@
     };
   };
 
+  # Less kernel for whoever escapes a service; protectKernelImage also
+  # disables kexec.
+  boot.kernel.sysctl = {
+    "kernel.io_uring_disabled" = 2;
+    "kernel.kptr_restrict" = 2;
+    "dev.tty.ldisc_autoload" = 0;
+    "kernel.yama.ptrace_scope" = 2;
+  };
+  security.protectKernelImage = true;
+
   time.timeZone = "UTC";
   i18n.defaultLocale = "en_US.UTF-8";
   boot.tmp.cleanOnBoot = true;
