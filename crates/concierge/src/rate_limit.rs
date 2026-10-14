@@ -160,6 +160,10 @@ pub const TRY_LATER: &str = "Too many attempts. Try again in 15 minutes.";
 /// Enough to try a few nicks while typing, too few to list the members.
 pub const LOOKUPS_PER_ADDRESS: usize = 60;
 
+/// Every load of the web client asks for a code and a token; this is
+/// dozens of loads, far fewer than codes take to guess.
+pub const OAUTH_REQUESTS_PER_ADDRESS: usize = 120;
+
 /// Requests in the last [`WINDOW`], by client address, up to a limit.
 pub struct AddressLimiter {
     requests: Recent<IpAddr>,

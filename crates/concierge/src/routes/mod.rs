@@ -3,6 +3,7 @@ pub mod checks;
 pub mod clients;
 pub mod invite;
 pub mod invites;
+pub mod oauth;
 pub mod pages;
 pub mod signin;
 
@@ -14,13 +15,43 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
-use crate::assets::Assets;
+use crate::{app::App, assets::Assets, auth::Visitor};
 
 /// What the shared layout around every page needs: the assets it links and
 /// who to greet in the header.
 pub struct Layout<'a> {
     pub assets: &'a Assets,
     pub nick: Option<&'a str>,
+}
+
+#[derive(Template)]
+#[template(path = "message.html")]
+struct Message<'a> {
+    layout: Layout<'a>,
+    eyebrow: &'a str,
+    title: &'a str,
+    lines: &'a [&'a str],
+}
+
+/// A page that only says something.
+pub fn message(
+    app: &App,
+    visitor: &Visitor,
+    status: StatusCode,
+    eyebrow: &str,
+    title: &str,
+    lines: &[&str],
+) -> Response {
+    let page = Message {
+        layout: Layout {
+            assets: &app.assets,
+            nick: visitor.nick(),
+        },
+        eyebrow,
+        title,
+        lines,
+    };
+    render_with(status, &page)
 }
 
 pub fn render(template: &impl Template) -> Response {

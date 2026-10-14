@@ -6,6 +6,7 @@ mod checks;
 mod clients;
 mod invite;
 mod invites;
+mod oauth;
 mod pages;
 mod security;
 mod signin;
@@ -25,7 +26,8 @@ use concierge::{
     config::IrcServer,
     db::{self, Db, NewInvite, NewMember},
     invite_rules::{self, DEFAULT_QUOTA},
-    rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter},
+    oauth::Webchat,
+    rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS},
     session::{self, Token},
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
@@ -34,6 +36,7 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 const PUBLIC_URL: &str = "https://members.weblounge.org";
+const WEBCHAT_URL: &str = "https://irc.weblounge.org";
 const SESSION_KEY: &[u8] = b"a session key for tests, at least 32 bytes";
 const PASSWORD: &str = "correct-horse-battery";
 
@@ -62,7 +65,11 @@ impl Site {
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),
             lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
+            oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
             public_url: PUBLIC_URL.into(),
+            webchat: Webchat {
+                origin: WEBCHAT_URL.into(),
+            },
             irc_server: irc_server(),
         });
         Self {
@@ -82,6 +89,20 @@ impl Site {
         if let Some(cookie) = cookie {
             request = request.header(header::COOKIE, cookie);
         }
+        self.send(request.body(Body::empty()).unwrap()).await
+    }
+
+    /// A GET the way another site's script makes it, from `origin`.
+    async fn get_from(&self, path: &str, origin: &str) -> Response {
+        let request = Request::get(path).header(header::ORIGIN, origin);
+        self.send(request.body(Body::empty()).unwrap()).await
+    }
+
+    /// A GET from the client address nginx passes on.
+    async fn get_with(&self, path: &str, cookie: &str, address: &str) -> Response {
+        let request = Request::get(path)
+            .header(header::COOKIE, cookie)
+            .header("x-real-ip", address);
         self.send(request.body(Body::empty()).unwrap()).await
     }
 
@@ -136,6 +157,17 @@ impl Site {
     /// Runs SQL the site has no query for, to set up a test.
     async fn execute(&self, sql: &str) {
         execute(&self.database_path(), sql).await;
+    }
+
+    async fn query_scalar<T>(&self, sql: &str) -> T
+    where
+        T: for<'r> sqlx::Decode<'r, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite> + Send + Unpin,
+    {
+        let url = format!("sqlite://{}", self.database_path().display());
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        let value = sqlx::query_scalar(sql).fetch_one(&pool).await.unwrap();
+        pool.close().await;
+        value
     }
 
     fn database_path(&self) -> std::path::PathBuf {

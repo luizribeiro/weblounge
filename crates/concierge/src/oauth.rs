@@ -122,6 +122,21 @@ impl Refusal {
     }
 }
 
+impl Authorization {
+    /// Where to send the browser when the request was fine but no code can
+    /// be issued for it.
+    pub fn error_redirect(&self, error: &'static str) -> String {
+        let refusal = Refusal::Invalid {
+            redirect_uri: self.redirect_uri.clone(),
+            state: Some(self.state.clone()),
+            error,
+        };
+        refusal
+            .redirect()
+            .expect("our own client has a redirect URI")
+    }
+}
+
 /// Where the browser takes the code back to the client.
 pub fn code_redirect(authorization: &Authorization, code: &str) -> String {
     let query = form_urlencoded::Serializer::new(String::new())
@@ -345,6 +360,18 @@ mod tests {
             code_redirect(&authorization, "c0de"),
             format!(
                 "https://irc.weblounge.org/?code=c0de&state={}",
+                authorization.state
+            )
+        );
+    }
+
+    #[test]
+    fn a_valid_request_can_still_be_refused_back_to_the_client() {
+        let authorization = gamja().check(&webchat()).unwrap();
+        assert_eq!(
+            authorization.error_redirect("temporarily_unavailable"),
+            format!(
+                "https://irc.weblounge.org/?error=temporarily_unavailable&state={}",
                 authorization.state
             )
         );

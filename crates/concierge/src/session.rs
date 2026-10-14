@@ -1,5 +1,6 @@
 //! Sign-in sessions: a random token in a cookie, and only its keyed hash in
-//! the database, so a copy of the database signs nobody in.
+//! the database, so a copy of the database signs nobody in. The web
+//! client's OAuth codes and tokens are tokens of the same kind.
 //!
 //! Times are Unix seconds.
 
@@ -48,10 +49,18 @@ impl Token {
             .filter_map(|value| value.to_str().ok())
             .flat_map(|cookies| cookies.split(';'))
             .filter_map(|cookie| cookie.trim().strip_prefix(COOKIE)?.strip_prefix('='))
-            .find(|value| {
-                value.len() == TOKEN_LENGTH && value.bytes().all(|c| random::URL_SAFE.contains(&c))
-            })
-            .map(|value| Self(value.to_owned()))
+            .find_map(Self::parse)
+    }
+
+    /// `value` as a token, if it could have been generated here.
+    pub fn parse(value: &str) -> Option<Self> {
+        let plausible =
+            value.len() == TOKEN_LENGTH && value.bytes().all(|c| random::URL_SAFE.contains(&c));
+        plausible.then(|| Self(value.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 
     /// A `Set-Cookie` value that keeps the token for [`LIFETIME`].
@@ -140,6 +149,15 @@ mod tests {
                 Token::from_cookies(&headers(&[&cookie])).is_none(),
                 "{cookie}"
             );
+        }
+    }
+
+    #[test]
+    fn parses_only_what_could_be_a_token() {
+        let token = Token::generate();
+        assert!(Token::parse(token.as_str()) == Some(token.clone()));
+        for value in ["", &token.0[1..], &format!("{}=", &token.0[1..])] {
+            assert!(Token::parse(value).is_none(), "{value}");
         }
     }
 

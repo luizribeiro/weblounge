@@ -129,7 +129,7 @@ pub async fn start_session(
     Ok(token.cookie())
 }
 
-fn sign_in_url(next: &str) -> String {
+pub fn sign_in_url(next: &str) -> String {
     let next: String = form_urlencoded::byte_serialize(next.as_bytes()).collect();
     format!("{SIGN_IN_PATH}?next={next}")
 }

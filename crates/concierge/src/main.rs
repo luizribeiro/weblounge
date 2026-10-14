@@ -7,7 +7,8 @@ use concierge::{
     assets::Assets,
     config::Config,
     db::{self, Db},
-    rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter},
+    oauth::Webchat,
+    rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS},
     session,
 };
 use tokio::net::TcpListener;
@@ -34,7 +35,11 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         sessions: session::Hasher::new(&config.read_session_key()?),
         limiter: Limiter::default(),
         lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
+        oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
         public_url: config.public_url.clone(),
+        webchat: Webchat {
+            origin: config.webchat_url.clone(),
+        },
         irc_server: config.irc_server.clone(),
     };
     let listener = TcpListener::bind(config.listen).await?;

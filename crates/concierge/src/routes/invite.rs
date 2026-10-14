@@ -84,15 +84,6 @@ struct NewAccount {
     news: bool,
 }
 
-#[derive(Template)]
-#[template(path = "message.html")]
-struct Message<'a> {
-    layout: Layout<'a>,
-    eyebrow: &'a str,
-    title: &'a str,
-    lines: &'a [&'a str],
-}
-
 pub async fn show(
     State(app): State<AppState>,
     visitor: Visitor,
@@ -337,16 +328,7 @@ fn message(
     title: &str,
     lines: &[&str],
 ) -> Response {
-    let page = Message {
-        layout: Layout {
-            assets: &app.assets,
-            nick: visitor.nick(),
-        },
-        eyebrow: "Invitation",
-        title,
-        lines,
-    };
-    render_with(status, &page)
+    super::message(app, visitor, status, "Invitation", title, lines)
 }
 
 /// The one answer for every link that can't be redeemed, whatever the
