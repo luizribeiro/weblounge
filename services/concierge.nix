@@ -35,7 +35,7 @@ let
   };
 in
 {
-  imports = [ ./ergo.nix ./loopback.nix ./nginx.nix ./secrets.nix ./sqlite-vacuum.nix ];
+  imports = [ ./ergo.nix ./loopback.nix ./nginx.nix ./sandbox.nix ./secrets.nix ./sqlite-vacuum.nix ];
 
   options.weblounge.concierge.publicUrl = lib.mkOption {
     type = lib.types.str;
@@ -89,12 +89,11 @@ in
       description = "Concierge, the members' site";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
-      serviceConfig = serviceOnly // {
+      serviceConfig = config.weblounge.sandbox // serviceOnly // {
         User = "concierge";
         DynamicUser = true;
         StateDirectory = "concierge";
         StateDirectoryMode = "0700";
-        UMask = "0077";
         Environment = [
           "CONCIERGE_LISTEN=${cfg.listen}"
           "CONCIERGE_PUBLIC_URL=${publicUrl}"
@@ -107,31 +106,8 @@ in
           "CONCIERGE_AUTO_AWAY_DEFAULT=${multiclient.auto-away}"
         ];
 
-        CapabilityBoundingSet = "";
         IPAddressAllow = "localhost";
         IPAddressDeny = "any";
-        LockPersonality = true;
-        MemoryDenyWriteExecute = true;
-        NoNewPrivileges = true;
-        PrivateDevices = true;
-        PrivateTmp = true;
-        PrivateUsers = true;
-        ProcSubset = "pid";
-        ProtectClock = true;
-        ProtectControlGroups = true;
-        ProtectHome = true;
-        ProtectHostname = true;
-        ProtectKernelLogs = true;
-        ProtectKernelModules = true;
-        ProtectKernelTunables = true;
-        ProtectProc = "invisible";
-        ProtectSystem = "strict";
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
-        RestrictNamespaces = true;
-        RestrictRealtime = true;
-        RestrictSUIDSGID = true;
-        SystemCallArchitectures = "native";
-        SystemCallFilter = [ "@system-service" "~@privileged" ];
       };
     };
 
