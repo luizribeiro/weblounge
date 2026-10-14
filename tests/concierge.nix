@@ -61,12 +61,10 @@ vmTest {
         link = concierge_admin("invite", "create", "--root")
         assert re.fullmatch(r"https://members\.weblounge\.org/invite#[A-Za-z0-9_-]{22}\n", link), link
 
-    with subtest("concierge-admin member adopt imports an account made through Ergo's API"):
+    with subtest("an admin's root invite brings the network's first member in"):
         credenza.wait_for_open_port(8089)
         dana = {"account": "Dana", "password": "an-old-password-of-hers"}
-        assert '"success":true' in register(**dana)
-        adopted = concierge_admin("member", "adopt", "dana", "--admin")
-        assert adopted == "adopted Dana as an admin\n", adopted
+        add_member(**dana, admin=True)
         status = concierge_admin("status")
         assert "(migration 20261020120000, 1 members)" in status, status
 
@@ -79,7 +77,7 @@ vmTest {
 
     browser = Browser("dana")
 
-    with subtest("an adopted member signs in to the website with their IRC password"):
+    with subtest("a member signs in to the website with their IRC password"):
         signed_in = browser.sign_in("dana", password)
         assert signed_in == f"303 https://{members}/", signed_in
         home = browser.get("/", "-f")

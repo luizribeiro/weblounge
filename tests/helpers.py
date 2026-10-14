@@ -82,6 +82,13 @@ class Browser:
         return page, link
 
 
+def add_member(account, password, admin=False):
+    """Signs `account` up through a root invite, the way every member joins."""
+    link = concierge_admin("invite", "create", "--root", *(["--admin"] if admin else []))
+    signed_up = Browser(f"signup-{account}").sign_up(link, account, password)
+    assert signed_up == "200 ", signed_up
+
+
 def assert_client_address_absent(logs):
     addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
     patterns = shlex.join(arg for address in addresses for arg in ["-e", address])

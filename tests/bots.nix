@@ -10,8 +10,7 @@ vmTest ''
       credenza.fail("systemctl is-active weblounge-bot-bender.service")
 
   with subtest("once its owner is, bender registers itself as their bot"):
-      register(**luiz)
-      concierge_admin("member", "adopt", "luiz")
+      add_member(**luiz)
       credenza.succeed("systemctl start weblounge-bot-bender.service")
       bots = concierge_admin("bot", "list", "luiz")
       assert re.match(r"bender luiz \d{4}-\d\d-\d\d$", bots), bots

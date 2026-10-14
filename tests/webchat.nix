@@ -49,8 +49,7 @@ vmTest {
     credenza.wait_for_unit("ergochat.service")
     credenza.wait_for_open_port(8089)
 
-    register(**grace)
-    concierge_admin("member", "adopt", "grace")
+    add_member(**grace)
     assert graces_browser.sign_in(**grace) == f"303 https://{members}/"
 
     with subtest("a signed-in member trades a PKCE authorization code for a token"):

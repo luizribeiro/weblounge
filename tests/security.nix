@@ -119,7 +119,7 @@ vmTest ''
           assert " 001 " not in reply and re.search(r"^ERROR .*SASL", reply, re.M), reply
 
   with subtest("NickServ won't register new accounts, even for a member"):
-      register(**mallory)
+      add_member(**mallory)
       reply = irc("PRIVMSG NickServ :REGISTER battery-staple", **mallory)
       assert "NOTICE mallory :This command has been disabled" in reply, reply
 
@@ -164,7 +164,6 @@ vmTest ''
       assert https(members, "/?saved", *outcome) == f"303 https://{members}/signin?next=%2F%3Fsaved"
 
   with subtest("the session cookie is host-only, Secure, HttpOnly and SameSite=Lax"):
-      credenza.succeed("su - luiz -c 'concierge-admin member adopt mallory'")
       response = https(members, "/signin", "-D", "-", "-o", "/dev/null", "-H", f"Origin: https://{members}",
                        "--data-urlencode", "nick=mallory", "--data-urlencode", f"password={mallory['password']}")
       [cookie] = [line for line in response.splitlines() if line.lower().startswith("set-cookie:")]
@@ -264,8 +263,8 @@ vmTest ''
       def lookup(n):
           return https(members, "/signup/nick", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Origin: https://{members}",
                        "-H", f"X-Real-IP: 198.51.100.{n % 250}", "--data", "nick=bob")
-      # eve's and trudy's signups above counted as one each.
-      allowed = lookups_per_address - 2
+      # mallory's, eve's and trudy's signups above counted as one each.
+      allowed = lookups_per_address - 3
       statuses = [lookup(n) for n in range(allowed + 1)]
       assert statuses == ["200"] * allowed + ["429"], statuses
 ''
