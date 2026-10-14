@@ -1,23 +1,7 @@
 { pkgs, vmTest, ... }:
 
-let
-  python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
-  # The headless shell is all a headless test needs.
-  browsers = pkgs.playwright-driver.browsers.override {
-    withChromium = false;
-    withFirefox = false;
-    withWebkit = false;
-    withFfmpeg = false;
-  };
-  webchatBrowser = pkgs.writeShellScriptBin "webchat-browser" ''
-    PLAYWRIGHT_BROWSERS_PATH=${browsers} exec ${python}/bin/python3 ${./webchat-browser.py} "$@"
-  '';
-in
 vmTest {
-  client = {
-    environment.systemPackages = [ webchatBrowser ];
-    virtualisation.memorySize = 2048;
-  };
+  browsers.webchat-browser = ./webchat-browser.py;
 
   script = ''
     import base64

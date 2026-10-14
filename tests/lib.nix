@@ -1,11 +1,24 @@
 # Builds a VM test of credenza's real configuration, probed from a client.
-# Takes the test script, or { script, client } to add to the client node.
+# Takes the test script, or { script, client, browsers } to add to the
+# client node; browsers maps command names to Playwright scripts.
 { pkgs, weblounge, name }:
 
 test:
 let
   ircClient = pkgs.writers.writePython3Bin "irc-client" { } ./irc-client.py;
   testScript = test.script or test;
+  browsers = test.browsers or { };
+  python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
+  # The headless shell is all a headless test needs.
+  playwrightBrowsers = pkgs.playwright-driver.browsers.override {
+    withChromium = false;
+    withFirefox = false;
+    withWebkit = false;
+    withFfmpeg = false;
+  };
+  browserCommand = command: script: pkgs.writeShellScriptBin command ''
+    PLAYWRIGHT_BROWSERS_PATH=${playwrightBrowsers} exec ${python}/bin/python3 ${script} "$@"
+  '';
 in
 pkgs.testers.runNixOSTest {
   inherit name;
@@ -25,7 +38,9 @@ pkgs.testers.runNixOSTest {
     };
     client = {
       imports = [ (test.client or { }) ];
-      environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ];
+      environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ]
+        ++ pkgs.lib.mapAttrsToList browserCommand browsers;
+      virtualisation.memorySize = pkgs.lib.mkIf (browsers != { }) 2048;
     };
   };
 
