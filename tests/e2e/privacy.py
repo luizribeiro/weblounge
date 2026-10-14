@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
     from helpers import (
+        Account,
         Browser,
         concierge_admin,
         concierge_sql,
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
         register,
     )
 
-grace = {"account": "grace", "password": "willow-harbor-58"}
+grace: Account = {"account": "grace", "password": "willow-harbor-58"}
 graces_browser = Browser("grace")
 email = "grace@example.org"
 
@@ -101,8 +102,8 @@ with subtest("leaving: an admin deletes the account, its email leaves the disk, 
     client.fail(irc_command(**grace))
     assert graces_browser.get("/", *outcome) == f"303 https://{members}/signin"
 
-heidi = {"account": "heidi", "password": "quarry-lantern-36"}
-ivan = {"account": "ivan", "password": "saffron-kettle-12"}
+heidi: Account = {"account": "heidi", "password": "quarry-lantern-36"}
+ivan: Account = {"account": "ivan", "password": "saffron-kettle-12"}
 register(**heidi)
 register(**ivan)
 irc(**ivan)

@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import ergo_api, ergo_api_token, irc, irc_command, register
+    from helpers import Account, ergo_api, ergo_api_token, irc, irc_command, register
 
-alice = {"account": "alice", "password": "correct-horse"}
-bob = {"account": "bob", "password": "battery-staple"}
-carol = {"account": "carol", "password": "tr0ub4dor-and-3"}
+alice: Account = {"account": "alice", "password": "correct-horse"}
+bob: Account = {"account": "bob", "password": "battery-staple"}
+carol: Account = {"account": "carol", "password": "tr0ub4dor-and-3"}
 
 with subtest("ergo serves IRC over TLS on 6697 with irc.weblounge.org's certificate"):
     credenza.wait_for_unit("ergochat.service")
@@ -79,7 +79,7 @@ with subtest("ergo advertises web push for mobile clients"):
 
 with subtest("the API changes a member's password, and only the new one logs in"):
     register(**carol)
-    renewed = {**carol, "password": "a-longer-generated-one"}
+    renewed: Account = {**carol, "password": "a-longer-generated-one"}
     body, _ = ergo_api("ns/passwd", accountName=carol["account"], passphrase=renewed["password"])
     assert json.loads(body)["success"], body
     client.fail(irc_command(**carol))

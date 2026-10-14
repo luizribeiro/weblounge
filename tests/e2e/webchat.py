@@ -10,10 +10,10 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Browser, add_member, concierge_sql, ergo_api, https, irc, irc_command, members, outcome
+    from helpers import Account, Browser, add_member, concierge_sql, ergo_api, https, irc, irc_command, members, outcome
 
 webchat = "https://irc.weblounge.org"
-grace = {"account": "grace", "password": "a-kettle-on-the-hob"}
+grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
 graces_browser = Browser("grace")
 
 

@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest, tools
-    from helpers import Browser, add_member, concierge_sql, ergo_api, https, invite_code, irc
+    from helpers import Account, Browser, add_member, concierge_sql, ergo_api, https, invite_code, irc
 
-mallory = {"account": "mallory", "password": "an-insider-gone-bad"}
+mallory: Account = {"account": "mallory", "password": "an-insider-gone-bad"}
 tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
 sites = ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]
 members = "members.weblounge.org"

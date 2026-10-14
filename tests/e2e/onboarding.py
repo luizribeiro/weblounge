@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Browser, concierge_admin, invite_code, irc, irc_command, members, outcome
+    from helpers import Account, Browser, concierge_admin, invite_code, irc, irc_command, members, outcome
 
-erin = {"account": "erin", "password": "lantern-orchard-71"}
-frank = {"account": "frank", "password": "copper-meadow-94"}
+erin: Account = {"account": "erin", "password": "lantern-orchard-71"}
+frank: Account = {"account": "frank", "password": "copper-meadow-94"}
 erins_browser = Browser("erin")
 
 credenza.wait_for_unit("nginx.service")

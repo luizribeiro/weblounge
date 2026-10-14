@@ -3,10 +3,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import add_member, concierge_admin, irc, irc_command, register
+    from helpers import Account, add_member, concierge_admin, irc, irc_command, register
 
-luiz = {"account": "luiz", "password": "plain-old-vanilla"}
-alice = {"account": "alice", "password": "correct-horse"}
+luiz: Account = {"account": "luiz", "password": "plain-old-vanilla"}
+alice: Account = {"account": "alice", "password": "correct-horse"}
 
 
 def main_pid(unit):

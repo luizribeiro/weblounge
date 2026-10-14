@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
     from helpers import (
+        Account,
         Browser,
         add_member,
         concierge_admin,
@@ -85,7 +86,7 @@ with subtest("concierge-admin invite create --root prints a link to join.webloun
 
 with subtest("an admin's root invite brings the network's first member in"):
     credenza.wait_for_open_port(8089)
-    dana = {"account": "Dana", "password": "an-old-password-of-hers"}
+    dana: Account = {"account": "Dana", "password": "an-old-password-of-hers"}
     add_member(**dana, admin=True)
     status = concierge_admin("status")
     assert "(migration 20261020120000, 1 members)" in status, status
