@@ -7,7 +7,6 @@
     default = true;
     serverAliases = [
       "www.weblounge.org"
-      "irc.weblounge.org"
       config.networking.fqdn
     ];
     enableACME = true;

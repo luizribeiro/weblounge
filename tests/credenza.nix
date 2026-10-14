@@ -1,5 +1,8 @@
 { pkgs, weblounge }:
 
+let
+  ircClient = pkgs.writers.writePython3Bin "irc-client" { } ./irc-client.py;
+in
 pkgs.testers.runNixOSTest {
   name = "credenza";
 
@@ -9,17 +12,23 @@ pkgs.testers.runNixOSTest {
   nodes = {
     credenza = {
       imports = weblounge.hostModules "credenza" ++ [ ../modules/offline-acme.nix ];
+      environment.systemPackages = [ ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [
         "-netdev user,id=wan,net=107.173.231.128/25,host=107.173.231.129"
         "-device virtio-net-pci,netdev=wan,mac=00:16:3c:1a:01:be"
       ];
     };
-    client.environment.systemPackages = [ pkgs.curl pkgs.netcat ];
+    client.environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.openssl ircClient ];
   };
 
   testScript = ''
     import re
+    import shlex
+
+    def irc(*commands, machine=client, host="credenza", **options):
+        flags = [f"--{name}={value}" for name, value in options.items()]
+        return machine.succeed(shlex.join(["irc-client", host, *flags, *commands]))
 
     start_all()
 
@@ -49,6 +58,39 @@ pkgs.testers.runNixOSTest {
     with subtest("the release build carries no live-reload code"):
         for path in ["/", *assets]:
             client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")
+
+    with subtest("ergo serves IRC over TLS on 6697 with irc.weblounge.org's certificate"):
+        credenza.wait_for_unit("ergochat.service")
+        credenza.wait_for_open_port(6697)
+        names = client.succeed(
+            "openssl s_client -connect credenza:6697 -servername irc.weblounge.org </dev/null 2>/dev/null"
+            " | openssl x509 -noout -ext subjectAltName"
+        )
+        assert "DNS:irc.weblounge.org" in names, names
+        credenza.fail("ss -Htln | grep -q ':6667 '")
+
+    with subtest("a renewed certificate reaches ergo on reload, without a restart"):
+        fingerprint = "openssl s_client -connect credenza:6697 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint"
+        before = client.succeed(fingerprint)
+        pid = credenza.succeed("systemctl show -P MainPID ergochat")
+        credenza.succeed("systemctl restart acme-irc.weblounge.org.service")
+        credenza.succeed("systemctl try-reload-or-restart ergochat")
+        client.wait_until_succeeds(f"{fingerprint} | grep -vqF '{before.strip()}'", timeout=10)
+        assert credenza.succeed("systemctl show -P MainPID ergochat") == pid
+
+    with subtest("irc.weblounge.org in a browser redirects to the landing page"):
+        address = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
+        redirect = client.succeed(
+            f"curl -sk --resolve irc.weblounge.org:443:{address} -o /dev/null -w '%{{redirect_url}}' https://irc.weblounge.org/"
+        )
+        assert redirect == "https://weblounge.org/", redirect
+
+    with subtest("a client that doesn't log in with SASL is turned away, even from loopback"):
+        for reply in [irc(), irc(machine=credenza, host="localhost")]:
+            assert " 001 " not in reply and re.search(r"^ERROR .*SASL", reply, re.M), reply
+
+    with subtest("default.yaml's example oper and WebIRC gateway are left out"):
+        credenza.fail("grep -qE '^opers:|webirc' /etc/ergo.yaml")
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
