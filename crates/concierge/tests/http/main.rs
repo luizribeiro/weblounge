@@ -31,7 +31,7 @@ use concierge::{
     assets::Assets,
     config::{IrcServer, Presence},
     db::{self, Db, NewInvite, NewMember},
-    invite_rules::{self, DEFAULT_QUOTA},
+    invite_rules,
     oauth::Webchat,
     rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS},
     session::{self, Token},
@@ -162,7 +162,6 @@ impl Site {
             news_opt_in: false,
             invited_by: None,
             joined_at: 1_760_000_000,
-            invite_quota: DEFAULT_QUOTA,
             is_admin: false,
         };
         self.db.insert_member(&member).await.unwrap();

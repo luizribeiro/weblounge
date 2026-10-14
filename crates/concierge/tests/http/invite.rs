@@ -48,7 +48,7 @@ async fn every_unusable_link_gets_the_same_404() {
         site.add_invite(code, Some("alice")).await;
     }
     site.execute(&format!(
-        "INSERT INTO members (account, joined_at, invite_quota) VALUES ('bob', 0, 5);
+        "INSERT INTO members (account, joined_at) VALUES ('bob', 0);
          UPDATE invites SET redeemed_by = 'bob', redeemed_at = 1 WHERE code = 'used';
          UPDATE invites SET revoked_at = 1 WHERE code = 'revoked';
          UPDATE invites SET created_at = {}, expires_at = {expired_at} WHERE code = 'expired';",

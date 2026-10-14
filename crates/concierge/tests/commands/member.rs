@@ -1,7 +1,4 @@
-use concierge::{
-    db::{self, NewBot, NewInvite},
-    invite_rules::DEFAULT_QUOTA,
-};
+use concierge::db::{self, NewBot, NewInvite};
 use ergo_api::{SettingsChanges, fake::Failure};
 
 use crate::{Fixture, OLD_PASSWORD};
@@ -31,7 +28,6 @@ mod adopt {
         assert_eq!(member.account, "Alice");
         assert_eq!(member.email.as_deref(), Some("alice@example.org"));
         assert_eq!(member.invited_by, None);
-        assert_eq!(member.invite_quota, DEFAULT_QUOTA);
         assert!(!member.is_admin);
         assert_eq!(member.removed_at, None);
     }
@@ -170,10 +166,7 @@ mod delete {
         let db = fixture.db().await;
         let alice = db.member("alice").await.unwrap().unwrap();
         assert!(alice.removed_at.is_some());
-        assert_eq!(
-            (alice.email, alice.invite_quota, alice.is_admin),
-            (None, 0, false)
-        );
+        assert_eq!((alice.email, alice.is_admin), (None, false));
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(bob.invited_by.as_deref(), Some("alice"));
         let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
@@ -270,63 +263,6 @@ mod delete {
             .await
             .unwrap_err();
         assert_eq!(error.to_string(), "nobody is not a member");
-    }
-}
-
-mod grant_invites {
-    use super::*;
-
-    #[tokio::test]
-    async fn raises_the_quota_by_n_each_time() {
-        let fixture = Fixture::start().await;
-        fixture.add_member("alice", None).await;
-
-        let output = fixture
-            .run(&["member", "grant-invites", "ALICE", "2"])
-            .await
-            .unwrap();
-        assert_eq!(
-            output,
-            format!("alice's invite quota is now {}\n", DEFAULT_QUOTA + 2)
-        );
-        fixture
-            .run(&["member", "grant-invites", "alice", "10"])
-            .await
-            .unwrap();
-
-        let member = fixture.db().await.member("alice").await.unwrap().unwrap();
-        assert_eq!(member.invite_quota, DEFAULT_QUOTA + 12);
-    }
-
-    #[tokio::test]
-    async fn takes_only_a_positive_number() {
-        let fixture = Fixture::start().await;
-        fixture.add_member("alice", None).await;
-        for n in ["0", "-1", "two", "70000"] {
-            let result = fixture.run(&["member", "grant-invites", "alice", n]).await;
-            assert!(result.is_err(), "{n}");
-        }
-        let member = fixture.db().await.member("alice").await.unwrap().unwrap();
-        assert_eq!(member.invite_quota, DEFAULT_QUOTA);
-    }
-
-    #[tokio::test]
-    async fn refuses_removed_members_and_strangers() {
-        let fixture = Fixture::start().await;
-        fixture.add_member("alice", None).await;
-        fixture.run(&["member", "delete", "alice"]).await.unwrap();
-        for (account, message) in [
-            ("alice", "alice was removed"),
-            ("nobody", "nobody is not a member"),
-        ] {
-            let error = fixture
-                .run(&["member", "grant-invites", account, "1"])
-                .await
-                .unwrap_err();
-            assert_eq!(error.to_string(), message);
-        }
-        let member = fixture.db().await.member("alice").await.unwrap().unwrap();
-        assert_eq!(member.invite_quota, 0);
     }
 }
 

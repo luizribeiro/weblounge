@@ -6,8 +6,6 @@
 const HOUR: i64 = 60 * 60;
 const DAY: i64 = 24 * HOUR;
 
-/// What new members' rows record as their quota, which nothing reads.
-pub const DEFAULT_QUOTA: i64 = 5;
 /// How many invites a member, admins too, may have open at once. Nothing
 /// lists or revokes open invites, so each holds its place until it's
 /// redeemed or expires.

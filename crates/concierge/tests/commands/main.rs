@@ -13,7 +13,6 @@ use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
     db::{Db, NewMember, NewSession},
-    invite_rules::DEFAULT_QUOTA,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
 use tempfile::TempDir;
@@ -96,7 +95,6 @@ impl Fixture {
             news_opt_in: false,
             invited_by,
             joined_at: 1_760_000_000,
-            invite_quota: DEFAULT_QUOTA,
             is_admin: false,
         };
         self.db().await.insert_member(&member).await.unwrap();

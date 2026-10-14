@@ -74,10 +74,8 @@ async fn says_whether_a_nick_is_free_and_nothing_more() {
     let site = Site::start().await;
     site.add_member("alice").await;
     site.register("ergo-only").await;
-    site.execute(
-        "INSERT INTO members (account, joined_at, invite_quota, removed_at) VALUES ('gone', 0, 0, 1)",
-    )
-    .await;
+    site.execute("INSERT INTO members (account, joined_at, removed_at) VALUES ('gone', 0, 1)")
+        .await;
     for (nick, answer) in [
         ("bob", "available"),
         ("ALICE", "taken"),

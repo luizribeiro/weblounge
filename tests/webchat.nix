@@ -123,7 +123,7 @@ vmTest {
         session = secrets.token_urlsafe(32)[:43]
         session_hash = hmac.new(key.encode(), session.encode(), hashlib.sha256).hexdigest()
         orphan = ("import sqlite3; db = sqlite3.connect('/var/lib/private/concierge/concierge.db'); "
-                  "db.execute(\"INSERT INTO members (account, joined_at, invite_quota) VALUES ('ghost', 0, 0)\"); "
+                  "db.execute(\"INSERT INTO members (account, joined_at) VALUES ('ghost', 0)\"); "
                   f"db.execute(\"INSERT INTO sessions VALUES (x'{session_hash}', 'ghost', 0, 4000000000)\"); db.commit()")
         credenza.succeed(f"${pkgs.python3}/bin/python3 -c {shlex.quote(orphan)}")
         ghosts_browser = Browser("ghost")

@@ -4,10 +4,7 @@ use anyhow::Context;
 use clap::Subcommand;
 
 use super::{Admin, bot, erase_reminder, print_once};
-use crate::{
-    db::{self, NewMember},
-    invite_rules,
-};
+use crate::db::{self, NewMember};
 
 #[derive(Subcommand)]
 pub enum MemberCommand {
@@ -24,12 +21,6 @@ pub enum MemberCommand {
     /// Remove a member's personal data, sessions and bots and revoke their
     /// open invites, keeping their place in the invite tree.
     Delete { account: String },
-    /// Raise a member's invite quota by N.
-    GrantInvites {
-        account: String,
-        #[arg(value_parser = clap::value_parser!(u16).range(1..))]
-        n: u16,
-    },
     /// List Ergo accounts that are neither members nor bots, members and
     /// bots Ergo lacks, removed ones whose accounts are still to be erased,
     /// and bots whose owner was removed.
@@ -44,7 +35,6 @@ pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result
         } => adopt(admin, &account, is_admin).await,
         MemberCommand::ResetPassword { account } => reset_password(admin, &account).await,
         MemberCommand::Delete { account } => delete(admin, &account).await,
-        MemberCommand::GrantInvites { account, n } => grant_invites(admin, &account, n).await,
         MemberCommand::Reconcile => reconcile(admin).await,
     }
 }
@@ -71,7 +61,6 @@ async fn adopt(admin: &Admin, name: &str, is_admin: bool) -> anyhow::Result<Stri
             news_opt_in: false,
             invited_by: None,
             joined_at: db::now(),
-            invite_quota: invite_rules::DEFAULT_QUOTA,
             is_admin,
         })
         .await?;
@@ -99,19 +88,6 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
         removal.sessions_ended,
         removal.invites_revoked,
         erase_reminder(account),
-    ))
-}
-
-async fn grant_invites(admin: &Admin, name: &str, n: u16) -> anyhow::Result<String> {
-    let member = admin.current_member(name).await?;
-    let quota = admin
-        .db
-        .grant_invites(&member.account, n.into())
-        .await?
-        .with_context(|| format!("{} was removed", member.account))?;
-    Ok(format!(
-        "{}'s invite quota is now {quota}\n",
-        member.account
     ))
 }
 

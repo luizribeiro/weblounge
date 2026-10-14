@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use sqlx::{
-    SqliteExecutor, SqlitePool,
+    SqliteConnection, SqliteExecutor, SqlitePool,
     migrate::Migrator,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
 };
@@ -34,7 +34,6 @@ pub struct NewMember<'a> {
     /// `None` for a root of the invite tree.
     pub invited_by: Option<&'a str>,
     pub joined_at: i64,
-    pub invite_quota: i64,
     pub is_admin: bool,
 }
 
@@ -47,7 +46,6 @@ pub struct Member {
     pub news_opt_in: bool,
     pub invited_by: Option<String>,
     pub joined_at: i64,
-    pub invite_quota: i64,
     pub is_admin: bool,
     pub removed_at: Option<i64>,
 }
@@ -227,8 +225,7 @@ impl Db {
             .connect_with(options)
             .await
             .with_context(|| format!("can't open the database {}", path.display()))?;
-        MIGRATOR
-            .run(&pool)
+        migrate(&pool)
             .await
             .with_context(|| format!("can't migrate the database {}", path.display()))?;
         Ok(Self { pool })
@@ -252,23 +249,9 @@ impl Db {
         sqlx::query_as!(
             Member,
             r#"SELECT account AS "account!", email, email_verified_at, news_opt_in,
-                      invited_by, joined_at, invite_quota, is_admin, removed_at
+                      invited_by, joined_at, is_admin, removed_at
                FROM members WHERE account = ?"#,
             account
-        )
-        .fetch_optional(&self.pool)
-        .await
-    }
-
-    /// Raises a current member's invite quota by `extra`, answering the new
-    /// quota, or `None` if there's no such member or they were removed.
-    pub async fn grant_invites(&self, account: &str, extra: i64) -> sqlx::Result<Option<i64>> {
-        sqlx::query_scalar!(
-            "UPDATE members SET invite_quota = invite_quota + ?
-             WHERE account = ? AND removed_at IS NULL
-             RETURNING invite_quota",
-            extra,
-            account,
         )
         .fetch_optional(&self.pool)
         .await
@@ -395,7 +378,7 @@ impl Db {
         sqlx::query!(
             "UPDATE members
              SET email = NULL, email_verified_at = NULL, news_opt_in = FALSE,
-                 invite_quota = 0, is_admin = FALSE, removed_at = ?
+                 is_admin = FALSE, removed_at = ?
              WHERE account = ?",
             now,
             account,
@@ -441,15 +424,7 @@ impl Db {
         invite: &NewInvite<'_>,
         allowed: impl FnOnce(&[Invite]) -> bool,
     ) -> sqlx::Result<bool> {
-        let mut transaction = self.pool.begin().await?;
-        // Writing first takes the database's write lock for the whole
-        // transaction, before anything is read.
-        sqlx::query!(
-            "UPDATE members SET invite_quota = invite_quota WHERE account = ?",
-            invite.created_by,
-        )
-        .execute(&mut *transaction)
-        .await?;
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let invites = sqlx::query_as!(
             Invite,
             r#"SELECT code AS "code!", created_by, note, created_at, expires_at, claimed_at,
@@ -770,14 +745,13 @@ async fn insert_member(
     member: &NewMember<'_>,
 ) -> sqlx::Result<()> {
     sqlx::query!(
-        "INSERT INTO members (account, email, news_opt_in, invited_by, joined_at, invite_quota, is_admin)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO members (account, email, news_opt_in, invited_by, joined_at, is_admin)
+         VALUES (?, ?, ?, ?, ?, ?)",
         member.account,
         member.email,
         member.news_opt_in,
         member.invited_by,
         member.joined_at,
-        member.invite_quota,
         member.is_admin,
     )
     .execute(executor)
@@ -801,6 +775,34 @@ async fn insert_invite(
     .execute(executor)
     .await
     .map(drop)
+}
+
+/// Applies the migrations `pool`'s database lacks with foreign keys off,
+/// which SQLite needs for rebuilding a table others refer to, and then
+/// checks that every reference still holds.
+async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
+    let mut connection = pool.acquire().await?;
+    sqlx::query("PRAGMA foreign_keys = OFF")
+        .execute(&mut *connection)
+        .await?;
+    let migrated = migrate_and_check(&mut connection).await;
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&mut *connection)
+        .await?;
+    migrated
+}
+
+async fn migrate_and_check(connection: &mut SqliteConnection) -> anyhow::Result<()> {
+    MIGRATOR.run_direct(&mut *connection).await?;
+    let broken = sqlx::query("PRAGMA foreign_key_check")
+        .fetch_all(&mut *connection)
+        .await?;
+    anyhow::ensure!(
+        broken.is_empty(),
+        "{} rows refer to rows that aren't there",
+        broken.len()
+    );
+    Ok(())
 }
 
 async fn delete_sessions(executor: impl SqliteExecutor<'_>, account: &str) -> sqlx::Result<u64> {
@@ -844,6 +846,98 @@ pub(crate) mod tests {
         );
     }
 
+    /// Applies the migrations up to `version` to a new database at `path`
+    /// and runs `sql` there, as a concierge of that version would have.
+    async fn written_by_version(path: &Path, version: i64, sql: &str) {
+        let older = Migrator {
+            migrations: MIGRATOR
+                .iter()
+                .filter(|migration| migration.version <= version)
+                .cloned()
+                .collect(),
+            ..Migrator::DEFAULT
+        };
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .foreign_keys(true);
+        let pool = SqlitePool::connect_with(options).await.unwrap();
+        older.run(&pool).await.unwrap();
+        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    async fn dropping_the_invite_quota_keeps_members_and_whatever_refers_to_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261016120000,
+            "INSERT INTO members (account, email, joined_at, invite_quota, is_admin)
+             VALUES ('alice', 'alice@example.org', 1, 5, TRUE);
+             INSERT INTO members (account, invited_by, joined_at, invite_quota, removed_at)
+             VALUES ('bob', 'alice', 2, 0, 3);
+             INSERT INTO invites (code, created_by, created_at, expires_at) VALUES ('open', 'alice', 4, 5);
+             INSERT INTO sessions (token_hash, account, created_at, expires_at) VALUES (x'00', 'alice', 6, 70);
+             INSERT INTO oauth_tokens (token_hash, session_hash, client_id, created_at, expires_at)
+             VALUES (x'01', x'00', 'gamja', 6, 70);
+             INSERT INTO bots (account, owner, created_at) VALUES ('bender', 'alice', 8);",
+        )
+        .await;
+
+        let db = Db::open(&path).await.unwrap();
+
+        assert_eq!(
+            db.session(b"\x00", 10)
+                .await
+                .unwrap()
+                .unwrap()
+                .member
+                .account,
+            "alice"
+        );
+        assert!(db.access_token(b"\x01", 10).await.unwrap().is_some());
+
+        let alice = db.member("ALICE").await.unwrap().unwrap();
+        assert_eq!(alice.email.as_deref(), Some("alice@example.org"));
+        assert!(alice.is_admin);
+        let bob = db.member("bob").await.unwrap().unwrap();
+        assert_eq!(
+            (bob.invited_by.as_deref(), bob.removed_at),
+            (Some("alice"), Some(3))
+        );
+        assert!(db.invite("open").await.unwrap().is_some());
+        assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 1);
+        let error = execute(
+            &db,
+            "INSERT INTO bots (account, owner, created_at) VALUES ('x', 'nobody', 0)",
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("FOREIGN KEY"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_database_whose_references_dont_hold_doesnt_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261016120000,
+            "PRAGMA foreign_keys = OFF;
+             INSERT INTO sessions (token_hash, account, created_at, expires_at) VALUES (x'00', 'ghost', 0, 1);",
+        )
+        .await;
+
+        let error = Db::open(&path).await.err().unwrap();
+
+        assert!(
+            format!("{error:#}").contains("1 rows refer to rows that aren't there"),
+            "{error:#}"
+        );
+    }
+
     #[tokio::test]
     async fn writes_ahead_and_enforces_foreign_keys() {
         let (db, _dir) = temp_db().await;
@@ -864,11 +958,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn account_names_are_unique_whatever_their_case() {
         let (db, _dir) = temp_db().await;
-        let insert = |name: &str| {
-            format!(
-                "INSERT INTO members (account, joined_at, invite_quota) VALUES ('{name}', 0, 0)"
-            )
-        };
+        let insert =
+            |name: &str| format!("INSERT INTO members (account, joined_at) VALUES ('{name}', 0)");
         execute(&db, &insert("Alice")).await.unwrap();
         let error = execute(&db, &insert("aLICE")).await.unwrap_err();
         assert!(error.to_string().contains("UNIQUE"), "{error}");
@@ -879,15 +970,15 @@ pub(crate) mod tests {
         let (db, _dir) = temp_db().await;
         let error = execute(
             &db,
-            "INSERT INTO members (account, email, joined_at, invite_quota, removed_at)
-             VALUES ('alice', 'alice@example.org', 0, 0, 1)",
+            "INSERT INTO members (account, email, joined_at, removed_at)
+             VALUES ('alice', 'alice@example.org', 0, 1)",
         )
         .await
         .unwrap_err();
         assert!(error.to_string().contains("CHECK"), "{error}");
         execute(
             &db,
-            "INSERT INTO members (account, joined_at, invite_quota, removed_at) VALUES ('alice', 0, 0, 1)",
+            "INSERT INTO members (account, joined_at, removed_at) VALUES ('alice', 0, 1)",
         )
         .await
         .unwrap();
@@ -898,10 +989,10 @@ pub(crate) mod tests {
         let (db, _dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, email, invited_by, joined_at, invite_quota)
-             VALUES ('root', NULL, NULL, 0, 5),
-                    ('alice', 'alice@example.org', 'root', 10, 5),
-                    ('bob', 'bob@example.org', 'alice', 20, 5);
+            "INSERT INTO members (account, email, invited_by, joined_at)
+             VALUES ('root', NULL, NULL, 0),
+                    ('alice', 'alice@example.org', 'root', 10),
+                    ('bob', 'bob@example.org', 'alice', 20);
              UPDATE members SET email_verified_at = 11, news_opt_in = TRUE, is_admin = TRUE
              WHERE account = 'alice';
              INSERT INTO invites (code, created_by, note, created_at, expires_at, redeemed_by, redeemed_at)
@@ -926,7 +1017,6 @@ pub(crate) mod tests {
                 news_opt_in: false,
                 invited_by: Some("root".into()),
                 joined_at: 10,
-                invite_quota: 0,
                 is_admin: false,
                 removed_at: Some(200),
             }
@@ -955,7 +1045,7 @@ pub(crate) mod tests {
         execute(
             &db,
             &format!(
-                "INSERT INTO members (account, joined_at, invite_quota) VALUES ('alice', 0, 5);
+                "INSERT INTO members (account, joined_at) VALUES ('alice', 0);
                  INSERT INTO invites (code, created_by, created_at, expires_at)
                  VALUES ('open', 'alice', {CREATED}, {})",
                 invite_rules::expires_at(CREATED)
@@ -973,7 +1063,6 @@ pub(crate) mod tests {
             news_opt_in: true,
             invited_by: Some("alice"),
             joined_at,
-            invite_quota: invite_rules::DEFAULT_QUOTA,
             is_admin: false,
         }
     }
@@ -1110,7 +1199,7 @@ pub(crate) mod tests {
         let (db, dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, joined_at, invite_quota) VALUES ('alice', 0, 5), ('bob', 0, 5);
+            "INSERT INTO members (account, joined_at) VALUES ('alice', 0), ('bob', 0);
              INSERT INTO sessions (token_hash, account, created_at, expires_at)
              VALUES (x'a1', 'alice', 0, 100), (x'a2', 'alice', 0, 200), (x'b1', 'bob', 0, 100);",
         )
@@ -1184,8 +1273,8 @@ pub(crate) mod tests {
         let (db, _dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, email, email_verified_at, joined_at, invite_quota)
-             VALUES ('alice', 'alice@example.org', 10, 0, 5)",
+            "INSERT INTO members (account, email, email_verified_at, joined_at)
+             VALUES ('alice', 'alice@example.org', 10, 0)",
         )
         .await
         .unwrap();
@@ -1329,7 +1418,7 @@ pub(crate) mod tests {
             .unwrap();
         execute(
             &db,
-            "UPDATE members SET invite_quota = 0, removed_at = 1 WHERE account = 'alice'",
+            "UPDATE members SET removed_at = 1 WHERE account = 'alice'",
         )
         .await
         .unwrap();
@@ -1341,8 +1430,8 @@ pub(crate) mod tests {
         let (db, dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, joined_at, invite_quota)
-             VALUES ('luiz', 0, 5), ('alice', 0, 5)",
+            "INSERT INTO members (account, joined_at)
+             VALUES ('luiz', 0), ('alice', 0)",
         )
         .await
         .unwrap();
@@ -1399,7 +1488,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_bots().await;
         execute(
             &db,
-            "UPDATE members SET invite_quota = 0, removed_at = 300 WHERE account = 'alice'",
+            "UPDATE members SET removed_at = 300 WHERE account = 'alice'",
         )
         .await
         .unwrap();
@@ -1448,8 +1537,8 @@ pub(crate) mod tests {
         let (db, _dir) = with_bots().await;
         execute(
             &db,
-            "INSERT INTO members (account, joined_at, invite_quota, removed_at)
-             VALUES ('Gone', 0, 0, 1)",
+            "INSERT INTO members (account, joined_at, removed_at)
+             VALUES ('Gone', 0, 1)",
         )
         .await
         .unwrap();
@@ -1466,7 +1555,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_sessions().await;
         execute(
             &db,
-            "UPDATE members SET invite_quota = 0, removed_at = 1 WHERE account = 'alice'",
+            "UPDATE members SET removed_at = 1 WHERE account = 'alice'",
         )
         .await
         .unwrap();

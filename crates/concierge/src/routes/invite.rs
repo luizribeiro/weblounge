@@ -199,7 +199,6 @@ async fn create_account(
         news_opt_in: account.news,
         invited_by: claim.created_by.as_deref(),
         joined_at: now,
-        invite_quota: invite_rules::DEFAULT_QUOTA,
         is_admin: false,
     };
     match app.db.redeem_invite(claim, &member).await {

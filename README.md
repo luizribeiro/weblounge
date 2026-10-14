@@ -159,7 +159,6 @@ machine. They print plain lines a script can read:
 | `member reset-password <account>`               | Sets a new generated password, ends sessions, prints it once     |
 | `member delete <account>`                       | Removes a member's data and bots; their place in the tree stays  |
 | `member reconcile`                              | Lists accounts Ergo and concierge disagree on, bots included     |
-| `member grant-invites <account> <n>`            | Raises a member's invite quota by n                              |
 | `bot create <owner> <name> [--note …]`          | Registers a member's bot, prints its generated password once     |
 | `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
 | `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |

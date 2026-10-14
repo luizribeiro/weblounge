@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT account AS \"account!\", email, email_verified_at, news_opt_in,\n                      invited_by, joined_at, invite_quota, is_admin, removed_at\n               FROM members WHERE account = ?",
+  "query": "SELECT account AS \"account!\", email, email_verified_at, news_opt_in,\n                      invited_by, joined_at, is_admin, removed_at\n               FROM members WHERE account = ?",
   "describe": {
     "columns": [
       {
@@ -34,18 +34,13 @@
         "type_info": "Integer"
       },
       {
-        "name": "invite_quota",
-        "ordinal": 6,
-        "type_info": "Integer"
-      },
-      {
         "name": "is_admin",
-        "ordinal": 7,
+        "ordinal": 6,
         "type_info": "Bool"
       },
       {
         "name": "removed_at",
-        "ordinal": 8,
+        "ordinal": 7,
         "type_info": "Integer"
       }
     ],
@@ -60,9 +55,8 @@
       true,
       false,
       false,
-      false,
       true
     ]
   },
-  "hash": "52838e513fdf11d478bb6ec062c9685115b0f53b3b9cc2c0eb1331773e81bfe5"
+  "hash": "0c0647d6c03215d8372606540bf73c9ef997c06c8f9598ab7341ed0833ddfa60"
 }

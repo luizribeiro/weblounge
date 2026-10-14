@@ -146,10 +146,8 @@ async fn a_name_ergo_already_has_is_taken_and_the_invite_still_works() {
 #[tokio::test]
 async fn a_removed_members_name_stays_taken_after_ergo_erased_it() {
     let site = with_invite_from_alice().await;
-    site.execute(
-        "INSERT INTO members (account, joined_at, invite_quota, removed_at) VALUES ('Bob', 0, 0, 1)",
-    )
-    .await;
+    site.execute("INSERT INTO members (account, joined_at, removed_at) VALUES ('Bob', 0, 1)")
+        .await;
 
     let response = site
         .post(INVITE, &signup("BOB", NEW_PASSWORD, NEW_PASSWORD), None)
@@ -259,10 +257,8 @@ async fn an_invite_revoked_while_ergo_works_adds_no_member_and_says_so() {
 
 #[tokio::test]
 async fn failing_to_record_the_member_after_ergo_said_yes_says_so() {
-    let site = with_ergo_that_runs(
-        "INSERT INTO members (account, joined_at, invite_quota) VALUES ('bob', 0, 5)",
-    )
-    .await;
+    let site =
+        with_ergo_that_runs("INSERT INTO members (account, joined_at) VALUES ('bob', 0)").await;
 
     let response = site.post(INVITE, &bob(), None).await;
 
