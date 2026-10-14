@@ -38,3 +38,7 @@ with subtest("the kernel keeps io_uring, its addresses, ptrace and kexec from se
         "kernel.kexec_load_disabled": "1",
     }.items():
         assert credenza.succeed(f"sysctl -n {setting}").strip() == value, setting
+
+with subtest("credenza neither follows nor sends ICMP redirects, on any interface"):
+    settings = credenza.succeed("sysctl -a -r '\\.(accept|send)_redirects$'").strip().splitlines()
+    assert len(settings) > 6 and all(line.endswith(" = 0") for line in settings), settings
