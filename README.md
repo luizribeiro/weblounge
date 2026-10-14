@@ -135,19 +135,20 @@ Concierge's admin commands run on the server, as the service itself:
 `concierge-admin status` over SSH, or `just prod concierge status` from your
 machine. They print plain lines a script can read:
 
-| Command                                   | What it does                                                    |
-| ----------------------------------------- | --------------------------------------------------------------- |
-| `status`                                  | Configuration, secrets, database and whether Ergo answers       |
-| `invite create --root [--note …]`         | Prints the link of a new invite nobody vouches for              |
-| `member adopt <account> [--admin]`        | Makes an existing Ergo account a member at the root of the tree |
-| `member reset-password <account>`         | Sets a new generated password, ends sessions, prints it once    |
-| `member delete <account>`                 | Removes a member's data, keeping their place in the tree        |
-| `member reconcile`                        | Lists Ergo accounts without members, and the other way round    |
-| `member grant-invites <account> <n>`      | Raises a member's invite quota by n                             |
-| `bot create <owner> <name> [--note …]`    | Registers a member's bot, prints its generated password once    |
-| `bot list [<owner>]`                      | Lists bots, of everyone or one member: name, owner, date, note  |
-| `bot reset-password <name>`               | Sets a bot's new generated password, prints it once             |
-| `bot delete <name>`                       | Locks a bot out and marks it deleted, keeping its name taken    |
+| Command                                         | What it does                                                     |
+| ----------------------------------------------- | ---------------------------------------------------------------- |
+| `status`                                        | Configuration, secrets, database and whether Ergo answers        |
+| `invite create --root [--note …]`               | Prints the link of a new invite nobody vouches for               |
+| `member adopt <account> [--admin]`              | Makes an existing Ergo account a member at the root of the tree  |
+| `member reset-password <account>`               | Sets a new generated password, ends sessions, prints it once     |
+| `member delete <account>`                       | Removes a member's data, keeping their place in the tree         |
+| `member reconcile`                              | Lists Ergo accounts without members, and the other way round     |
+| `member grant-invites <account> <n>`            | Raises a member's invite quota by n                              |
+| `bot create <owner> <name> [--note …]`          | Registers a member's bot, prints its generated password once     |
+| `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
+| `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |
+| `bot delete <name>`                             | Locks a bot out and marks it deleted, keeping its name taken     |
+| `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password to the file's |
 
 Ergo's API can't delete accounts, so after `member delete` or `bot delete`
 an oper still runs `/NS ERASE <account>`.

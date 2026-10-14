@@ -1,12 +1,17 @@
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
+
 use anyhow::Context;
 use clap::Subcommand;
 use ergo_api::{Passphrase, Preference, Registration, SettingsChanges};
 
 use super::{Admin, erase_reminder, print_once};
 use crate::{
-    db::{self, Bot, NewBot},
+    db::{self, Bot, Member, NewBot},
     nick::Nick,
-    password, tree,
+    password, password_rules, tree,
 };
 
 #[derive(Subcommand)]
@@ -29,6 +34,15 @@ pub enum BotCommand {
     /// Lock a bot out with a password nobody knows and mark it deleted,
     /// keeping its name taken.
     Delete { name: String },
+    /// Create a bot whose password is in a file, or set an existing bot's
+    /// password to the file's. Meant to run before the bot starts, every
+    /// time.
+    Ensure {
+        owner: String,
+        name: String,
+        #[arg(long)]
+        password_file: PathBuf,
+    },
 }
 
 pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -39,6 +53,11 @@ pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<St
         BotCommand::List { owner } => list(admin, owner.as_deref()).await,
         BotCommand::ResetPassword { name } => reset_password(admin, &name).await,
         BotCommand::Delete { name } => delete(admin, &name).await,
+        BotCommand::Ensure {
+            owner,
+            name,
+            password_file,
+        } => ensure(admin, &owner, &name, &password_file).await,
     }
 }
 
@@ -48,9 +67,43 @@ async fn create(
     name: &str,
     note: Option<&str>,
 ) -> anyhow::Result<String> {
+    let owner = admin.current_member(owner).await?;
     let password = password::generate();
-    register(admin, owner, name, note, &password).await?;
+    register(admin, &owner, name, note, &password).await?;
     Ok(print_once(&password))
+}
+
+async fn ensure(
+    admin: &Admin,
+    owner: &str,
+    name: &str,
+    password_file: &Path,
+) -> anyhow::Result<String> {
+    let password = read_password(password_file)?;
+    let owner = admin.current_member(owner).await?;
+    let Some(bot) = admin.db.bot(name).await? else {
+        let nick = register(admin, &owner, name, None, &password).await?;
+        return Ok(format!("created {nick}\n"));
+    };
+    ensure_live(&bot)?;
+    anyhow::ensure!(
+        bot.owner == owner.account,
+        "{} belongs to {}",
+        bot.account,
+        bot.owner
+    );
+    stay_offline_when_stopped(admin, &bot.account).await?;
+    admin.set_password(&bot.account, &password).await?;
+    Ok(format!("updated {}\n", bot.account))
+}
+
+/// The password in `path`, without the newline that may end the file.
+fn read_password(path: &Path) -> anyhow::Result<Passphrase> {
+    let contents =
+        fs::read_to_string(path).with_context(|| format!("can't read {}", path.display()))?;
+    let password = contents.strip_suffix('\n').unwrap_or(&contents);
+    password_rules::check(password, password)
+        .with_context(|| format!("{} doesn't hold a usable password", path.display()))
 }
 
 async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
@@ -102,20 +155,24 @@ async fn live_bot(admin: &Admin, name: &str) -> anyhow::Result<Bot> {
         .bot(name)
         .await?
         .with_context(|| format!("{name} is not a bot"))?;
-    anyhow::ensure!(bot.removed_at.is_none(), "{} was deleted", bot.account);
+    ensure_live(&bot)?;
     Ok(bot)
+}
+
+fn ensure_live(bot: &Bot) -> anyhow::Result<()> {
+    anyhow::ensure!(bot.removed_at.is_none(), "{} was deleted", bot.account);
+    Ok(())
 }
 
 /// Registers the Ergo account `name` with `password` and records it as a
 /// bot of `owner`, answering its name.
 async fn register(
     admin: &Admin,
-    owner: &str,
+    owner: &Member,
     name: &str,
     note: Option<&str>,
     password: &Passphrase,
 ) -> anyhow::Result<Nick> {
-    let owner = admin.current_member(owner).await?;
     let nick = Nick::parse(name).with_context(|| format!("{name} can't be a bot's name"))?;
     let taken = || anyhow::anyhow!("{nick} is taken");
     if admin.db.name_held(nick.as_str()).await? {

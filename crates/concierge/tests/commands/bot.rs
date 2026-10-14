@@ -324,6 +324,136 @@ mod delete {
     }
 }
 
+mod ensure {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+
+    use ergo_api::SettingsChanges;
+
+    use super::*;
+
+    const PASSWORD: &str = "q7Hx-2mZp_9vLcT4wRfB";
+
+    /// A file holding `contents`, as systemd hands a bot's secret over.
+    fn password_file(fixture: &Fixture, contents: &str) -> PathBuf {
+        let path = fixture.state_dir().join("bender-password");
+        fs::write(&path, contents).unwrap();
+        path
+    }
+
+    async fn ensure(fixture: &Fixture, owner: &str, file: &Path) -> anyhow::Result<String> {
+        let file = file.to_str().unwrap();
+        let args = ["bot", "ensure", owner, "bender", "--password-file", file];
+        fixture.run(&args).await
+    }
+
+    #[tokio::test]
+    async fn creates_a_missing_bot_with_the_files_password() {
+        let fixture = Fixture::with_owners().await;
+        let file = password_file(&fixture, &format!("{PASSWORD}\n"));
+
+        let output = ensure(&fixture, "luiz", &file).await.unwrap();
+
+        assert_eq!(output, "created bender\n");
+        assert!(fixture.signs_in_to_ergo("bender", PASSWORD).await);
+        let bot = fixture.bot("bender").await.unwrap();
+        assert_eq!((bot.owner.as_str(), bot.note), ("luiz", None));
+        let settings = fixture.ergo.client().settings("bender").await.unwrap();
+        assert_eq!(settings.always_on, Preference::Off);
+    }
+
+    #[tokio::test]
+    async fn sets_an_existing_bots_password_and_settings_every_time() {
+        let fixture = Fixture::with_owners().await;
+        fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap();
+        let file = password_file(&fixture, PASSWORD);
+        let always_on = SettingsChanges {
+            always_on: Some(Preference::On),
+            ..Default::default()
+        };
+        let client = fixture.ergo.client();
+        client.update_settings("bender", always_on).await.unwrap();
+
+        for _ in 0..2 {
+            let output = ensure(&fixture, "luiz", &file).await.unwrap();
+            assert_eq!(output, "updated bender\n");
+        }
+
+        assert!(fixture.signs_in_to_ergo("bender", PASSWORD).await);
+        let settings = client.settings("bender").await.unwrap();
+        assert_eq!(settings.always_on, Preference::Off);
+        assert_eq!(fixture.db().await.bots(None).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn refuses_another_members_deleted_or_ownerless_bot() {
+        let fixture = Fixture::with_owners().await;
+        fixture.add_member("zoe", Some("luiz")).await;
+        let file = password_file(&fixture, PASSWORD);
+        fixture
+            .run(&["bot", "create", "zoe", "bender"])
+            .await
+            .unwrap();
+
+        for (owner, message) in [
+            ("luiz", "bender belongs to zoe"),
+            ("alice", "alice was removed"),
+            ("nobody", "nobody is not a member"),
+        ] {
+            let error = ensure(&fixture, owner, &file).await.unwrap_err();
+            assert_eq!(error.to_string(), message);
+        }
+        assert!(!fixture.signs_in_to_ergo("bender", PASSWORD).await);
+
+        fixture.run(&["bot", "delete", "bender"]).await.unwrap();
+        let error = ensure(&fixture, "zoe", &file).await.unwrap_err();
+        assert_eq!(error.to_string(), "bender was deleted");
+    }
+
+    #[tokio::test]
+    async fn refuses_a_password_file_it_cannot_use() {
+        let fixture = Fixture::with_owners().await;
+        let missing = fixture.state_dir().join("missing");
+        let error = ensure(&fixture, "luiz", &missing).await.unwrap_err();
+        assert!(error.to_string().starts_with("can't read "), "{error:#}");
+
+        let short = password_file(&fixture, "hunter2\n");
+        let error = ensure(&fixture, "luiz", &short).await.unwrap_err();
+        assert_eq!(
+            format!("{error:#}"),
+            format!(
+                "{} doesn't hold a usable password: Passwords have at least 12 characters.",
+                short.display()
+            )
+        );
+        assert!(!fixture.in_ergo("bender").await);
+    }
+
+    #[tokio::test]
+    async fn fails_when_ergo_does() {
+        let fixture = Fixture::with_owners().await;
+        fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap();
+        let file = password_file(&fixture, PASSWORD);
+        fixture.ergo.fail_next(Failure::Unauthorized);
+
+        let error = ensure(&fixture, "luiz", &file).await.unwrap_err();
+
+        assert!(
+            error.to_string().starts_with("Ergo didn't turn"),
+            "{error:#}"
+        );
+        assert!(!fixture.signs_in_to_ergo("bender", PASSWORD).await);
+    }
+}
+
 mod list {
     use super::*;
 
