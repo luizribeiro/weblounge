@@ -21,17 +21,22 @@ impl Fixture {
         self.ergo.client().info(name).await.unwrap().is_some()
     }
 
-    /// A bot of luiz's that was deleted and that Ergo has since erased.
-    async fn insert_deleted_bot(&self, name: &str) {
-        let db = self.db().await;
+    /// Records a bot created on 2025-10-09, without touching Ergo.
+    async fn insert_bot(&self, name: &str, owner: &str, note: Option<&str>) {
         let bot = NewBot {
             account: name,
-            owner: "luiz",
-            note: None,
+            owner,
+            note,
             created_at: 1_760_000_000,
         };
-        db.insert_bot(&bot).await.unwrap();
-        assert!(db.remove_bot(name, 1_760_100_000).await.unwrap());
+        self.db().await.insert_bot(&bot).await.unwrap();
+    }
+
+    /// A bot of luiz's that was deleted and that Ergo has since erased.
+    async fn insert_deleted_bot(&self, name: &str) {
+        self.insert_bot(name, "luiz", None).await;
+        let removed = self.db().await.remove_bot(name, 1_760_100_000).await;
+        assert!(removed.unwrap());
     }
 }
 
@@ -179,5 +184,51 @@ mod create {
              Ergo refused the request: UNKNOWN_ERROR (simulated failure)"
         );
         assert!(fixture.bot("bender").await.is_some());
+    }
+}
+
+mod list {
+    use super::*;
+
+    async fn with_bots() -> Fixture {
+        let fixture = Fixture::with_owners().await;
+        fixture.add_member("Zoe", Some("luiz")).await;
+        fixture
+            .insert_bot("marvin", "Zoe", Some("posts the weather"))
+            .await;
+        fixture
+            .insert_bot("Bender", "luiz", Some("answers !ping"))
+            .await;
+        fixture.insert_bot("hal", "luiz", None).await;
+        fixture.insert_deleted_bot("dalek").await;
+        fixture
+    }
+
+    #[tokio::test]
+    async fn prints_every_live_bot_by_name() {
+        let fixture = with_bots().await;
+        assert_eq!(
+            fixture.run(&["bot", "list"]).await.unwrap(),
+            "Bender luiz 2025-10-09 answers !ping\n\
+             hal luiz 2025-10-09\n\
+             marvin Zoe 2025-10-09 posts the weather\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn prints_one_members_bots() {
+        let fixture = with_bots().await;
+        assert_eq!(
+            fixture.run(&["bot", "list", "zoe"]).await.unwrap(),
+            "marvin Zoe 2025-10-09 posts the weather\n"
+        );
+        assert_eq!(fixture.run(&["bot", "list", "alice"]).await.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn refuses_someone_who_is_not_a_member() {
+        let fixture = with_bots().await;
+        let error = fixture.run(&["bot", "list", "nobody"]).await.unwrap_err();
+        assert_eq!(error.to_string(), "nobody is not a member");
     }
 }

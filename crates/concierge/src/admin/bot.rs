@@ -6,7 +6,7 @@ use super::{Admin, print_once};
 use crate::{
     db::{self, NewBot},
     nick::Nick,
-    password,
+    password, tree,
 };
 
 #[derive(Subcommand)]
@@ -20,6 +20,9 @@ pub enum BotCommand {
         #[arg(long)]
         note: Option<String>,
     },
+    /// List the bots, of one member or of everyone: name, owner, creation
+    /// date and note.
+    List { owner: Option<String> },
 }
 
 pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -27,6 +30,7 @@ pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<St
         BotCommand::Create { owner, name, note } => {
             create(admin, &owner, &name, note.as_deref()).await
         }
+        BotCommand::List { owner } => list(admin, owner.as_deref()).await,
     }
 }
 
@@ -39,6 +43,25 @@ async fn create(
     let password = password::generate();
     register(admin, owner, name, note, &password).await?;
     Ok(print_once(&password))
+}
+
+async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
+    if let Some(owner) = owner {
+        admin
+            .db
+            .member(owner)
+            .await?
+            .with_context(|| format!("{owner} is not a member"))?;
+    }
+    let bots = admin.db.bots(owner).await?;
+    Ok(bots
+        .into_iter()
+        .map(|bot| {
+            let fields = [bot.account, bot.owner, tree::date(bot.created_at)];
+            let fields: Vec<_> = fields.into_iter().chain(bot.note).collect();
+            fields.join(" ") + "\n"
+        })
+        .collect())
 }
 
 /// Registers the Ergo account `name` with `password` and records it as a
