@@ -1,13 +1,19 @@
 //! The commands admins run on the server through concierge-admin. Each
 //! prints plain lines a script can read.
 
+mod bot;
 mod invite;
 mod member;
 
+use anyhow::Context;
 use clap::{Parser, Subcommand};
-use ergo_api::Client;
+use ergo_api::{Client, Passphrase};
 
-use crate::{config::Config, db::Db, status};
+use crate::{
+    config::Config,
+    db::{Db, Member},
+    status,
+};
 
 /// The members' site of weblounge.org, and the admin commands behind it.
 #[derive(Parser)]
@@ -28,6 +34,9 @@ pub enum AdminCommand {
     /// Manage members.
     #[command(subcommand)]
     Member(member::MemberCommand),
+    /// Manage members' bots.
+    #[command(subcommand)]
+    Bot(bot::BotCommand),
 }
 
 /// Runs `command` and answers with what it prints.
@@ -36,6 +45,7 @@ pub async fn run(command: AdminCommand, config: &Config) -> anyhow::Result<Strin
         AdminCommand::Status => status::report(config).await,
         AdminCommand::Invite(command) => invite::run(command, &Admin::connect(config).await?).await,
         AdminCommand::Member(command) => member::run(command, &Admin::connect(config).await?).await,
+        AdminCommand::Bot(command) => bot::run(command, &Admin::connect(config).await?).await,
     }
 }
 
@@ -54,4 +64,25 @@ impl Admin {
             ergo: config.ergo_client()?,
         })
     }
+
+    /// The member named `name`, unless there's none or they were removed.
+    async fn current_member(&self, name: &str) -> anyhow::Result<Member> {
+        let member = self
+            .db
+            .member(name)
+            .await?
+            .with_context(|| format!("{name} is not a member"))?;
+        anyhow::ensure!(
+            member.removed_at.is_none(),
+            "{} was removed",
+            member.account
+        );
+        Ok(member)
+    }
+}
+
+/// A generated password as the commands print it: alone on its line, the
+/// only time anyone sees it.
+fn print_once(password: &Passphrase) -> String {
+    format!("{}\n", password.as_str())
 }

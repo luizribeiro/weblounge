@@ -1,6 +1,7 @@
 //! Concierge's commands, run against a temporary state directory and
 //! credentials and a fake Ergo.
 
+mod bot;
 mod invite;
 mod member;
 mod status;

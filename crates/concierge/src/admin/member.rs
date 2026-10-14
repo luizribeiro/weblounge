@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 use anyhow::Context;
 use clap::Subcommand;
 
-use super::Admin;
+use super::{Admin, print_once};
 use crate::{
-    db::{self, Member, NewMember},
+    db::{self, NewMember},
     invite_rules, password,
 };
 
@@ -79,7 +79,7 @@ async fn adopt(admin: &Admin, name: &str, is_admin: bool) -> anyhow::Result<Stri
 }
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
-    let member = current_member(admin, name).await?;
+    let member = admin.current_member(name).await?;
     let password = password::generate();
     admin
         .ergo
@@ -87,11 +87,11 @@ async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
         .await
         .with_context(|| format!("Ergo didn't take {}'s new password", member.account))?;
     admin.db.end_sessions(&member.account).await?;
-    Ok(format!("{}\n", password.as_str()))
+    Ok(print_once(&password))
 }
 
 async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
-    let member = current_member(admin, name).await?;
+    let member = admin.current_member(name).await?;
     let account = &member.account;
     let removal = admin.db.remove_member(account, db::now()).await?;
     Ok(format!(
@@ -102,7 +102,7 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
 }
 
 async fn grant_invites(admin: &Admin, name: &str, n: u16) -> anyhow::Result<String> {
-    let member = current_member(admin, name).await?;
+    let member = admin.current_member(name).await?;
     let quota = admin
         .db
         .grant_invites(&member.account, n.into())
@@ -141,19 +141,4 @@ async fn reconcile(admin: &Admin) -> anyhow::Result<String> {
     );
     lines.sort();
     Ok(lines.into_iter().map(|line| line + "\n").collect())
-}
-
-/// The member named `name`, unless there's none or they were removed.
-async fn current_member(admin: &Admin, name: &str) -> anyhow::Result<Member> {
-    let member = admin
-        .db
-        .member(name)
-        .await?
-        .with_context(|| format!("{name} is not a member"))?;
-    anyhow::ensure!(
-        member.removed_at.is_none(),
-        "{} was removed",
-        member.account
-    );
-    Ok(member)
 }
