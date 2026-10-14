@@ -197,6 +197,15 @@ pub struct Bot {
     pub removed_at: Option<i64>,
 }
 
+/// A bot's name and owner, and which of the two is gone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BotAccount {
+    pub account: String,
+    pub owner: String,
+    pub removed: bool,
+    pub owner_removed: bool,
+}
+
 /// Concierge's SQLite database, migrated to the schema this build knows.
 #[derive(Clone)]
 pub struct Db {
@@ -726,6 +735,20 @@ impl Db {
                FROM bots WHERE removed_at IS NULL AND (?1 IS NULL OR owner = ?1 COLLATE NOCASE)
                ORDER BY account"#,
             owner
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Every bot's account, deleted ones included.
+    pub async fn bot_accounts(&self) -> sqlx::Result<Vec<BotAccount>> {
+        sqlx::query_as!(
+            BotAccount,
+            r#"SELECT bots.account AS "account!", bots.owner,
+                      bots.removed_at IS NOT NULL AS "removed!: bool",
+                      members.removed_at IS NOT NULL AS "owner_removed!: bool"
+               FROM bots JOIN members ON members.account = bots.owner
+               ORDER BY bots.account"#
         )
         .fetch_all(&self.pool)
         .await
@@ -1397,6 +1420,31 @@ pub(crate) mod tests {
         assert_eq!(names(db.bots(None).await.unwrap()), ["bender", "Marvin"]);
         assert_eq!(names(db.bots(Some("LUIZ")).await.unwrap()), ["bender"]);
         assert!(db.bots(Some("nobody")).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn lists_every_bot_with_whether_it_or_its_owner_is_gone() {
+        let (db, _dir) = with_bots().await;
+        execute(
+            &db,
+            "UPDATE members SET invite_quota = 0, removed_at = 300 WHERE account = 'alice'",
+        )
+        .await
+        .unwrap();
+        let account = |account: &str, owner: &str, removed, owner_removed| BotAccount {
+            account: account.into(),
+            owner: owner.into(),
+            removed,
+            owner_removed,
+        };
+        assert_eq!(
+            db.bot_accounts().await.unwrap(),
+            [
+                account("bender", "luiz", false, false),
+                account("dalek", "luiz", true, false),
+                account("Marvin", "alice", false, true),
+            ]
+        );
     }
 
     #[tokio::test]

@@ -1,5 +1,5 @@
 use concierge::{
-    db::{self, NewInvite},
+    db::{self, NewBot, NewInvite},
     invite_rules::DEFAULT_QUOTA,
 };
 use ergo_api::{SettingsChanges, fake::Failure};
@@ -362,6 +362,36 @@ mod reconcile {
              only in ergo: Zed\n\
              removed but still in ergo: dave\n\
              removed but still in ergo: erin\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn knows_bot_accounts_and_reports_the_ones_out_of_step() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.add_member("carol", Some("alice")).await;
+        for (owner, bot) in [("alice", "Bender"), ("alice", "hal"), ("carol", "marvin")] {
+            fixture.run(&["bot", "create", owner, bot]).await.unwrap();
+        }
+        fixture.run(&["bot", "delete", "hal"]).await.unwrap();
+        let db = fixture.db().await;
+        let ghost = NewBot {
+            account: "ghost",
+            owner: "alice",
+            note: None,
+            created_at: 1_760_000_000,
+        };
+        db.insert_bot(&ghost).await.unwrap();
+        db.remove_member("carol", db::now()).await.unwrap();
+
+        let output = fixture.run(&["member", "reconcile"]).await.unwrap();
+
+        assert_eq!(
+            output,
+            "bot of a removed member: marvin (carol)\n\
+             only in concierge: bot ghost\n\
+             removed but still in ergo: bot hal\n\
+             removed but still in ergo: carol\n"
         );
     }
 

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT bots.account AS \"account!\", bots.owner,\n                      bots.removed_at IS NOT NULL AS \"removed!: bool\",\n                      members.removed_at IS NOT NULL AS \"owner_removed!: bool\"\n               FROM bots JOIN members ON members.account = bots.owner\n               ORDER BY bots.account",
+  "describe": {
+    "columns": [
+      {
+        "name": "account!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "owner",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "removed!: bool",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "owner_removed!: bool",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ec40e94bd93364106359cde680f320ae8e6ea58d4f682d31dbae66a1f7881245"
+}

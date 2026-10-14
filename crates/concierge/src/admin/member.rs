@@ -30,8 +30,9 @@ pub enum MemberCommand {
         #[arg(value_parser = clap::value_parser!(u16).range(1..))]
         n: u16,
     },
-    /// List Ergo accounts that aren't members, members Ergo lacks, and
-    /// removed members whose accounts are still to be erased.
+    /// List Ergo accounts that are neither members nor bots, members and
+    /// bots Ergo lacks, removed ones whose accounts are still to be erased,
+    /// and bots whose owner was removed.
     Reconcile,
 }
 
@@ -123,14 +124,25 @@ async fn reconcile(admin: &Admin) -> anyhow::Result<String> {
         .map(|account| String::from(account.account_name.as_str()))
         .map(|name| (name.to_ascii_lowercase(), name))
         .collect();
-    let mut lines = Vec::new();
-    for member in admin.db.member_accounts().await? {
-        let known_to_ergo = in_ergo
-            .remove(&member.account.to_ascii_lowercase())
-            .is_some();
-        match (member.removed, known_to_ergo) {
-            (false, false) => lines.push(format!("only in concierge: {}", member.account)),
-            (true, true) => lines.push(format!("removed but still in ergo: {}", member.account)),
+    let members = admin.db.member_accounts().await?;
+    let bots = admin.db.bot_accounts().await?;
+    let mut lines: Vec<_> = bots
+        .iter()
+        .filter(|bot| bot.owner_removed && !bot.removed)
+        .map(|bot| format!("bot of a removed member: {} ({})", bot.account, bot.owner))
+        .collect();
+    let known = members
+        .into_iter()
+        .map(|member| ("", member.account, member.removed))
+        .chain(
+            bots.into_iter()
+                .map(|bot| ("bot ", bot.account, bot.removed)),
+        );
+    for (kind, account, removed) in known {
+        let known_to_ergo = in_ergo.remove(&account.to_ascii_lowercase()).is_some();
+        match (removed, known_to_ergo) {
+            (false, false) => lines.push(format!("only in concierge: {kind}{account}")),
+            (true, true) => lines.push(format!("removed but still in ergo: {kind}{account}")),
             _ => {}
         }
     }
