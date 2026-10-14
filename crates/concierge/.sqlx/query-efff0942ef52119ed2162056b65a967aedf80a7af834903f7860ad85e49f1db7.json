@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members\n             SET email_verified_at = CASE WHEN email IS ? THEN email_verified_at END,\n                 email = ?, news_opt_in = ?\n             WHERE account = ? AND removed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "efff0942ef52119ed2162056b65a967aedf80a7af834903f7860ad85e49f1db7"
+}

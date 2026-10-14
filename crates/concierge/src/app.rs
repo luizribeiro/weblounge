@@ -40,6 +40,7 @@ pub fn router(app: App) -> Router {
     let state = Arc::new(app);
     let pages = Router::new()
         .route("/", get(routes::account::show))
+        .route("/settings", post(routes::account::update))
         .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),

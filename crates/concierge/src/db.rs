@@ -179,6 +179,29 @@ impl Db {
         .await
     }
 
+    /// Sets a member's email and news consent. A changed address is no
+    /// longer verified.
+    pub async fn update_settings(
+        &self,
+        account: &str,
+        email: &str,
+        news_opt_in: bool,
+    ) -> sqlx::Result<()> {
+        sqlx::query!(
+            "UPDATE members
+             SET email_verified_at = CASE WHEN email IS ? THEN email_verified_at END,
+                 email = ?, news_opt_in = ?
+             WHERE account = ? AND removed_at IS NULL",
+            email,
+            email,
+            news_opt_in,
+            account,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
     /// Every member's account, removed ones included.
     pub async fn member_accounts(&self) -> sqlx::Result<Vec<MemberAccount>> {
         sqlx::query_as!(
@@ -531,6 +554,32 @@ pub(crate) mod tests {
         assert_eq!(db.end_expired_sessions(150).await.unwrap(), 2);
         assert!(db.session(b"\xa2", 150).await.unwrap().is_some());
         assert_eq!(db.end_sessions("bob").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn changing_the_email_drops_its_verification_but_keeping_it_does_not() {
+        let (db, _dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, email_verified_at, joined_at, invite_quota)
+             VALUES ('alice', 'alice@example.org', 10, 0, 5)",
+        )
+        .await
+        .unwrap();
+        db.update_settings("alice", "alice@example.org", true)
+            .await
+            .unwrap();
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert_eq!(
+            (alice.email_verified_at, alice.news_opt_in),
+            (Some(10), true)
+        );
+        db.update_settings("alice", "alice@example.net", false)
+            .await
+            .unwrap();
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert_eq!(alice.email.as_deref(), Some("alice@example.net"));
+        assert_eq!((alice.email_verified_at, alice.news_opt_in), (None, false));
     }
 
     #[tokio::test]

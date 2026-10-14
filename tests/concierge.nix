@@ -107,6 +107,13 @@ vmTest ''
       assert "<h1>Dana</h1>" in home, home
       assert "<code>irc.weblounge.org</code>" in home and "<code>6697</code>" in home, home
 
+  with subtest("a member changes their email and news setting on the account home"):
+      saved = members_post("/settings", "email=dana@example.org", "news=on")
+      assert saved == f"303 https://{members}/?saved", saved
+      home = members_get("/?saved", "-f")
+      assert "Saved." in home and 'value="dana@example.org"' in home, home
+      assert 'type="checkbox" checked' in home, home
+
   with subtest("signing out ends the session"):
       signed_out = members_post("/signout")
       assert signed_out == f"303 https://{members}/signin", signed_out

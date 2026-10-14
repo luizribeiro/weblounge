@@ -5,6 +5,7 @@ mod auth;
 pub mod config;
 mod csrf;
 pub mod db;
+pub mod email;
 pub mod invite_code;
 pub mod invite_rules;
 pub mod nick;
