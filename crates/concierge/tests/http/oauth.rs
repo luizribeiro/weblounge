@@ -20,7 +20,7 @@ impl Site {
     }
 
     /// A member's access token, the way gamja gets one.
-    async fn access_token(&self, cookie: &str) -> String {
+    pub(crate) async fn access_token(&self, cookie: &str) -> String {
         let code = self.authorization_code(cookie).await;
         let answer = json(self.exchange(&code, &[]).await).await;
         answer["access_token"].as_str().unwrap().to_owned()
@@ -34,7 +34,7 @@ impl Site {
             .await
     }
 
-    async fn introspect(&self, token: &str) -> Value {
+    pub(crate) async fn introspect(&self, token: &str) -> Value {
         let response = self
             .introspect_as(&format!("ergo:{INTROSPECTION_SECRET}"), token)
             .await;

@@ -18,6 +18,7 @@ use crate::{
     db::{self, Member},
     email::{self, Email},
     oauth::Webchat,
+    password_rules::FieldErrors,
 };
 
 #[derive(Template)]
@@ -31,6 +32,7 @@ struct Account<'a> {
     invites: Invites,
     flash: Flash,
     settings: SettingsForm<'a>,
+    password: PasswordForm,
     email_max_length: usize,
     email_pattern: &'a str,
 }
@@ -41,6 +43,7 @@ struct Account<'a> {
 pub struct Flash {
     saved: Option<String>,
     invited: Option<String>,
+    password: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -57,11 +60,28 @@ struct SettingsForm<'a> {
     email_error: Option<String>,
 }
 
+/// What's wrong with a password change; never what was typed.
+#[derive(Default)]
+pub struct PasswordForm {
+    pub current_error: Option<&'static str>,
+    pub new: FieldErrors,
+}
+
 /// The parts of the account home a refused form fills in.
 #[derive(Default)]
-struct Forms<'a> {
+pub struct Forms<'a> {
     flash: Flash,
     settings: Option<SettingsForm<'a>>,
+    password: PasswordForm,
+}
+
+impl Forms<'_> {
+    pub fn password(password: PasswordForm) -> Self {
+        Self {
+            password,
+            ..Self::default()
+        }
+    }
 }
 
 pub async fn show(
@@ -104,7 +124,7 @@ pub async fn update(
 }
 
 /// The account home of `member`, with `forms` filled in over what's stored.
-async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
+pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
     let invites = match Invites::of(app, member, db::now()).await {
         Ok(invites) => invites,
         Err(error) => return internal_error("Listing invites", error),
@@ -126,6 +146,7 @@ async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) 
         invites,
         flash: forms.flash,
         settings,
+        password: forms.password,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
     };

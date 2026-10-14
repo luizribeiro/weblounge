@@ -95,6 +95,19 @@ vmTest ''
       assert "Saved." in home and 'value="dana@example.org"' in home, home
       assert 'type="checkbox" checked' in home, home
 
+  with subtest("a member changes their password: IRC takes only the new one, and their other sessions end"):
+      laptop = Browser("dana-laptop")
+      assert laptop.sign_in("dana", password).startswith("303 ")
+      old_password, password = password, "a-passphrase-dana-chose"
+      changed = browser.post("/password", f"current={old_password}", f"password={password}", f"confirmation={password}")
+      assert changed == f"303 https://{members}/?password#account-settings", changed
+      assert "Password changed." in browser.get("/?password", "-f")
+      after = laptop.get("/", *outcome)
+      assert after == f"303 https://{members}/signin", after
+      client.fail(irc_command(account="Dana", password=old_password))
+      session = irc(account="Dana", password=password)
+      assert " 903 " in session, session
+
   with subtest("signing out ends the session"):
       signed_out = browser.post("/signout")
       assert signed_out == f"303 https://{members}/signin", signed_out
@@ -111,6 +124,6 @@ vmTest ''
 
   with subtest("the passwords never reach the journal"):
       credenza.succeed("journalctl --sync")
-      for secret in [password, new_password]:
+      for secret in [old_password, password, new_password]:
           credenza.fail(f"journalctl | grep -qF {secret}")
 ''

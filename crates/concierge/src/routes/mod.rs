@@ -5,6 +5,7 @@ pub mod invite;
 pub mod invites;
 pub mod oauth;
 pub mod pages;
+pub mod password;
 pub mod signin;
 
 use std::fmt::Display;

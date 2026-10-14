@@ -16,14 +16,12 @@ use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
     db::Member,
-    nick, rate_limit, session,
+    nick, password_rules, rate_limit, session,
 };
 
 /// The same answer whether the account exists or not.
 const WRONG: &str = "Wrong nick or password.";
 const UNAVAILABLE: &str = "Can't check passwords right now. Try again in a minute.";
-/// Ergo's limit; anything longer can't be anyone's password.
-const MAX_PASSWORD_BYTES: usize = 300;
 
 #[derive(Template)]
 #[template(path = "signin.html")]
@@ -129,7 +127,7 @@ fn page<'a>(
 /// against the limits.
 fn plausible(nick: &str, password: &str) -> bool {
     (1..=nick::MAX_LENGTH).contains(&nick.len())
-        && (1..=MAX_PASSWORD_BYTES).contains(&password.len())
+        && (1..=password_rules::MAX_BYTES).contains(&password.len())
 }
 
 /// The current member the password opens, under Ergo's spelling of the name.

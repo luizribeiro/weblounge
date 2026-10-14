@@ -55,6 +55,10 @@ pub fn router(app: App) -> Router {
             "/settings",
             post(routes::account::update).layer(map_response(routes::no_store)),
         )
+        .route(
+            "/password",
+            post(routes::password::change).layer(map_response(routes::no_store)),
+        )
         .route("/invites", post(routes::invites::create))
         .route("/invites/revoke", post(routes::invites::revoke))
         .route(

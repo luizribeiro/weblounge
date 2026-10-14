@@ -174,6 +174,16 @@ vmTest ''
       assert {"path", "httponly", "secure", "samesite"} <= attributes and "domain" not in attributes, cookie
       assert "SameSite=Lax" in cookie and "Path=/;" in cookie, cookie
 
+  with subtest("a password change from another origin is refused, even with the member's session"):
+      mallorys_browser = Browser("mallory")
+      assert mallorys_browser.sign_in(**mallory).startswith("303 ")
+      fields = [f"current={mallory['password']}", "password=chosen-by-evil-1", "confirmation=chosen-by-evil-1"]
+      refused = https(members, "/password", *mallorys_browser.cookies, "-H", "Origin: https://evil.example", *outcome,
+                      *[arg for field in fields for arg in ["--data-urlencode", field]])
+      assert refused == "403 ", refused
+      body, _ = ergo_api("check_auth", accountName="mallory", passphrase=mallory["password"])
+      assert '"success":true' in body, body
+
   with subtest("a POST from another origin, or from nowhere, is refused"):
       for headers in [["-H", "Origin: https://evil.example"], ["-H", "Referer: https://evil.example/"], []]:
           status = https(members, "/signin", "-o", "/dev/null", "-w", "%{http_code}", "--data", "", *headers)

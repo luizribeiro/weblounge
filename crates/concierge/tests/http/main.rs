@@ -8,6 +8,7 @@ mod invite;
 mod invites;
 mod oauth;
 mod pages;
+mod password;
 mod security;
 mod signin;
 mod signup;
