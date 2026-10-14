@@ -192,11 +192,6 @@ pkgs.testers.runNixOSTest {
         body, _ = ergo_api("ns/saget", token, accountName=carol["account"])
         assert json.loads(body)["alwaysOn"] == "off", body
 
-    with subtest("the journal keeps no client addresses from IRC logins, refused or not"):
-        irc(**alice)
-        irc()
-        assert_client_address_absent("journalctl")
-
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()
@@ -219,5 +214,12 @@ pkgs.testers.runNixOSTest {
         client.wait_for_unit("multi-user.target")
         client.succeed("nc -z credenza 22")
         client.fail("curl -sf --max-time 3 http://credenza:9000/")
+
+    # sshd's log is the admins' record of who got into the server; it names
+    # admins and scanners, never members.
+    with subtest("after everything above, only sshd's log names a client address"):
+        irc(**alice)
+        irc()
+        assert_client_address_absent("journalctl | grep -vE ' sshd(-session|-auth)?\\[[0-9]+\\]: '")
   '';
 }
