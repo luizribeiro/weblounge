@@ -14,6 +14,7 @@ async fn a_members_invite_names_them_and_offers_the_signup_form() {
     let response = site.get(INVITE, None).await;
 
     assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["cache-control"], "no-store");
     let page = body_text(response).await;
     assert!(page.contains("<h1>Alice saved you a seat.</h1>"), "{page}");
     assert!(page.contains(&format!(r#"action="{INVITE}""#)), "{page}");
@@ -68,6 +69,8 @@ async fn every_unusable_link_gets_the_same_404() {
     }
 
     assert!(pages.windows(2).all(|pair| pair[0] == pair[1]));
+    let response = site.get(INVITE, None).await;
+    assert_eq!(response.headers()["cache-control"], "no-store");
     assert!(
         pages[0].contains("This invite link doesn&#39;t work."),
         "{}",

@@ -280,8 +280,8 @@ async fn release(app: &App, claim: &Claim) {
     }
 }
 
-/// The welcome page is the signup's own answer, never cached, so nothing
-/// about it outlives the visit.
+/// The welcome page is the signup's own answer, so nothing about it
+/// outlives the visit.
 fn welcome(
     app: &App,
     nick: &str,
@@ -299,10 +299,8 @@ fn welcome(
         clients: &CLIENTS,
     };
     let mut response = render(&page);
-    let headers = response.headers_mut();
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     if let Some(cookie) = cookie {
-        headers.insert(header::SET_COOKIE, cookie);
+        response.headers_mut().insert(header::SET_COOKIE, cookie);
     }
     response
 }

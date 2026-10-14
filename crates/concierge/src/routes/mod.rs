@@ -10,7 +10,7 @@ use std::fmt::Display;
 
 use askama::Template;
 use axum::{
-    http::StatusCode,
+    http::{HeaderValue, StatusCode, header},
     response::{Html, IntoResponse, Response},
 };
 
@@ -38,4 +38,14 @@ pub fn render_with(status: StatusCode, template: &impl Template) -> Response {
 pub fn internal_error(what: &str, error: impl Display) -> Response {
     eprintln!("{what} failed: {error}");
     StatusCode::INTERNAL_SERVER_ERROR.into_response()
+}
+
+/// For pages that carry secrets (invite links, a signup's answer): no
+/// cache keeps them.
+pub async fn no_store(mut response: Response) -> Response {
+    let no_store = HeaderValue::from_static("no-store");
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, no_store);
+    response
 }

@@ -4,7 +4,7 @@ use axum::{
     Router,
     extract::{Path, State},
     http::StatusCode,
-    middleware,
+    middleware::{self, map_response},
     response::IntoResponse,
     routing::{get, post},
 };
@@ -40,8 +40,14 @@ pub fn router(app: App) -> Router {
     let public_url = app.public_url.clone();
     let state = Arc::new(app);
     let pages = Router::new()
-        .route("/", get(routes::account::show))
-        .route("/settings", post(routes::account::update))
+        .route(
+            "/",
+            get(routes::account::show).layer(map_response(routes::no_store)),
+        )
+        .route(
+            "/settings",
+            post(routes::account::update).layer(map_response(routes::no_store)),
+        )
         .route("/invites", post(routes::invites::create))
         .route("/invites/revoke", post(routes::invites::revoke))
         .route(
@@ -56,7 +62,9 @@ pub fn router(app: App) -> Router {
         .route("/clients/{slug}", get(routes::clients::show))
         .route(
             "/invite/{code}",
-            get(routes::invite::show).post(routes::invite::redeem),
+            get(routes::invite::show)
+                .post(routes::invite::redeem)
+                .layer(map_response(routes::no_store)),
         )
         .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
     let router = Router::new()

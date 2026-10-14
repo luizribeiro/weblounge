@@ -4,7 +4,7 @@ use askama::Template;
 use axum::{
     Form,
     extract::{Query, State},
-    http::{HeaderValue, StatusCode, header},
+    http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
@@ -71,7 +71,7 @@ pub async fn show(
             invites,
         )
     };
-    private(render(&page))
+    render(&page)
 }
 
 pub async fn update(
@@ -92,22 +92,13 @@ pub async fn update(
                 email_error: Some(error.to_string()),
                 ..page(&app, account, &settings.email, news, invites)
             };
-            return private(render_with(StatusCode::UNPROCESSABLE_ENTITY, &page));
+            return render_with(StatusCode::UNPROCESSABLE_ENTITY, &page);
         }
     };
     match app.db.update_settings(account, email.as_str(), news).await {
         Ok(()) => Redirect::to("/?saved").into_response(),
         Err(error) => internal_error("Saving settings", error),
     }
-}
-
-/// The page lists invite links, which are secrets: never cache it.
-fn private(mut response: Response) -> Response {
-    let no_store = HeaderValue::from_static("no-store");
-    response
-        .headers_mut()
-        .insert(header::CACHE_CONTROL, no_store);
-    response
 }
 
 fn page<'a>(
