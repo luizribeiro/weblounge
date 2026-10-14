@@ -11,10 +11,14 @@ use clap::Parser;
 use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
-    db::Db,
+    db::{Db, NewMember, NewSession},
+    invite_rules::DEFAULT_QUOTA,
 };
-use ergo_api::fake::FakeErgo;
+use ergo_api::{Passphrase, Registration, fake::FakeErgo};
 use tempfile::TempDir;
+
+/// The password [`Fixture::register`] gives accounts.
+const OLD_PASSWORD: &str = "correct-horse-battery";
 
 struct Fixture {
     config: Config,
@@ -71,5 +75,44 @@ impl Fixture {
 
     fn state_dir(&self) -> &Path {
         &self.config.state_dir
+    }
+
+    async fn register(&self, account: &str) {
+        let passphrase: Passphrase = OLD_PASSWORD.parse().unwrap();
+        let registration = self.ergo.client().register(account, &passphrase).await;
+        assert_eq!(registration.unwrap(), Registration::Created);
+    }
+
+    async fn add_member(&self, account: &str, invited_by: Option<&str>) {
+        self.register(account).await;
+        self.insert_member(account, invited_by).await;
+    }
+
+    async fn insert_member(&self, account: &str, invited_by: Option<&str>) {
+        let member = NewMember {
+            account,
+            email: Some("someone@example.org"),
+            news_opt_in: false,
+            invited_by,
+            joined_at: 1_760_000_000,
+            invite_quota: DEFAULT_QUOTA,
+            is_admin: false,
+        };
+        self.db().await.insert_member(&member).await.unwrap();
+    }
+
+    async fn sign_in(&self, account: &str, token_hash: &[u8]) {
+        let session = NewSession {
+            token_hash,
+            account,
+            created_at: 1_760_000_000,
+            expires_at: 1_762_592_000,
+        };
+        self.db().await.insert_session(&session).await.unwrap();
+    }
+
+    async fn signs_in_to_ergo(&self, account: &str, password: &str) -> bool {
+        let authenticated = self.ergo.client().check_auth(account, password).await;
+        authenticated.unwrap().is_some()
     }
 }

@@ -1,53 +1,10 @@
 use concierge::{
-    db::{self, NewInvite, NewMember, NewSession},
+    db::{self, NewInvite},
     invite_rules::DEFAULT_QUOTA,
 };
-use ergo_api::{Passphrase, Registration, SettingsChanges, fake::Failure};
+use ergo_api::{SettingsChanges, fake::Failure};
 
-use crate::Fixture;
-
-const OLD_PASSWORD: &str = "correct-horse-battery";
-
-impl Fixture {
-    async fn register(&self, account: &str) {
-        let passphrase: Passphrase = OLD_PASSWORD.parse().unwrap();
-        let registration = self.ergo.client().register(account, &passphrase).await;
-        assert_eq!(registration.unwrap(), Registration::Created);
-    }
-
-    async fn add_member(&self, account: &str, invited_by: Option<&str>) {
-        self.register(account).await;
-        self.insert_member(account, invited_by).await;
-    }
-
-    async fn insert_member(&self, account: &str, invited_by: Option<&str>) {
-        let member = NewMember {
-            account,
-            email: Some("someone@example.org"),
-            news_opt_in: false,
-            invited_by,
-            joined_at: 1_760_000_000,
-            invite_quota: DEFAULT_QUOTA,
-            is_admin: false,
-        };
-        self.db().await.insert_member(&member).await.unwrap();
-    }
-
-    async fn sign_in(&self, account: &str, token_hash: &[u8]) {
-        let session = NewSession {
-            token_hash,
-            account,
-            created_at: 1_760_000_000,
-            expires_at: 1_762_592_000,
-        };
-        self.db().await.insert_session(&session).await.unwrap();
-    }
-
-    async fn signs_in_to_ergo(&self, account: &str, password: &str) -> bool {
-        let authenticated = self.ergo.client().check_auth(account, password).await;
-        authenticated.unwrap().is_some()
-    }
-}
+use crate::{Fixture, OLD_PASSWORD};
 
 mod adopt {
     use super::*;
