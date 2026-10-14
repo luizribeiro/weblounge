@@ -15,6 +15,11 @@ workflow and layout.
   the file for that area (`host`, `landing`, `ergo`, `concierge`,
   `security`). Every `tests/*.nix` becomes a flake check automatically;
   VM tests are `{ vmTest, ... }: vmTest ''…''` and share `tests/helpers.py`.
+- Web pages must work on phones and desktops (fluid layouts, 44px touch
+  targets, 16px inputs); check both widths with a headless browser before
+  committing UI changes.
+- Validate user input on both the frontend and the backend, from one
+  definition the server owns.
 - Keep VM-only settings under `virtualisation.vmVariant` in
   `modules/vm.nix` so production configs never see them.
 - Name new servers after furniture (sideboard, armoire, ottoman, chaise…).
