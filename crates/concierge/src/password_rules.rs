@@ -1,4 +1,4 @@
-//! The rules members choose their password under at signup. Concierge is
+//! The rules members choose their password under, at signup or later. Concierge is
 //! the authority: signup pages get [`PageRules`] as JSON for their live
 //! checklist, and the server checks every rule again.
 
@@ -19,7 +19,7 @@ static COMMON: LazyLock<HashSet<String>> = LazyLock::new(|| {
         .collect()
 });
 
-/// One line of the checklist signup pages show, in order.
+/// One line of the checklist new-password forms show, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rule {
     Length,
@@ -116,6 +116,28 @@ impl fmt::Display for Refusal {
 }
 
 impl std::error::Error for Refusal {}
+
+/// What a form with a new password shows under each of its two fields.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct FieldErrors {
+    pub password: Option<Refusal>,
+    pub confirmation: Option<Refusal>,
+}
+
+impl From<Refusal> for FieldErrors {
+    fn from(refusal: Refusal) -> Self {
+        match refusal {
+            Refusal::Mismatch => Self {
+                confirmation: Some(refusal),
+                ..Self::default()
+            },
+            _ => Self {
+                password: Some(refusal),
+                ..Self::default()
+            },
+        }
+    }
+}
 
 /// A password that follows every [`Rule`], ready for Ergo.
 pub fn check(password: &str, confirmation: &str) -> Result<Passphrase, Refusal> {
@@ -224,6 +246,24 @@ mod tests {
         assert_eq!(
             Refusal::TooShort.to_string(),
             "Passwords have at least 12 characters."
+        );
+    }
+
+    #[test]
+    fn a_mismatch_shows_under_the_confirmation_and_the_rest_under_the_password() {
+        assert_eq!(
+            FieldErrors::from(Refusal::Mismatch),
+            FieldErrors {
+                password: None,
+                confirmation: Some(Refusal::Mismatch)
+            }
+        );
+        assert_eq!(
+            FieldErrors::from(Refusal::Common),
+            FieldErrors {
+                password: Some(Refusal::Common),
+                confirmation: None
+            }
         );
     }
 

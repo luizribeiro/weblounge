@@ -1,3 +1,4 @@
+import "./password";
 import "./signup";
 
 const FEEDBACK_MS = 1500;

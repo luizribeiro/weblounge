@@ -59,3 +59,28 @@
         </ul>
       </nav>
 {%- endmacro %}
+
+{% macro new_password(label, errors) %}
+            <div class="field">
+              <label for="password">{{ label }}</label>
+              <div class="password-input">
+                <input id="password" name="password" type="password" required minlength="{{ crate::password_rules::MIN_LENGTH }}" autocomplete="new-password" aria-describedby="password-rules"{% if errors.password.is_some() %} aria-invalid="true"{% endif %}>
+                <button class="button button-small" type="button" data-reveal="password" hidden>Show</button>
+              </div>
+              {%- if let Some(error) = errors.password %}
+              <p class="field-error">{{ error }}</p>
+              {%- endif %}
+            </div>
+            <div class="field">
+              <label for="confirmation">Confirm {{ label|lower }}</label>
+              <input id="confirmation" name="confirmation" type="password" required autocomplete="new-password" aria-describedby="password-rules"{% if errors.confirmation.is_some() %} aria-invalid="true"{% endif %}>
+              {%- if let Some(error) = errors.confirmation %}
+              <p class="field-error">{{ error }}</p>
+              {%- endif %}
+            </div>
+            <ul class="checklist" id="password-rules" data-password-rules="/password-rules.json">
+              {%- for rule in crate::password_rules::Rule::ALL %}
+              <li data-rule="{{ rule.id() }}">{{ rule.label() }}</li>
+              {%- endfor %}
+            </ul>
+{%- endmacro %}

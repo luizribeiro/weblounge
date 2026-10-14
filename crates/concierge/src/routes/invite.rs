@@ -24,7 +24,7 @@ use crate::{
     invite_rules,
     nick::{self, Nick},
     oauth::Webchat,
-    password_rules::{self, Refusal, Rule},
+    password_rules::{self, FieldErrors},
     platform::VisitorPlatform,
     rate_limit::{self, ClientAddress},
 };
@@ -36,13 +36,11 @@ struct InvitePage<'a> {
     code: &'a str,
     inviter: Option<&'a str>,
     form: SignupForm<'a>,
-    rules: [Rule; 5],
     nick_max_length: usize,
     nick_pattern: String,
     nick_rule: &'a str,
     email_max_length: usize,
     email_pattern: &'a str,
-    password_min_length: usize,
 }
 
 /// What the form shows: what was typed, except passwords, and what's wrong.
@@ -53,8 +51,7 @@ struct SignupForm<'a> {
     news: bool,
     nick_error: Option<String>,
     email_error: Option<String>,
-    password_error: Option<String>,
-    confirmation_error: Option<String>,
+    password: FieldErrors,
 }
 
 #[derive(Template)]
@@ -240,20 +237,12 @@ fn validate(signup: &Signup) -> Result<NewAccount, Box<SignupForm<'_>>> {
             password,
             news: signup.news.is_some(),
         }),
-        (nick, email, password) => {
-            let password_error = password.err();
-            let (password_error, confirmation_error) = match password_error {
-                Some(Refusal::Mismatch) => (None, password_error),
-                _ => (password_error, None),
-            };
-            Err(Box::new(SignupForm {
-                nick_error: nick.err().map(|error| error.to_string()),
-                email_error: email.err().map(|error| error.to_string()),
-                password_error: password_error.map(|error| error.to_string()),
-                confirmation_error: confirmation_error.map(|error| error.to_string()),
-                ..form_for(signup)
-            }))
-        }
+        (nick, email, password) => Err(Box::new(SignupForm {
+            nick_error: nick.err().map(|error| error.to_string()),
+            email_error: email.err().map(|error| error.to_string()),
+            password: password.err().map(FieldErrors::from).unwrap_or_default(),
+            ..form_for(signup)
+        })),
     }
 }
 
@@ -314,13 +303,11 @@ fn page<'a>(app: &'a App, invite: &'a Invite, form: SignupForm<'a>) -> InvitePag
         code: &invite.code,
         inviter: invite.created_by.as_deref(),
         form,
-        rules: Rule::ALL,
         nick_max_length: nick::MAX_LENGTH,
         nick_pattern: nick::html_pattern(),
         nick_rule: nick::RULE,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
-        password_min_length: password_rules::MIN_LENGTH,
     }
 }
 

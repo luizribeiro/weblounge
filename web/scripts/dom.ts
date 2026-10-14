@@ -20,3 +20,10 @@ export function svgElement<K extends keyof SVGElementTagNameMap>(
   }
   return element;
 }
+
+export function field(form: HTMLFormElement, name: string): HTMLInputElement {
+  return expectElement(
+    form.querySelector(`input[name="${name}"]`),
+    HTMLInputElement,
+  );
+}
