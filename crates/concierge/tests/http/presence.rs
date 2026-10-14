@@ -125,10 +125,7 @@ async fn a_failed_save_says_so_and_changes_nothing() {
     assert_eq!(response.status(), 503);
     let page = body_text(response).await;
     assert!(page.contains("Nothing changed"), "{page}");
-    assert!(
-        page.contains(r#"<a href="/irc" aria-current="page">"#),
-        "{page}"
-    );
+    assert!(crate::is_tab(&page, "/irc"), "{page}");
     assert_eq!(
         preferences(&site).await,
         (Preference::Default, Preference::Default)

@@ -1,4 +1,4 @@
-//! The account home: how to connect a client, and the member's settings.
+//! The Account tab: the member's email, news setting and password.
 
 use askama::Template;
 use axum::{
@@ -9,15 +9,12 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{Flash, Layout, Tab, internal_error, invites::Invites, render_with};
+use super::{Flash, Layout, Tab, internal_error, render_with};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
-    clients::{CLIENTS, Client},
-    config::IrcServer,
-    db::{self, Member},
+    db::Member,
     email::{self, Email},
-    oauth::Webchat,
     password_rules::FieldErrors,
 };
 
@@ -26,10 +23,6 @@ use crate::{
 struct Account<'a> {
     layout: Layout<'a>,
     nick: &'a str,
-    irc: &'a IrcServer,
-    clients: &'a [Client],
-    webchat: &'a Webchat,
-    invites: Invites,
     flash: Flash,
     settings: SettingsForm<'a>,
     password: PasswordForm,
@@ -58,7 +51,7 @@ pub struct PasswordForm {
     pub new: FieldErrors,
 }
 
-/// The parts of the account home a refused form fills in.
+/// The parts of the Account tab a refused form fills in.
 #[derive(Default)]
 pub struct Forms<'a> {
     flash: Flash,
@@ -84,7 +77,7 @@ pub async fn show(
         flash,
         ..Forms::default()
     };
-    home(&app, &me.member, StatusCode::OK, forms).await
+    page(&app, &me.member, StatusCode::OK, forms)
 }
 
 pub async fn update(
@@ -105,33 +98,25 @@ pub async fn update(
                 }),
                 ..Forms::default()
             };
-            return home(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms).await;
+            return page(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms);
         }
     };
     match app.db.update_settings(account, email.as_str(), news).await {
-        Ok(()) => Redirect::to("/?saved").into_response(),
+        Ok(()) => Redirect::to("/account?saved").into_response(),
         Err(error) => internal_error("Saving settings", error),
     }
 }
 
-/// The account home of `member`, with `forms` filled in over what's stored.
-pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
-    let invites = match Invites::of(app, member, db::now()).await {
-        Ok(invites) => invites,
-        Err(error) => return internal_error("Listing invites", error),
-    };
+/// The Account tab of `member`, with `forms` filled in over what's stored.
+pub fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
     let settings = forms.settings.unwrap_or_else(|| SettingsForm {
         email: member.email.as_deref().unwrap_or(""),
         news: member.news_opt_in,
         email_error: None,
     });
     let page = Account {
-        layout: Layout::new(app, Some(&member.account)).on(Tab::Home),
+        layout: Layout::new(app, Some(&member.account)).on(Tab::Account),
         nick: &member.account,
-        irc: &app.irc_server,
-        clients: &CLIENTS,
-        webchat: &app.webchat,
-        invites,
         flash: forms.flash,
         settings,
         password: forms.password,

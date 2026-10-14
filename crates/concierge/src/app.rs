@@ -51,6 +51,10 @@ pub fn router(app: App) -> Router {
     let pages = Router::new()
         .route(
             "/",
+            get(routes::home::show).layer(map_response(routes::no_store)),
+        )
+        .route(
+            "/account",
             get(routes::account::show).layer(map_response(routes::no_store)),
         )
         .route(

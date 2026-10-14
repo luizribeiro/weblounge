@@ -2,6 +2,7 @@ pub mod account;
 pub mod certificates;
 pub mod checks;
 pub mod clients;
+pub mod home;
 pub mod invite;
 pub mod invites;
 pub mod irc;
@@ -61,15 +62,17 @@ impl<'a> Layout<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Home,
+    Account,
     Irc,
 }
 
 impl Tab {
-    pub const ALL: [Self; 2] = [Self::Home, Self::Irc];
+    pub const ALL: [Self; 3] = [Self::Home, Self::Account, Self::Irc];
 
     pub fn path(self) -> &'static str {
         match self {
             Self::Home => "/",
+            Self::Account => "/account",
             Self::Irc => "/irc",
         }
     }
@@ -77,6 +80,7 @@ impl Tab {
     pub fn label(self) -> &'static str {
         match self {
             Self::Home => "Home",
+            Self::Account => "Account",
             Self::Irc => "IRC",
         }
     }

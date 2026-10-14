@@ -4,102 +4,45 @@
 {% block title %}Account{% endblock %}
 
 {% block content %}
-      <p class="eyebrow">Account</p>
-      <h1>{{ nick }}</h1>
-      {%- call components::open_chat(webchat) %}{% endcall %}
-      <div class="account-grid account-home">
-        <section class="card connect" aria-labelledby="connect-title">
-          <h2 class="eyebrow" id="connect-title">Connect a client</h2>
-          {%- call components::connection(irc, Some(nick), "The one you sign in with here.") %}{% endcall %}
-        </section>
-        <section class="card invites" id="invites" aria-labelledby="invites-title">
-          <h2 class="eyebrow" id="invites-title">Invites</h2>
-          {%- if flash.invited.is_some() %}
-          <p class="notice" role="status">Invite created. Send the link yourself; it works once, for a week.</p>
-          {%- endif %}
-          {%- match invites.remaining %}
-          {%- when Some(0) %}
-          <p class="muted">No invites left.</p>
-          {%- else %}
-          <form method="post" action="/invites">
-            <button class="button" type="submit">Invite someone</button>
-            <span class="muted">
-              {%- if let Some(left) = invites.remaining %}{{ left }} left{% else %}Admins have no quota.{% endif -%}
-            </span>
-          </form>
-          {%- endmatch %}
-          {%- if !invites.open.is_empty() %}
-          <ul class="invite-list">
-            {%- for invite in invites.open %}
-            <li>
-              <code class="invite-link">{{ invite.url }}</code>
-              <div class="invite-actions">
-                <span class="muted">{{ invite.time_left }} left</span>
-                <button class="button button-small" type="button" data-copy="{{ invite.url }}" data-copy-label="invite link" hidden>Copy</button>
-                <a class="button button-small" href="/invites/{{ invite.id }}/qr">QR</a>
-                <form method="post" action="/invites/revoke">
-                  <input type="hidden" name="code" value="{{ invite.code }}">
-                  <button class="button button-small" type="submit">Revoke</button>
-                </form>
-              </div>
-            </li>
-            {%- endfor %}
-          </ul>
-          {%- endif %}
-          {%- if !invites.invitees.is_empty() %}
-          <h3 class="eyebrow">You invited</h3>
-          <ul class="invitees">
-            {%- for invitee in invites.invitees %}
-            <li>{{ invitee.account }}{% if invitee.removed %} <span class="muted">(left)</span>{% endif %}</li>
-            {%- endfor %}
-          </ul>
-          {%- endif %}
-        </section>
-        <section class="card account-settings" id="account-settings" aria-labelledby="settings-title">
-          <h2 class="eyebrow" id="settings-title">Account settings</h2>
-          {%- if flash.saved.is_some() %}
-          <p class="notice" role="status">Saved.</p>
-          {%- endif %}
-          <form class="form" method="post" action="/settings">
-            <div class="field">
-              <label for="email">Email</label>
-              <input id="email" name="email" type="email" value="{{ settings.email }}" required maxlength="{{ email_max_length }}" pattern="{{ email_pattern }}" autocomplete="email" aria-describedby="email-hint"{% if settings.email_error.is_some() %} aria-invalid="true"{% endif %}>
-              {%- if let Some(error) = settings.email_error %}
-              <p class="field-error" id="email-hint">{{ error }}</p>
-              {%- else %}
-              <p class="hint" id="email-hint">Unverified. For account recovery.</p>
-              {%- endif %}
-            </div>
-            <label class="check">
-              <input name="news" type="checkbox"{% if settings.news %} checked{% endif %}>
-              <span>Occasional news by email</span>
-            </label>
-            <button class="button button-primary" type="submit">Save</button>
-          </form>
-          <h3 class="eyebrow" id="password-title">Password</h3>
-          {%- if flash.password.is_some() %}
-          <p class="notice" role="status">Password changed. Signed out everywhere else.</p>
-          {%- endif %}
-          <form class="form" method="post" action="/password" aria-labelledby="password-title">
-            <input type="text" value="{{ nick }}" autocomplete="username" hidden>
-            <div class="field">
-              <label for="current-password">Current password</label>
-              <input id="current-password" name="current" type="password" required autocomplete="current-password"{% if password.current_error.is_some() %} aria-invalid="true"{% endif %}>
-              {%- if let Some(error) = password.current_error %}
-              <p class="field-error">{{ error }}</p>
-              {%- endif %}
-            </div>
-            {%- call components::new_password("New password", password.new) %}{% endcall %}
-            <button class="button button-primary" type="submit">Change password</button>
-          </form>
-        </section>
-        <nav class="card more" aria-labelledby="more-title">
-          <h2 class="eyebrow" id="more-title">More</h2>
-          <ul class="more-links">
-            <li><a href="/tree">Invite tree</a> <span class="muted">who invited whom</span></li>
-            <li><a href="/certificates">Client certificates</a> <span class="muted">log in without a password</span></li>
-          </ul>
-        </nav>
-      </div>
-      {%- call components::guides(clients) %}{% endcall %}
+      <h1>Account</h1>
+      <section class="card tab-card" aria-labelledby="email-title">
+        <h2 class="eyebrow" id="email-title">Email and news</h2>
+        {%- if flash.saved.is_some() %}
+        <p class="notice" role="status">Saved.</p>
+        {%- endif %}
+        <form class="form" method="post" action="/settings">
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" value="{{ settings.email }}" required maxlength="{{ email_max_length }}" pattern="{{ email_pattern }}" autocomplete="email" aria-describedby="email-hint"{% if settings.email_error.is_some() %} aria-invalid="true"{% endif %}>
+            {%- if let Some(error) = settings.email_error %}
+            <p class="field-error" id="email-hint">{{ error }}</p>
+            {%- else %}
+            <p class="hint" id="email-hint">Unverified. For account recovery.</p>
+            {%- endif %}
+          </div>
+          <label class="check">
+            <input name="news" type="checkbox"{% if settings.news %} checked{% endif %}>
+            <span>Occasional news by email</span>
+          </label>
+          <button class="button button-primary" type="submit">Save</button>
+        </form>
+      </section>
+      <section class="card tab-card" id="change-password" aria-labelledby="password-title">
+        <h2 class="eyebrow" id="password-title">Password</h2>
+        {%- if flash.password.is_some() %}
+        <p class="notice" role="status">Password changed. Signed out everywhere else.</p>
+        {%- endif %}
+        <form class="form" method="post" action="/password" aria-labelledby="password-title">
+          <input type="text" value="{{ nick }}" autocomplete="username" hidden>
+          <div class="field">
+            <label for="current-password">Current password</label>
+            <input id="current-password" name="current" type="password" required autocomplete="current-password"{% if password.current_error.is_some() %} aria-invalid="true"{% endif %}>
+            {%- if let Some(error) = password.current_error %}
+            <p class="field-error">{{ error }}</p>
+            {%- endif %}
+          </div>
+          {%- call components::new_password("New password", password.new) %}{% endcall %}
+          <button class="button button-primary" type="submit">Change password</button>
+        </form>
+      </section>
 {%- endblock %}

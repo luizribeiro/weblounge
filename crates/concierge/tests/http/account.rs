@@ -32,7 +32,7 @@ async fn shows_the_email_and_news_settings() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
     assert!(
         page.contains(r#"type="email" value="someone@example.org" required maxlength="254""#),
         "{page}"
@@ -54,11 +54,11 @@ async fn saves_the_settings_and_says_so() {
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(response.status(), 303);
-    assert_eq!(location(&response), "/?saved");
+    assert_eq!(location(&response), "/account?saved");
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("alice@example.net"));
     assert!(member.news_opt_in);
-    let page = body_text(site.get("/?saved", Some(&cookie)).await).await;
+    let page = body_text(site.get("/account?saved", Some(&cookie)).await).await;
     assert!(page.contains("Saved."), "{page}");
     assert!(page.contains(r#"value="alice@example.net""#), "{page}");
     assert!(
@@ -92,6 +92,7 @@ async fn refuses_an_invalid_email_and_keeps_what_was_typed() {
     );
     assert!(page.contains(r#"value="alice@example""#), "{page}");
     assert!(page.contains(r#"aria-invalid="true""#), "{page}");
+    assert!(crate::is_tab(&page, "/account"), "{page}");
     assert!(page.contains(r#"type="checkbox" checked"#), "{page}");
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("someone@example.org"));
@@ -103,7 +104,7 @@ async fn the_email_field_checks_the_servers_rule() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
     let pattern = concierge::email::HTML_PATTERN;
     assert!(page.contains(&format!(r#"pattern="{pattern}""#)), "{page}");
 }
@@ -131,7 +132,6 @@ async fn sections_come_in_the_order_phones_stack_them() {
         ">Open chat<",
         ">Connect a client<",
         ">Invites<",
-        ">Account settings<",
         r#"<a href="/tree">Invite tree</a>"#,
         r#"<a href="/certificates">Client certificates</a>"#,
     ]

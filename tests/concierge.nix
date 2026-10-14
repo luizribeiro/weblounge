@@ -89,20 +89,20 @@ vmTest ''
       assert "<h1>Dana</h1>" in home, home
       assert "<code>irc.weblounge.org</code>" in home and "<code>6697</code>" in home, home
 
-  with subtest("a member changes their email and news setting on the account home"):
+  with subtest("a member changes their email and news setting on the Account tab"):
       saved = browser.post("/settings", "email=dana@example.org", "news=on")
-      assert saved == f"303 https://{members}/?saved", saved
-      home = browser.get("/?saved", "-f")
-      assert "Saved." in home and 'value="dana@example.org"' in home, home
-      assert 'type="checkbox" checked' in home, home
+      assert saved == f"303 https://{members}/account?saved", saved
+      tab = browser.get("/account?saved", "-f")
+      assert "Saved." in tab and 'value="dana@example.org"' in tab, tab
+      assert 'type="checkbox" checked' in tab, tab
 
   with subtest("a member changes their password: IRC takes only the new one, and their other sessions end"):
       laptop = Browser("dana-laptop")
       assert laptop.sign_in("dana", password).startswith("303 ")
       old_password, password = password, "a-passphrase-dana-chose"
       changed = browser.post("/password", f"current={old_password}", f"password={password}", f"confirmation={password}")
-      assert changed == f"303 https://{members}/?password#account-settings", changed
-      assert "Password changed." in browser.get("/?password", "-f")
+      assert changed == f"303 https://{members}/account?password#change-password", changed
+      assert "Password changed." in browser.get("/account?password", "-f")
       after = laptop.get("/", *outcome)
       assert after == f"303 https://{members}/signin", after
       client.fail(irc_command(account="Dana", password=old_password))

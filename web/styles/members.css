@@ -22,6 +22,10 @@
 
 .tab-card {
   max-width: 40rem;
+
+  & + & {
+    margin-top: 1.5rem;
+  }
 }
 
 .settings-list {
@@ -412,7 +416,7 @@
   @media (min-width: 52rem) {
     grid-template-areas:
       "connect invites"
-      "account more";
+      "connect more";
     grid-template-rows: auto 1fr;
 
     & .connect {
@@ -421,10 +425,6 @@
 
     & .invites {
       grid-area: invites;
-    }
-
-    & .account-settings {
-      grid-area: account;
     }
 
     & .more {

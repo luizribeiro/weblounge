@@ -254,6 +254,11 @@ fn opens_the_chat(page: &str) -> bool {
     ) && page.contains(r#"<code class="muted">irc.weblounge.org in your browser</code>"#)
 }
 
+/// Whether a page is the tab at `path`, marked open in the row of tabs.
+fn is_tab(page: &str, path: &str) -> bool {
+    page.contains(&format!(r#"<a href="{path}" aria-current="page">"#))
+}
+
 fn location(response: &Response) -> &str {
     response.headers()[header::LOCATION].to_str().unwrap()
 }

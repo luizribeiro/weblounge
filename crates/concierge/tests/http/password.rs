@@ -38,7 +38,7 @@ async fn signed_in_alice() -> (Site, String) {
 #[tokio::test]
 async fn the_form_lets_password_managers_update_the_saved_password() {
     let (site, cookie) = signed_in_alice().await;
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
     assert!(
         page.contains(r#"<form class="form" method="post" action="/password""#),
         "{page}"
@@ -76,7 +76,7 @@ async fn changes_the_password_and_ends_every_other_session_and_its_tokens() {
         .await;
 
     assert_eq!(response.status(), 303);
-    assert_eq!(location(&response), "/?password#account-settings");
+    assert_eq!(location(&response), "/account?password#change-password");
     assert!(site.opens("alice", NEW_PASSWORD).await);
     assert!(!site.opens("alice", PASSWORD).await);
     assert_eq!(site.session_expiry(&phone).await, None);
@@ -84,7 +84,7 @@ async fn changes_the_password_and_ends_every_other_session_and_its_tokens() {
     assert!(site.session_expiry(&cookie).await.is_some());
     assert_eq!(site.introspect(&own_token).await["active"], true);
     assert!(site.session_expiry(&bobs).await.is_some());
-    let page = body_text(site.get("/?password", Some(&cookie)).await).await;
+    let page = body_text(site.get("/account?password", Some(&cookie)).await).await;
     assert!(page.contains("Password changed."), "{page}");
 }
 
@@ -99,6 +99,7 @@ async fn a_wrong_current_password_changes_nothing() {
         assert_eq!(response.status(), 401, "{current:?}");
         let page = body_text(response).await;
         assert!(page.contains("Wrong password."), "{page}");
+        assert!(crate::is_tab(&page, "/account"), "{page}");
         assert!(!page.contains(NEW_PASSWORD), "{page}");
     }
     assert!(site.opens("alice", PASSWORD).await);
