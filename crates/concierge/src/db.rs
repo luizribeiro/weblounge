@@ -223,6 +223,7 @@ impl Db {
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)
             .foreign_keys(true)
+            .pragma("secure_delete", "ON")
             .busy_timeout(BUSY_TIMEOUT);
         let pool = SqlitePoolOptions::new()
             .connect_with(options)
@@ -400,10 +401,25 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
+        self.empty_write_ahead_log().await?;
         Ok(Removal {
             sessions_ended,
             invites_revoked: revoked.rows_affected(),
         })
+    }
+
+    /// Copies the write-ahead log into the database and truncates it, so
+    /// the rows a change overwrote leave the disk, not just the database.
+    async fn empty_write_ahead_log(&self) -> sqlx::Result<()> {
+        let (busy, _, _): (i64, i64, i64) = sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
+            .fetch_one(&self.pool)
+            .await?;
+        if busy != 0 {
+            return Err(sqlx::Error::Protocol(
+                "the write-ahead log is busy; the overwritten data is still on disk".into(),
+            ));
+        }
+        Ok(())
     }
 
     pub async fn insert_invite(&self, invite: &NewInvite<'_>) -> sqlx::Result<()> {
@@ -1119,6 +1135,34 @@ pub(crate) mod tests {
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(bob.invited_by.as_deref(), Some("alice"));
         assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
+    }
+
+    #[tokio::test]
+    async fn a_removed_members_email_leaves_the_database_files() {
+        let (db, dir) = temp_db().await;
+        let secure_delete: i64 = sqlx::query_scalar("PRAGMA secure_delete")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(secure_delete, 1);
+        execute(
+            &db,
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('alice', 'alice@example.org', 10),
+                    ('bob', 'bob@example.org', 20);",
+        )
+        .await
+        .unwrap();
+
+        db.remove_member("alice", 200).await.unwrap();
+
+        let on_disk: Vec<u8> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flat_map(|entry| std::fs::read(entry.unwrap().path()).unwrap())
+            .collect();
+        let contains = |text: &[u8]| on_disk.windows(text.len()).any(|window| window == text);
+        assert!(!contains(b"alice@example.org"));
+        assert!(contains(b"bob@example.org"));
     }
 
     const CREATED: i64 = 1_000;
