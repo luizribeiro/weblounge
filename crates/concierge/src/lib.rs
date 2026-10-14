@@ -19,3 +19,4 @@ pub mod rate_limit;
 mod routes;
 pub mod session;
 pub mod status;
+pub mod tree;

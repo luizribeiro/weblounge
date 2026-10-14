@@ -10,7 +10,7 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
 };
 
-use crate::invite_rules;
+use crate::{invite_rules, tree::Branch};
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -472,6 +472,18 @@ impl Db {
             r#"SELECT account AS "account!", joined_at, removed_at IS NOT NULL AS "removed!: bool"
                FROM members WHERE invited_by = ? ORDER BY joined_at, account"#,
             account
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Every member's place in the invite tree, removed ones included.
+    pub async fn invite_tree(&self) -> sqlx::Result<Vec<Branch>> {
+        sqlx::query_as!(
+            Branch,
+            r#"SELECT account AS "account!", invited_by, joined_at,
+                      removed_at IS NOT NULL AS "removed!: bool"
+               FROM members"#
         )
         .fetch_all(&self.pool)
         .await

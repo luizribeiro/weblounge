@@ -13,6 +13,7 @@ mod presence;
 mod security;
 mod signin;
 mod signup;
+mod tree;
 
 use std::path::Path;
 

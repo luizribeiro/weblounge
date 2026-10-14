@@ -72,6 +72,7 @@ pub fn router(app: App) -> Router {
         .route("/signout", post(routes::signin::sign_out))
         .route("/signup/nick", post(routes::checks::nick))
         .route("/password-rules.json", get(routes::checks::password_rules))
+        .route("/tree", get(routes::tree::show))
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
         .route("/clients/{slug}", get(routes::clients::show))

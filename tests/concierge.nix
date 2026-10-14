@@ -118,6 +118,14 @@ vmTest ''
       assert '<input name="always_on" type="checkbox">' in home, home
       assert '<input name="auto_away" type="checkbox" checked>' in home, home
 
+  with subtest("the invite tree lists a new member under whoever invited them"):
+      assert browser.post("/invites") == f"303 https://{members}/?invited#invites"
+      [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', browser.get("/", "-f"))
+      fields = ["nick=ivy", "email=ivy@example.org", "password=ivy-chose-this-one", "confirmation=ivy-chose-this-one"]
+      assert Browser("ivy").post(link.removeprefix(f"https://{members}"), *fields) == "200 "
+      tree = browser.get("/tree", "-f")
+      assert re.search(r'aria-current="true">Dana</strong>.*?<ul>\s*<li>\s*<span>ivy</span>', tree, re.S), tree
+
   with subtest("signing out ends the session"):
       signed_out = browser.post("/signout")
       assert signed_out == f"303 https://{members}/signin", signed_out

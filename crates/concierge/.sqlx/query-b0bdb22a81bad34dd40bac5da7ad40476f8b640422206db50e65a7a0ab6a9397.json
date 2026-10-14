@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT account AS \"account!\", invited_by, joined_at,\n                      removed_at IS NOT NULL AS \"removed!: bool\"\n               FROM members",
+  "describe": {
+    "columns": [
+      {
+        "name": "account!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "invited_by",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "joined_at",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "removed!: bool",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b0bdb22a81bad34dd40bac5da7ad40476f8b640422206db50e65a7a0ab6a9397"
+}
