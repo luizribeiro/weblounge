@@ -16,11 +16,15 @@ use crate::{
 pub type AppState = Arc<Assets>;
 
 pub fn router(assets: Assets) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/", get(routes::index::show))
         .route("/healthz", get(|| async { "ok" }))
         .route(&format!("{}{{file}}", assets::URL_PREFIX), get(asset))
-        .with_state(Arc::new(assets))
+        .with_state(Arc::new(assets));
+    // Pages reload themselves when the dev loop restarts concierge.
+    #[cfg(debug_assertions)]
+    let router = router.layer(tower_livereload::LiveReloadLayer::new());
+    router
 }
 
 async fn asset(State(assets): State<AppState>, Path(file): Path<String>) -> impl IntoResponse {

@@ -221,6 +221,10 @@ pkgs.testers.runNixOSTest {
         health = https("members.weblounge.org", "/healthz", "-f")
         assert health == "ok", health
 
+    with subtest("concierge's release build carries no live-reload code"):
+        assert "livereload" not in page, page
+        credenza.fail("grep -aq tower-livereload /proc/$(systemctl show -P MainPID concierge)/exe")
+
     with subtest("concierge listens on credenza's loopback only"):
         assert_loopback_only(8080, "/healthz")
 

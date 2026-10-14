@@ -42,6 +42,16 @@ async fn the_index_greets_visitors_at_the_members_entrance() {
 }
 
 #[tokio::test]
+async fn pages_carry_the_live_reload_script_only_in_debug_builds() {
+    let page = body_text(get("/").await).await;
+    assert_eq!(
+        page.contains("tower-livereload"),
+        cfg!(debug_assertions),
+        "{page}"
+    );
+}
+
+#[tokio::test]
 async fn the_index_links_its_hashed_stylesheet_and_favicon() {
     let page = body_text(get("/").await).await;
     assert!(
