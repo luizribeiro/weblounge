@@ -6,9 +6,6 @@
       <h1>Invites</h1>
       <section class="card tab-card invites" aria-labelledby="invites-title">
         <h2 class="eyebrow" id="invites-title">Your invites</h2>
-        {%- if flash.invited.is_some() %}
-        <p class="notice" role="status">Invite created. Send the link yourself; it works once, for a week.</p>
-        {%- endif %}
         {%- match invites.remaining %}
         {%- when Some(0) %}
         <p class="muted">No invites left.</p>
@@ -20,24 +17,6 @@
           </span>
         </form>
         {%- endmatch %}
-        {%- if !invites.open.is_empty() %}
-        <ul class="invite-list">
-          {%- for invite in invites.open %}
-          <li>
-            <code class="invite-link">{{ invite.url }}</code>
-            <div class="invite-actions">
-              <span class="muted">{{ invite.time_left }} left</span>
-              <button class="button button-small" type="button" data-copy="{{ invite.url }}" data-copy-label="invite link" hidden>Copy</button>
-              <a class="button button-small" href="/invites/{{ invite.id }}/qr">QR</a>
-              <form method="post" action="/invites/revoke">
-                <input type="hidden" name="code" value="{{ invite.code }}">
-                <button class="button button-small" type="submit">Revoke</button>
-              </form>
-            </div>
-          </li>
-          {%- endfor %}
-        </ul>
-        {%- endif %}
         {%- if !invites.invitees.is_empty() %}
         <h3 class="eyebrow">You invited</h3>
         <ul class="invitees">

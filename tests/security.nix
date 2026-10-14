@@ -1,7 +1,6 @@
 { pkgs, vmTest, ... }:
 
 vmTest ''
-  import re
   from html.parser import HTMLParser
 
   mallory = {"account": "mallory", "password": "an-insider-gone-bad"}
@@ -184,22 +183,13 @@ vmTest ''
       body, _ = ergo_api("check_auth", accountName="mallory", passphrase=mallory["password"])
       assert '"success":true' in body, body
 
-  with subtest("an invite's QR page is its inviter's alone, and names the invite without its code"):
-      assert mallorys_browser.post("/invites") == f"303 https://{members}/invites?invited"
-      tab = mallorys_browser.get("/invites", "-f")
-      [code] = re.findall(r'<code class="invite-link">https://[^/]+/invite/([^<]+)</code>', tab)
-      [qr] = re.findall(r'href="(/invites/[^"]+/qr)"', tab)
-      assert code not in qr, (code, qr)
-      needs = PageNeeds(mallorys_browser.get(qr, "-f"))
+  with subtest("a new invite's page draws its QR code within the CSP, and nothing shows its code again"):
+      page, link = mallorys_browser.create_invite()
+      code = link.rsplit("/", 1)[1]
+      needs = PageNeeds(page)
       assert needs.inline == [] and all(directive for directive, _ in needs.fetches), (needs.inline, needs.fetches)
-      assert "<svg" in mallorys_browser.get(qr, "-f")
-      oscar = {"account": "oscar", "password": "another-member-entirely"}
-      register(**oscar)
-      concierge_admin("member", "adopt", "oscar")
-      oscars_browser = Browser("oscar")
-      assert oscars_browser.sign_in(**oscar).startswith("303 ")
-      assert oscars_browser.get(qr, *outcome) == "404 "
-      assert https(members, qr, *outcome) == f"303 https://{members}/signin?next={qr.replace('/', '%2F')}"
+      assert "<svg" in page, page
+      assert code not in mallorys_browser.get("/invites", "-f")
       credenza.succeed("journalctl --sync")
       credenza.fail(f"grep -qF {code} /var/log/nginx/access.log")
       credenza.fail(f"journalctl | grep -qF {code}")

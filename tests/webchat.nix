@@ -7,7 +7,6 @@ vmTest {
     import base64
     import hashlib
     import hmac
-    import re
     import secrets
     from urllib.parse import parse_qs, urlencode, urlsplit
 

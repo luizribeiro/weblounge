@@ -1,4 +1,5 @@
 import json
+import re
 import shlex
 
 
@@ -63,6 +64,12 @@ class Browser:
 
     def sign_in(self, account, password):
         return self.post("/signin", f"nick={account}", f"password={password}")
+
+    def create_invite(self):
+        """Answers with the page of a new invite and its link, which nothing shows again."""
+        page = self.post("/invites", flags=["-f"])
+        [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', page)
+        return page, link
 
 
 def assert_client_address_absent(logs):

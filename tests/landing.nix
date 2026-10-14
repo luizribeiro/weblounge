@@ -1,8 +1,6 @@
 { vmTest, ... }:
 
 vmTest ''
-  import re
-
   with subtest("nginx redirects to HTTPS and serves the parking page"):
       credenza.wait_for_unit("nginx.service")
       credenza.wait_for_open_port(443)

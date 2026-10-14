@@ -1,23 +1,22 @@
 //! The Invites tab: members creating and revoking their own invites, and
-//! the invite tree.
+//! the invite tree. A new invite's link is shown once, as it's created.
 
 use askama::Template;
 use axum::{
     Form,
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::State,
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 
-use super::{Flash, Layout, Tab, internal_error, render};
+use super::{Layout, Tab, internal_error, render};
 use crate::{
     app::{App, AppState},
-    auth::{CurrentMember, Visitor},
+    auth::CurrentMember,
     config,
     db::{self, Invitee, Member, NewInvite},
     invite_code,
-    invite_rules::{self, Inviter, Status},
+    invite_rules::{self, Inviter},
     qr,
     tree::{self, Line},
 };
@@ -27,17 +26,17 @@ use crate::{
 struct InvitesPage<'a> {
     layout: Layout<'a>,
     nick: &'a str,
-    flash: Flash,
     invites: Invites,
     lines: Vec<Line>,
 }
 
 #[derive(Template)]
-#[template(path = "qr.html")]
-struct QrPage<'a> {
+#[template(path = "new-invite.html")]
+struct NewInvitePage<'a> {
     layout: Layout<'a>,
-    invite: OpenInvite,
+    url: String,
     svg: String,
+    lifetime: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -46,11 +45,7 @@ pub struct Revocation {
     code: String,
 }
 
-pub async fn show(
-    State(app): State<AppState>,
-    CurrentMember(me): CurrentMember,
-    Query(flash): Query<Flash>,
-) -> Response {
+pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
     let member = &me.member;
     let invites = match Invites::of(&app, member, db::now()).await {
         Ok(invites) => invites,
@@ -63,7 +58,6 @@ pub async fn show(
     render(&InvitesPage {
         layout: Layout::new(&app, Some(&member.account)).on(Tab::Invites),
         nick: &member.account,
-        flash,
         invites,
         lines: tree::lines(branches),
     })
@@ -85,7 +79,15 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
         invite_rules::may_invite(&inviter, &invites, now).is_ok()
     });
     match created.await {
-        Ok(true) => Redirect::to("/invites?invited").into_response(),
+        Ok(true) => {
+            let url = config::invite_url(&app.public_url, &code);
+            render(&NewInvitePage {
+                layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Invites),
+                svg: qr::svg(&url),
+                url,
+                lifetime: invite_rules::in_words(invite_rules::LIFETIME),
+            })
+        }
         Ok(false) => Redirect::to("/invites").into_response(),
         Err(error) => internal_error("Creating an invite", error),
     }
@@ -107,45 +109,11 @@ pub async fn revoke(
     }
 }
 
-/// An open invite's link as a QR code, big enough to scan from another
-/// phone. Other members' invites, and dead ones, aren't found.
-pub async fn show_qr(
-    State(app): State<AppState>,
-    CurrentMember(me): CurrentMember,
-    Path(id): Path<String>,
-) -> Response {
-    match open_invite(&app, &me.member, &id, db::now()).await {
-        Ok(Some(invite)) => render(&QrPage {
-            layout: Layout::new(&app, Some(&me.member.account)),
-            svg: qr::svg(&invite.url),
-            invite,
-        }),
-        Ok(None) => super::message(
-            &app,
-            &Visitor(Some(me.clone())),
-            StatusCode::NOT_FOUND,
-            "Invites",
-            "No such invite.",
-            &["It was used, revoked or expired, or it isn't yours."],
-        ),
-        Err(error) => internal_error("Looking up an invite", error),
-    }
-}
-
 /// A member's invites, as the Invites tab shows them.
 pub struct Invites {
-    pub open: Vec<OpenInvite>,
     pub invitees: Vec<Invitee>,
     /// `None` for admins, who have no quota.
     pub remaining: Option<i64>,
-}
-
-pub struct OpenInvite {
-    pub code: String,
-    /// What URLs call it by, since the code is a secret.
-    pub id: String,
-    pub url: String,
-    pub time_left: String,
 }
 
 impl Invites {
@@ -153,34 +121,10 @@ impl Invites {
         let invites = app.db.invites_created_by(&member.account).await?;
         let rules: Vec<_> = invites.iter().map(db::Invite::rules).collect();
         Ok(Self {
-            open: open(app, invites, now).collect(),
             invitees: app.db.invitees(&member.account).await?,
             remaining: invite_rules::remaining(&inviter(member), &rules, now),
         })
     }
-}
-
-/// The open invite of `member`'s that URLs call `id`, if there is one.
-pub async fn open_invite(
-    app: &App,
-    member: &Member,
-    id: &str,
-    now: i64,
-) -> sqlx::Result<Option<OpenInvite>> {
-    let invites = app.db.invites_created_by(&member.account).await?;
-    Ok(open(app, invites, now).find(|invite| invite.id == id))
-}
-
-fn open(app: &App, invites: Vec<db::Invite>, now: i64) -> impl Iterator<Item = OpenInvite> {
-    invites
-        .into_iter()
-        .filter(move |invite| matches!(invite.status(now), Status::Open | Status::Claimed))
-        .map(move |invite| OpenInvite {
-            id: invite_code::public_id(&invite.code),
-            url: config::invite_url(&app.public_url, &invite.code),
-            time_left: invite_rules::time_left(invite.expires_at, now),
-            code: invite.code,
-        })
 }
 
 fn inviter(member: &Member) -> Inviter {

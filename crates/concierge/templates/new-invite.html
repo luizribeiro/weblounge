@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}New invite{% endblock %}
+
+{% block content %}
+      <section class="qr-page" aria-labelledby="qr-title">
+        <p class="eyebrow">Invite · works once, for {{ lifetime }}</p>
+        <h1 id="qr-title">Share it now.</h1>
+        <figure class="qr">
+          <div class="qr-code" role="img" aria-label="QR code of the invite link">{{ svg|safe }}</div>
+          <figcaption>
+            <code class="invite-link">{{ url }}</code>
+            <button class="button button-small" type="button" data-copy="{{ url }}" data-copy-label="invite link" hidden>Copy</button>
+          </figcaption>
+        </figure>
+        <p class="hint">Text them the link or let them scan the code. It isn't shown anywhere else; if you lose it, make another.</p>
+        <p class="copy-status visually-hidden" aria-live="polite" data-copy-status></p>
+        <p class="links"><a href="/invites">Back to invites</a></p>
+      </section>
+{%- endblock %}

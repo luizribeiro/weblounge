@@ -1,8 +1,6 @@
 { vmTest, ... }:
 
 vmTest ''
-  import re
-
   alice = {"account": "alice", "password": "correct-horse"}
   bob = {"account": "bob", "password": "battery-staple"}
   carol = {"account": "carol", "password": "tr0ub4dor-and-3"}

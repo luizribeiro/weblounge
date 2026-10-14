@@ -342,7 +342,6 @@
   }
 }
 
-.invite-list,
 .invitees,
 .bots {
   margin: 1rem 0 0;
@@ -358,20 +357,9 @@
 
 .invite-link {
   display: block;
+  margin-bottom: 0.5rem;
   font-size: 0.875rem;
-}
-
-.invite-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-
-  & .muted {
-    margin-right: auto;
-    font-size: 0.875rem;
-  }
+  overflow-wrap: anywhere;
 }
 
 .tree {

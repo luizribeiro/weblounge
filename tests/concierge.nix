@@ -5,7 +5,6 @@ vmTest {
 
   script = ''
     import html
-    import re
 
     with subtest("members.weblounge.org serves concierge's sign-in page in the shared styles"):
         credenza.wait_for_unit("nginx.service")
@@ -130,8 +129,7 @@ vmTest {
         assert "save buttons follow changes" in result, result
 
     with subtest("the invite tree lists a new member under whoever invited them"):
-        assert browser.post("/invites") == f"303 https://{members}/invites?invited"
-        [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', browser.get("/invites", "-f"))
+        _, link = browser.create_invite()
         fields = ["nick=ivy", "email=ivy@example.org", "password=ivy-chose-this-one", "confirmation=ivy-chose-this-one"]
         assert Browser("ivy").post(link.removeprefix(f"https://{members}"), *fields) == "200 "
         tree = browser.get("/invites", "-f")

@@ -106,13 +106,12 @@ pub fn may_invite<'a>(
     }
 }
 
-/// How long until `expires_at`, in words: "6 days", "1 day", "5 hours".
-pub fn time_left(expires_at: i64, now: i64) -> String {
-    let left = (expires_at - now).max(0);
-    let (n, unit) = if left >= DAY {
-        (left / DAY, "day")
+/// A duration of `seconds`, in words: "6 days", "1 day", "5 hours".
+pub fn in_words(seconds: i64) -> String {
+    let (n, unit) = if seconds >= DAY {
+        (seconds / DAY, "day")
     } else {
-        ((left / HOUR).max(1), "hour")
+        ((seconds / HOUR).max(1), "hour")
     };
     let plural = if n == 1 { "" } else { "s" };
     format!("{n} {unit}{plural}")
@@ -254,11 +253,11 @@ mod tests {
     }
 
     #[test]
-    fn says_how_long_an_invite_has_left() {
-        assert_eq!(time_left(expires_at(JOINED), JOINED), "7 days");
-        assert_eq!(time_left(JOINED + DAY + HOUR, JOINED), "1 day");
-        assert_eq!(time_left(JOINED + 5 * HOUR + 59, JOINED), "5 hours");
-        assert_eq!(time_left(JOINED + 60, JOINED), "1 hour");
+    fn says_durations_in_words() {
+        assert_eq!(in_words(LIFETIME), "7 days");
+        assert_eq!(in_words(DAY + HOUR), "1 day");
+        assert_eq!(in_words(5 * HOUR + 59), "5 hours");
+        assert_eq!(in_words(60), "1 hour");
     }
 
     #[test]

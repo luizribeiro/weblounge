@@ -1,8 +1,6 @@
 { vmTest, ... }:
 
 vmTest ''
-  import re
-
   erin = {"account": "erin", "password": "lantern-orchard-71"}
   frank = {"account": "frank", "password": "copper-meadow-94"}
   erins_browser, franks_browser = Browser("erin"), Browser("frank")
@@ -52,9 +50,7 @@ vmTest ''
       assert re.search(r"^:erin!\S+ JOIN #lounge", session, re.M), session
 
   with subtest("the new member invites someone, who joins under them"):
-      assert erins_browser.post("/invites") == f"303 https://{members}/invites?invited"
-      tab = erins_browser.get("/invites", "-f")
-      [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', tab)
+      _, link = erins_browser.create_invite()
       assert sign_up(franks_browser, invite_path(link), frank, *outcome) == "200 "
       tab = erins_browser.get("/invites", "-f")
       assert "<li>frank</li>" in tab, tab
