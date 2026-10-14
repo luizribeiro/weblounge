@@ -23,7 +23,11 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
     rustfmt.enable = true;
     gofmt.enable = true;
     shellcheck.enable = true;
-    yamllint.enable = true;
+    yamllint = {
+      enable = true;
+      # sops writes these, one long line per encrypted value.
+      excludes = [ "^secrets/" ];
+    };
     actionlint.enable = true;
     tsc = {
       enable = true;
