@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="chair" viewBox="-21.5 -28 675 653" role="img" aria-label="A lounge chair constructed from 53 network nodes and 102 connections">
+  <g transform="translate(16 4)">
+    <g class="chair-edges" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21,23 C50,8 110,42 159,41"/>
+      <path d="M159,41 Q234,33 283,26"/>
+      <path d="M283,26 Q313,32 324,114"/>
+      <path d="M324,114 Q320,185 340,215"/>
+      <path d="M340,215 Q354,236 376,245"/>
+      <path d="M376,245 Q430,232 491,219"/>
+      <path d="M491,219 Q518,209 535,214"/>
+      <path d="M535,214 Q562,211 564,241"/>
+      <path d="M564,241 Q555,309 536,375"/>
+      <path d="M536,375 Q526,418 499,428"/>
+      <path d="M56,236 Q88,218 112,217"/>
+      <path d="M112,217 Q141,206 167,225"/>
+      <path d="M167,225 Q189,239 198,279"/>
+      <path d="M85,372 Q90,401 110,416"/>
+      <path d="M222,308 Q349,286 468,318"/>
+      <path d="M501,386 Q498,408 499,428"/>
+      <path d="M21,23 L27,117"/>
+      <path d="M27,117 L56,236"/>
+      <path d="M56,236 L85,372"/>
+      <path d="M110,416 L82,525"/>
+      <path d="M82,525 L117,461"/>
+      <path d="M117,461 L139,425"/>
+      <path d="M110,416 L127,421"/>
+      <path d="M127,421 L139,425"/>
+      <path d="M139,425 L211,439"/>
+      <path d="M211,439 L250,438"/>
+      <path d="M250,438 L499,428"/>
+      <path d="M499,428 L522,541"/>
+      <path d="M522,541 L500,497"/>
+      <path d="M500,497 L474,449"/>
+      <path d="M474,449 L462,430"/>
+      <path d="M462,430 L499,428"/>
+      <path d="M499,428 L474,449"/>
+      <path d="M211,439 L206,565"/>
+      <path d="M206,565 L226,509"/>
+      <path d="M226,509 L250,438"/>
+      <path d="M211,439 L224,397"/>
+      <path d="M224,397 L220,347"/>
+      <path d="M220,347 L222,308"/>
+      <path d="M222,308 L198,279"/>
+      <path d="M21,23 L84,85"/>
+      <path d="M84,85 L159,41"/>
+      <path d="M159,41 L266,84"/>
+      <path d="M266,84 L283,26"/>
+      <path d="M27,117 L84,85"/>
+      <path d="M84,85 L191,139"/>
+      <path d="M191,139 L159,41"/>
+      <path d="M191,139 L266,84"/>
+      <path d="M266,84 L324,114"/>
+      <path d="M324,114 L292,176"/>
+      <path d="M292,176 L266,84"/>
+      <path d="M292,176 L191,139"/>
+      <path d="M78,174 L191,139"/>
+      <path d="M78,174 L84,85"/>
+      <path d="M78,174 L27,117"/>
+      <path d="M56,236 L78,174"/>
+      <path d="M78,174 L167,225"/>
+      <path d="M292,176 L226,247"/>
+      <path d="M191,139 L226,247"/>
+      <path d="M191,139 L167,225"/>
+      <path d="M167,225 L226,247"/>
+      <path d="M226,247 L326,284"/>
+      <path d="M292,176 L326,284"/>
+      <path d="M326,284 L376,245"/>
+      <path d="M373,285 L326,284"/>
+      <path d="M326,284 L222,308"/>
+      <path d="M222,308 L226,247"/>
+      <path d="M167,225 L141,255"/>
+      <path d="M141,255 L112,217"/>
+      <path d="M112,217 L90,282"/>
+      <path d="M90,282 L141,255"/>
+      <path d="M90,282 L165,370"/>
+      <path d="M141,255 L165,370"/>
+      <path d="M198,279 L165,370"/>
+      <path d="M56,236 L90,282"/>
+      <path d="M85,372 L165,370"/>
+      <path d="M165,370 L211,439"/>
+      <path d="M165,370 L127,421"/>
+      <path d="M165,370 L139,425"/>
+      <path d="M564,241 L521,282"/>
+      <path d="M521,282 L535,214"/>
+      <path d="M491,219 L461,253"/>
+      <path d="M461,253 L376,245"/>
+      <path d="M376,245 L373,285"/>
+      <path d="M373,285 L461,253"/>
+      <path d="M461,253 L468,318"/>
+      <path d="M468,318 L505,338"/>
+      <path d="M505,338 L521,282"/>
+      <path d="M521,282 L536,375"/>
+      <path d="M505,338 L501,386"/>
+      <path d="M222,308 L308,341"/>
+      <path d="M308,341 L430,335"/>
+      <path d="M430,335 L505,338"/>
+      <path d="M220,347 L308,341"/>
+      <path d="M308,341 L253,410"/>
+      <path d="M308,341 L401,404"/>
+      <path d="M430,335 L401,404"/>
+      <path d="M401,404 L501,386"/>
+      <path d="M253,410 L401,404"/>
+      <path d="M224,397 L253,410"/>
+      <path d="M253,410 L211,439"/>
+      <path d="M401,404 L499,428"/>
+    </g>
+    <g class="chair-nodes" fill="currentColor">
+      <circle cx="21" cy="23" r="9.68"/>
+      <circle cx="159" cy="41" r="7.04"/>
+      <circle cx="283" cy="26" r="7.04"/>
+      <circle cx="84" cy="85" r="10.56"/>
+      <circle cx="266" cy="84" r="7.04"/>
+      <circle cx="27" cy="117" r="7.04"/>
+      <circle cx="191" cy="139" r="8.8"/>
+      <circle cx="324" cy="114" r="7.04"/>
+      <circle cx="78" cy="174" r="7.04"/>
+      <circle cx="292" cy="176" r="7.92"/>
+      <circle cx="56" cy="236" r="8.8"/>
+      <circle cx="112" cy="217" r="6.16"/>
+      <circle cx="167" cy="225" r="6.16"/>
+      <circle cx="141" cy="255" r="7.04"/>
+      <circle cx="226" cy="247" r="7.04"/>
+      <circle cx="340" cy="215" r="6.16"/>
+      <circle cx="376" cy="245" r="6.16"/>
+      <circle cx="491" cy="219" r="4.84"/>
+      <circle cx="535" cy="214" r="6.16"/>
+      <circle cx="564" cy="241" r="6.16"/>
+      <circle cx="461" cy="253" r="6.16"/>
+      <circle cx="521" cy="282" r="7.04"/>
+      <circle cx="373" cy="285" r="6.16"/>
+      <circle cx="326" cy="284" r="7.04"/>
+      <circle cx="90" cy="282" r="7.04"/>
+      <circle cx="198" cy="279" r="6.16"/>
+      <circle cx="222" cy="308" r="4.84"/>
+      <circle cx="468" cy="318" r="4.84"/>
+      <circle cx="505" cy="338" r="6.6"/>
+      <circle cx="536" cy="375" r="7.04"/>
+      <circle cx="430" cy="335" r="6.16"/>
+      <circle cx="308" cy="341" r="7.04"/>
+      <circle cx="220" cy="347" r="4.84"/>
+      <circle cx="165" cy="370" r="7.92"/>
+      <circle cx="85" cy="372" r="7.92"/>
+      <circle cx="224" cy="397" r="4.4"/>
+      <circle cx="253" cy="410" r="7.04"/>
+      <circle cx="401" cy="404" r="7.04"/>
+      <circle cx="501" cy="386" r="4.84"/>
+      <circle cx="499" cy="428" r="8.8"/>
+      <circle cx="211" cy="439" r="8.8"/>
+      <circle cx="110" cy="416" r="4.84"/>
+      <circle cx="127" cy="421" r="5.28"/>
+      <circle cx="139" cy="425" r="3.52"/>
+      <circle cx="250" cy="438" r="4.84"/>
+      <circle cx="462" cy="430" r="4.4"/>
+      <circle cx="474" cy="449" r="5.72"/>
+      <circle cx="500" cy="497" r="4.4"/>
+      <circle cx="522" cy="541" r="6.16"/>
+      <circle cx="226" cy="509" r="5.72"/>
+      <circle cx="206" cy="565" r="6.16"/>
+      <circle cx="117" cy="461" r="5.28"/>
+      <circle cx="82" cy="525" r="6.16"/>
+    </g>
+    <g class="packets" pointer-events="none"></g>
+  </g>
+</svg>

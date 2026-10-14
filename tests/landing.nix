@@ -24,6 +24,10 @@ vmTest ''
       svg = client.succeed(f"curl -sfk https://credenza{wordmark}")
       assert f'id="{fragment}"' in svg, svg
 
+  with subtest("the chair the script animates is inlined from its shared file"):
+      assert '<svg xmlns="http://www.w3.org/2000/svg" id="chair"' in page, page
+      assert page.count("<circle ") == 53 and "<!-- include" not in page, page
+
   with subtest("the page and its assets are cached briefly and revalidated by ETag"):
       for path in ["/", *assets]:
           headers = client.succeed(f"curl -sfkI https://credenza{path}").lower()

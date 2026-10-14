@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, runCommand, writeShellApplication, esbuild, typescript }:
+{ lib, stdenvNoCC, runCommand, writeShellApplication, writeShellScript, gawk, diffutils, esbuild, typescript }:
 
 let
   src = ../web;
@@ -26,6 +26,22 @@ let
     ] ++ flags
   );
 
+  # The landing page inlines the SVGs its script animates, e.g. the chair
+  # concierge's home shares: `<!-- include images/chair.svg -->` becomes
+  # that file, indented like the comment. Run from web/.
+  renderLanding = writeShellScript "render-landing" ''
+    ${gawk}/bin/awk '
+      $1 == "<!--" && $2 == "include" && $4 == "-->" {
+        match($0, /^ */)
+        indent = substr($0, 1, RLENGTH)
+        while ((getline line < $3) > 0) print (line == "" ? "" : indent line)
+        close($3)
+        next
+      }
+      { print }
+    ' pages/index.html
+  '';
+
   release = esbuildCommand { dev = false; };
   development = esbuildCommand { dev = true; };
 in
@@ -38,7 +54,7 @@ stdenvNoCC.mkDerivation {
   buildPhase = ''
     runHook preBuild
     ${release bundles.landing [ "--minify" "--outdir=dist/assets" ]}
-    install -Dm644 pages/index.html dist/index.html
+    ${renderLanding} > dist/index.html
     install -Dm644 images/favicon.svg dist/favicon.svg
     ${release bundles.members [ "--minify" "--outdir=members" "--metafile=members/manifest.json" ]}
     runHook postBuild
@@ -63,13 +79,18 @@ stdenvNoCC.mkDerivation {
     # Serves the working tree, not the store copy, so edits show up live.
     dev = writeShellApplication {
       name = "weblounge-web-dev";
-      runtimeInputs = [ esbuild ];
+      runtimeInputs = [ esbuild diffutils ];
       text = ''
         cd "$1"
         served=$(mktemp -d)
-        trap 'rm -rf "$served"' EXIT
-        ln -s "$PWD/pages/index.html" "$served/index.html"
+        trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$served"' EXIT
         ln -s "$PWD/images/favicon.svg" "$served/favicon.svg"
+        render() {
+          ${renderLanding} > "$served/next.html"
+          cmp -s "$served/next.html" "$served/index.html" || mv "$served/next.html" "$served/index.html"
+        }
+        render
+        while sleep 1; do render; done &
         ${development bundles.landing [ "--sourcemap" "--watch=forever" ]} \
           --outdir="$served/assets" --servedir="$served" --serve=127.0.0.1:"$2"
       '';

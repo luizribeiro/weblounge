@@ -1,0 +1,30 @@
+/* The network-node chair both sites draw; scripts/chair animates it. */
+
+#chair {
+  display: block;
+  height: auto;
+  -webkit-user-select: none;
+  user-select: none;
+  isolation: isolate;
+
+  & .node-target {
+    fill: transparent;
+    pointer-events: all;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  &[data-grabbing],
+  &[data-grabbing] * {
+    /* biome-ignore lint/complexity/noImportantStyles: mid-drag, the grabbing cursor must beat every descendant's own cursor */
+    cursor: grabbing !important;
+  }
+}
+
+.packets {
+  fill: var(--accent);
+
+  @media (prefers-reduced-motion: reduce) {
+    display: none;
+  }
+}

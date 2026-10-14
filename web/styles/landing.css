@@ -1,5 +1,6 @@
 @import "./tokens.css";
 @import "./base.css";
+@import "./components/chair.css";
 
 html,
 body {
@@ -25,33 +26,7 @@ main {
 }
 
 #chair {
-  display: block;
   width: var(--w);
-  height: auto;
-  -webkit-user-select: none;
-  user-select: none;
-  isolation: isolate;
-
-  & .node-target {
-    fill: transparent;
-    pointer-events: all;
-    cursor: grab;
-    touch-action: none;
-  }
-
-  &[data-grabbing],
-  &[data-grabbing] * {
-    /* biome-ignore lint/complexity/noImportantStyles: mid-drag, the grabbing cursor must beat every descendant's own cursor */
-    cursor: grabbing !important;
-  }
-}
-
-.packets {
-  fill: var(--accent);
-
-  @media (prefers-reduced-motion: reduce) {
-    display: none;
-  }
 }
 
 h1 {
