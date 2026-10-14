@@ -17,6 +17,10 @@
     "images/favicon.svg": {
       "bytes": 1007,
       "imports": []
+    },
+    "images/wordmark.svg": {
+      "bytes": 89,
+      "imports": []
     }
   },
   "outputs": {
@@ -49,6 +53,17 @@
         }
       },
       "bytes": 1007
+    },
+    "members/wordmark-R5TY7UQ8.svg": {
+      "imports": [],
+      "exports": [],
+      "entryPoint": "images/wordmark.svg",
+      "inputs": {
+        "images/wordmark.svg": {
+          "bytesInOutput": 89
+        }
+      },
+      "bytes": 89
     }
   }
 }

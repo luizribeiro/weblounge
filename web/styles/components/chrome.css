@@ -1,0 +1,96 @@
+/* The header, page and footer every concierge page shares. */
+
+body {
+  --gutter: clamp(16px, 4vw, 32px);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-header,
+.page,
+.site-footer {
+  box-sizing: border-box;
+  width: min(100% - 2 * var(--gutter), 64rem);
+  margin-inline: auto;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 44px;
+
+  &:hover {
+    text-decoration: none;
+  }
+}
+
+.brand-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.brand-wordmark {
+  height: 1.375rem;
+  width: auto;
+  aspect-ratio: 778.675 / 130;
+}
+
+.session {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.9375rem;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  & form {
+    margin: 0;
+  }
+}
+
+.session-nick {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-divider {
+  color: var(--muted);
+}
+
+.page {
+  flex: 1;
+  padding-block: 2.5rem 4rem;
+}
+
+.site-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 4rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.875rem;
+  color: var(--muted);
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}

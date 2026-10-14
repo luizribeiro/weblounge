@@ -1,0 +1,51 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 1.125rem;
+  border: 1px solid var(--fg);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--soft);
+  }
+}
+
+.button-primary {
+  min-height: 48px;
+  background: var(--fg);
+  color: var(--bg);
+
+  &:hover {
+    background: var(--fg);
+    opacity: 0.88;
+  }
+}
+
+.button-small {
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+}
+
+/* A form's submit button dressed as a link, such as "Sign out". */
+.link-button {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

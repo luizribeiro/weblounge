@@ -1,14 +1,17 @@
 use askama::Template;
 use axum::{extract::State, response::Response};
 
-use crate::{app::AppState, assets::Assets};
+use super::Layout;
+use crate::app::AppState;
 
 #[derive(Template)]
 #[template(path = "index.html")]
 struct Index<'a> {
-    assets: &'a Assets,
+    layout: Layout<'a>,
 }
 
 pub async fn show(State(assets): State<AppState>) -> Response {
-    super::render(&Index { assets: &assets })
+    super::render(&Index {
+        layout: Layout { assets: &assets },
+    })
 }

@@ -16,6 +16,9 @@
   --panel: #faf9f4;
   --soft: #eaede3;
   --accent: #4e6244;
+  --danger: #9a3b2e;
+  --radius: 3px;
+  --radius-card: 6px;
   color-scheme: light dark;
 
   @media (prefers-color-scheme: dark) {
@@ -26,5 +29,6 @@
     --panel: #202c24;
     --soft: #253227;
     --accent: var(--signal);
+    --danger: #eba293;
   }
 }

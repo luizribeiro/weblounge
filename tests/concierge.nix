@@ -21,13 +21,18 @@ vmTest ''
       assert "--paper:" in css, css
 
   with subtest("concierge serves the assets its page links, under hashed names cached for good"):
-      member_assets = re.findall(r'href="(/assets/[^"]+)"', page)
+      member_assets = set(re.findall(r'href="(/assets/[^"#]+)', page))
       for asset in member_assets:
           assert re.fullmatch(r"/assets/\w+-[A-Z0-9]{8}\.\w+", asset), asset
           headers = https("members.weblounge.org", asset, "-fI").lower()
           assert "cache-control: public, max-age=31536000, immutable" in headers, headers
       types = {https("members.weblounge.org", asset, "-f", "-o", "/dev/null", "-w", "%{content_type}") for asset in member_assets}
       assert types == {"text/css", "image/svg+xml"}, (member_assets, types)
+
+  with subtest("the header draws the mark and wordmark from files that have the ids it uses"):
+      for asset, fragment in re.findall(r'<use href="(/assets/[^"#]+)#([^"]+)"', page):
+          svg = https("members.weblounge.org", asset, "-f")
+          assert f'id="{fragment}"' in svg, (asset, svg)
 
   with subtest("concierge answers health checks"):
       health = https("members.weblounge.org", "/healthz", "-f")

@@ -11,7 +11,7 @@ let
     };
     # Concierge looks the hashed names up in esbuild's metafile.
     members = {
-      entryPoints = [ "styles/members.css" "images/favicon.svg" ];
+      entryPoints = [ "styles/members.css" "images/favicon.svg" "images/wordmark.svg" ];
       entryNames = "[name]-[hash]";
     };
   };

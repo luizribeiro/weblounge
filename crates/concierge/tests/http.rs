@@ -65,6 +65,17 @@ async fn the_index_links_its_hashed_stylesheet_and_favicon() {
 }
 
 #[tokio::test]
+async fn the_header_draws_the_mark_and_wordmark_from_hashed_files() {
+    let page = body_text(get("/").await).await;
+    for part in [
+        r#"<use href="/assets/favicon-E6HOAGDL.svg#mark"/>"#,
+        r#"<use href="/assets/wordmark-R5TY7UQ8.svg#wordmark"/>"#,
+    ] {
+        assert!(page.contains(part), "{part}: {page}");
+    }
+}
+
+#[tokio::test]
 async fn hashed_assets_are_served_immutable() {
     let response = get("/assets/members-N4AQSMXV.css").await;
     assert_eq!(response.status(), 200);

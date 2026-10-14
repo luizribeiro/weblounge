@@ -6,11 +6,21 @@
     <title>{% block title %}{% endblock %} · weblounge.org</title>
     <meta name="theme-color" content="#F3F1E9" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#18221E" media="(prefers-color-scheme: dark)">
-    <link rel="icon" type="image/svg+xml" href="{{ assets.url("favicon.svg")? }}">
-    <link rel="stylesheet" href="{{ assets.url("members.css")? }}">
+    <link rel="icon" type="image/svg+xml" href="{{ layout.assets.url("favicon.svg")? }}">
+    <link rel="stylesheet" href="{{ layout.assets.url("members.css")? }}">
   </head>
   <body>
-    <main>
+    <header class="site-header">
+      <a class="brand" href="/">
+        <svg class="brand-mark" viewBox="0 0 16 16" aria-hidden="true">
+          <use href="{{ layout.assets.url("favicon.svg")? }}#mark"/>
+        </svg>
+        <svg class="brand-wordmark" viewBox="0 0 778.675 130" role="img" aria-label="weblounge.org">
+          <use href="{{ layout.assets.url("wordmark.svg")? }}#wordmark"/>
+        </svg>
+      </a>
+    </header>
+    <main class="page">
       {%- block content %}{% endblock %}
     </main>
   </body>

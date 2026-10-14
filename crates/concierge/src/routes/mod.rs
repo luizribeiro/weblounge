@@ -6,6 +6,13 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
+use crate::assets::Assets;
+
+/// What the layout shared by every page needs.
+pub struct Layout<'a> {
+    pub assets: &'a Assets,
+}
+
 pub fn render(template: &impl Template) -> Response {
     match template.render() {
         Ok(html) => Html(html).into_response(),

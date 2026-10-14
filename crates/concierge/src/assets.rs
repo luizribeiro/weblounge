@@ -158,7 +158,8 @@ mod tests {
             [
                 "favicon-E6HOAGDL.svg",
                 "members-N4AQSMXV.css",
-                "members-N4AQSMXV.css.map"
+                "members-N4AQSMXV.css.map",
+                "wordmark-R5TY7UQ8.svg",
             ]
         );
         assert!(assets.response(MANIFEST).is_none());
