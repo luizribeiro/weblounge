@@ -37,14 +37,22 @@ let
 
   weblounge = { inherit overlay hosts hostModules testErgo zone; };
 
-  nixFilesIn = dir: lib.mapAttrs' (file: _: lib.nameValuePair (lib.removeSuffix ".nix" file) (dir + "/${file}"))
-    (lib.filterAttrs (file: type: type == "regular" && lib.hasSuffix ".nix" file) (builtins.readDir dir));
+  filesIn = suffix: dir: lib.mapAttrs' (file: _: lib.nameValuePair (lib.removeSuffix suffix file) (dir + "/${file}"))
+    (lib.filterAttrs (file: type: type == "regular" && lib.hasSuffix suffix file) (builtins.readDir dir));
 
-  tests = nixFilesIn ../tests // nixFilesIn ../tests/e2e;
+  # A VM test is tests/e2e/<name>.py, with a <name>.nix beside it if it
+  # needs more than lib.nix gives it.
+  vmTests = lib.mapAttrs (_: _: { vmTest, ... }: vmTest { }) (filesIn ".py" ../tests/e2e)
+    // lib.mapAttrs (_: import) (filesIn ".nix" ../tests/e2e);
 
-  checkOf = pkgs: name: file: import file {
+  tests = lib.mapAttrs (_: import) (filesIn ".nix" ../tests) // vmTests;
+
+  checkOf = pkgs: name: test: test {
     inherit pkgs weblounge;
-    vmTest = import ../tests/e2e/lib/lib.nix { inherit pkgs weblounge name; };
+    vmTest = import ../tests/e2e/lib/lib.nix {
+      inherit pkgs weblounge name;
+      script = ../tests/e2e/${name}.py;
+    };
   };
 in
 weblounge // {
