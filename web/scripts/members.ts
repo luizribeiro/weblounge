@@ -12,7 +12,7 @@ async function copy(button: HTMLButtonElement) {
   }
   if (copyStatus) {
     copyStatus.textContent = "";
-    copyStatus.textContent = `${button.textContent}: ${button.dataset.copy}`;
+    copyStatus.textContent = `${button.textContent}: ${button.dataset.copyLabel ?? button.dataset.copy}`;
   }
   setTimeout(() => {
     button.textContent = label;

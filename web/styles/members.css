@@ -11,6 +11,10 @@
   gap: 1.5rem;
   align-items: start;
 
+  & > * {
+    min-width: 0;
+  }
+
   @media (min-width: 52rem) {
     grid-template-columns: 1fr 1fr;
   }
@@ -84,5 +88,74 @@
       font-size: 0.75rem;
       color: var(--muted);
     }
+  }
+}
+
+.hint a {
+  overflow-wrap: anywhere;
+}
+
+.lede {
+  font-size: 1.125rem;
+  color: var(--muted);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+.snippet {
+  margin: 0 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+
+  & figcaption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.25rem 0.25rem 0.25rem 0.875rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  & pre {
+    margin: 0;
+    padding: 0.875rem;
+    overflow-x: auto;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  & pre code {
+    font-size: inherit;
+    overflow-wrap: normal;
+  }
+}
+
+.guides {
+  margin-top: 2.5rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  & .button {
+    gap: 0.5rem;
+    font-weight: 400;
   }
 }

@@ -31,3 +31,24 @@
               </dd>
             </div>
 {%- endmacro %}
+
+{% macro snippet(snippet) %}
+          <figure class="snippet">
+            <figcaption>
+              <code>{{ snippet.target }}</code>
+              <button class="button button-small" type="button" data-copy="{{ snippet.text }}" data-copy-label="{{ snippet.target }}" hidden>Copy</button>
+            </figcaption>
+            <pre><code>{{ snippet.text }}</code></pre>
+          </figure>
+{%- endmacro %}
+
+{% macro guides(clients) %}
+      <nav class="guides" aria-labelledby="guides-title">
+        <h2 class="eyebrow" id="guides-title">Setup guides</h2>
+        <ul class="chips">
+          {%- for client in clients %}
+          <li><a class="button button-small" href="{{ client.guide_url() }}">{{ client.name }} <span class="muted">{{ client.runs_on }}</span></a></li>
+          {%- endfor %}
+        </ul>
+      </nav>
+{%- endmacro %}

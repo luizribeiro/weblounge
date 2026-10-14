@@ -13,6 +13,7 @@ use super::{Layout, internal_error, render, render_with};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
+    clients::{CLIENTS, Client},
     config::IrcServer,
     email::{self, Email},
 };
@@ -29,6 +30,7 @@ struct Account<'a> {
     saved: bool,
     email_max_length: usize,
     email_pattern: &'a str,
+    clients: &'a [Client],
 }
 
 #[derive(Deserialize, Default)]
@@ -99,5 +101,6 @@ fn page<'a>(app: &'a App, nick: &'a str, email: &'a str, news: bool) -> Account<
         saved: false,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
+        clients: &CLIENTS,
     }
 }

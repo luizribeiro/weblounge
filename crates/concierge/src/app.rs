@@ -48,6 +48,7 @@ pub fn router(app: App) -> Router {
         .route("/signout", post(routes::signin::sign_out))
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
+        .route("/clients/{slug}", get(routes::clients::show))
         .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
     let router = Router::new()
         .merge(pages)

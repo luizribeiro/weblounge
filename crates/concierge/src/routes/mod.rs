@@ -1,4 +1,5 @@
 pub mod account;
+pub mod clients;
 pub mod pages;
 pub mod signin;
 

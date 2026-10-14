@@ -2,6 +2,7 @@
 //! fake Ergo.
 
 mod account;
+mod clients;
 mod pages;
 mod security;
 mod signin;
@@ -52,10 +53,7 @@ impl Site {
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),
             public_url: PUBLIC_URL.into(),
-            irc_server: IrcServer {
-                host: "irc.weblounge.org".into(),
-                port: 6697,
-            },
+            irc_server: irc_server(),
         });
         Self {
             router,
@@ -148,6 +146,13 @@ impl Site {
         let hash = self.session_hash(cookie).await;
         let session = self.db.session(&hash, db::now()).await.unwrap();
         session.map(|session| session.expires_at)
+    }
+}
+
+fn irc_server() -> IrcServer {
+    IrcServer {
+        host: "irc.weblounge.org".into(),
+        port: 6697,
     }
 }
 
