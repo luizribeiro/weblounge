@@ -96,6 +96,7 @@ func TestLoadConfigErrors(t *testing.T) {
 		{"missing password file", map[string]string{"IRC_NICK": "bender", "IRC_PASSWORD_FILE": filepath.Join(dir, "nope")}, "reading the password"},
 		{"empty password file", map[string]string{"IRC_NICK": "bender", "IRC_PASSWORD_FILE": writeFile(t, dir, "empty", "\n")}, "is empty"},
 		{"credentials without a password", map[string]string{"IRC_NICK": "bender", "IRC_PASSWORD_FILE": password, "CREDENTIALS_DIRECTORY": t.TempDir()}, "reading the password"},
+		{"missing CA file", map[string]string{"IRC_NICK": "bender", "IRC_PASSWORD_FILE": password, "IRC_CA_FILE": filepath.Join(dir, "nope.pem")}, "reading IRC_CA_FILE"},
 		{"CA file that isn't PEM", map[string]string{"IRC_NICK": "bender", "IRC_PASSWORD_FILE": password, "IRC_CA_FILE": password}, "holds no PEM certificates"},
 	}
 	for _, tt := range tests {

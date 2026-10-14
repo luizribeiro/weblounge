@@ -60,7 +60,7 @@ func readPassword() (string, error) {
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return "", fmt.Errorf("reading the password: %w", err)
+		return "", fmt.Errorf("reading the password from %s: %w", file, err)
 	}
 	password := strings.TrimRight(string(data), "\r\n")
 	if password == "" {
