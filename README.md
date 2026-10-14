@@ -43,6 +43,10 @@ machine, with ports forwarded from localhost:
 | HTTPS   | https://localhost:10443 (self-signed) |
 | IRC     | localhost:16697, TLS (self-signed)    |
 
+IRC requires SASL, and there's no NickServ registration: accounts come
+from Ergo's API on the server's loopback, authenticated with the token
+in `/var/lib/weblounge-secrets/ergo-api-token`.
+
 The VM's console is attached to your terminal (Ctrl-A X quits QEMU). From
 another terminal:
 
@@ -64,6 +68,8 @@ just prod build            # build credenza's system closure
 just prod install root@IP  # first install on a fresh server (wipes its disk)
 just prod push             # deploy to credenza.weblounge.org
 ```
+
+IRC clients connect to `irc.weblounge.org:6697` over TLS.
 
 ## Layout
 
