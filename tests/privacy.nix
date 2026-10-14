@@ -62,6 +62,7 @@ vmTest ''
       concierge_admin("member", "delete", "grace")
       found = files_containing(email)
       assert found == [], found
+      credenza.succeed("systemctl start concierge-vacuum")
       client.fail(irc_command(**grace))
       assert graces_browser.get("/", *outcome) == f"303 https://{members}/signin"
 

@@ -34,7 +34,7 @@ let
   };
 in
 {
-  imports = [ ./ergo.nix ./loopback.nix ./nginx.nix ./secrets.nix ];
+  imports = [ ./ergo.nix ./loopback.nix ./nginx.nix ./secrets.nix ./sqlite-vacuum.nix ];
 
   options.weblounge.concierge.publicUrl = lib.mkOption {
     type = lib.types.str;
@@ -81,6 +81,8 @@ in
       client-id = "ergo";
       client-secret = "";
     };
+
+    weblounge.sqliteVacuum.concierge = "/var/lib/concierge/concierge.db";
 
     systemd.services.concierge = {
       description = "Concierge, the members' site";

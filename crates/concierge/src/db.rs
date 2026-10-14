@@ -178,6 +178,9 @@ pub struct Session {
 pub struct Removal {
     pub sessions_ended: u64,
     pub invites_revoked: u64,
+    /// Whether the overwritten data left the disk now, rather than at the
+    /// next vacuum.
+    pub off_the_disk: bool,
 }
 
 pub struct NewBot<'a> {
@@ -401,25 +404,22 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
-        self.empty_write_ahead_log().await?;
         Ok(Removal {
             sessions_ended,
             invites_revoked: revoked.rows_affected(),
+            off_the_disk: self.empty_write_ahead_log().await,
         })
     }
 
     /// Copies the write-ahead log into the database and truncates it, so
     /// the rows a change overwrote leave the disk, not just the database.
-    async fn empty_write_ahead_log(&self) -> sqlx::Result<()> {
-        let (busy, _, _): (i64, i64, i64) = sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
-            .fetch_one(&self.pool)
-            .await?;
-        if busy != 0 {
-            return Err(sqlx::Error::Protocol(
-                "the write-ahead log is busy; the overwritten data is still on disk".into(),
-            ));
-        }
-        Ok(())
+    /// Answers whether it could, which a reader holding the log prevents.
+    async fn empty_write_ahead_log(&self) -> bool {
+        let checkpoint: sqlx::Result<(i64, i64, i64)> =
+            sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
+                .fetch_one(&self.pool)
+                .await;
+        matches!(checkpoint, Ok((0, _, _)))
     }
 
     pub async fn insert_invite(&self, invite: &NewInvite<'_>) -> sqlx::Result<()> {
@@ -1154,8 +1154,9 @@ pub(crate) mod tests {
         .await
         .unwrap();
 
-        db.remove_member("alice", 200).await.unwrap();
+        let removal = db.remove_member("alice", 200).await.unwrap();
 
+        assert!(removal.off_the_disk);
         let on_disk: Vec<u8> = std::fs::read_dir(dir.path())
             .unwrap()
             .flat_map(|entry| std::fs::read(entry.unwrap().path()).unwrap())
@@ -1163,6 +1164,32 @@ pub(crate) mod tests {
         let contains = |text: &[u8]| on_disk.windows(text.len()).any(|window| window == text);
         assert!(!contains(b"alice@example.org"));
         assert!(contains(b"bob@example.org"));
+    }
+
+    #[tokio::test]
+    async fn a_reader_holding_the_log_leaves_the_removal_for_the_vacuum() {
+        let (db, dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('alice', 'alice@example.org', 10);",
+        )
+        .await
+        .unwrap();
+        let reader = Db::open(&dir.path().join("concierge.db")).await.unwrap();
+        let mut snapshot = reader.pool.begin().await.unwrap();
+        sqlx::query("SELECT COUNT(*) FROM members")
+            .execute(&mut *snapshot)
+            .await
+            .unwrap();
+
+        let removal = db.remove_member("alice", 200).await.unwrap();
+
+        assert!(!removal.off_the_disk);
+        assert_eq!(
+            db.member("alice").await.unwrap().unwrap().removed_at,
+            Some(200)
+        );
     }
 
     const CREATED: i64 = 1_000;

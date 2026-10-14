@@ -44,8 +44,13 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
     }
     admin.set_generated_password(account).await?;
     let removal = admin.db.remove_member(account, db::now()).await?;
+    let lingering = if removal.off_the_disk {
+        ""
+    } else {
+        "their old data stays on disk until the hourly vacuum\n"
+    };
     Ok(format!(
-        "removed {account} (sessions ended: {}, invites revoked: {})\n{}{bots_removed}",
+        "removed {account} (sessions ended: {}, invites revoked: {})\n{lingering}{}{bots_removed}",
         removal.sessions_ended,
         removal.invites_revoked,
         erase_reminder(account),
