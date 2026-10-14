@@ -1,6 +1,7 @@
 { vmTest, ... }:
 
 vmTest ''
+  import html
   import re
 
   with subtest("members.weblounge.org serves concierge's sign-in page in the shared styles"):
@@ -125,6 +126,19 @@ vmTest ''
       assert Browser("ivy").post(link.removeprefix(f"https://{members}"), *fields) == "200 "
       tree = browser.get("/tree", "-f")
       assert re.search(r'aria-current="true">Dana</strong>.*?<ul>\s*<li>\s*<span>ivy</span>', tree, re.S), tree
+
+  with subtest("the client certificate guide's commands attach a certificate that SASL EXTERNAL logs in with"):
+      guide = browser.get("/certificates", "-f")
+      generate, fingerprint = [html.unescape(block) for block in re.findall(r"<pre><code>(.*?)</code></pre>", guide, re.S)[:2]]
+      assert "/CN=Dana" in generate, generate
+      client.succeed(f"mkdir -p /tmp/cert && cd /tmp/cert && {generate}")
+      certfp = client.succeed(f"cd /tmp/cert && {fingerprint}").strip()
+      assert re.fullmatch("[0-9a-f]{64}", certfp), certfp
+      added = irc(f"PRIVMSG NickServ :CERT ADD {certfp}", account="Dana", password=password)
+      assert "NOTICE Dana :Certificate fingerprint successfully added" in added, added
+      client.succeed("cat /tmp/cert/weblounge.key /tmp/cert/weblounge.crt > /tmp/cert/weblounge.pem")
+      session = irc(account="Dana", cert="/tmp/cert/weblounge.pem")
+      assert " 903 " in session and re.search(r" 900 \S+ .* :You are now logged in as Dana", session), session
 
   with subtest("signing out ends the session"):
       signed_out = browser.post("/signout")

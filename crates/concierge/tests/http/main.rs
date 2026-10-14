@@ -2,6 +2,7 @@
 //! fake Ergo.
 
 mod account;
+mod certificates;
 mod checks;
 mod clients;
 mod invite;

@@ -378,3 +378,28 @@
     height: auto;
   }
 }
+
+.steps {
+  max-width: 44rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+
+  & > li {
+    padding: 1.5rem 0 0.5rem;
+    border-top: 1px solid var(--line);
+    counter-increment: step;
+  }
+
+  & h2 {
+    margin-top: 0;
+
+    &::before {
+      content: counter(step, decimal-leading-zero) " ";
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+  }
+}

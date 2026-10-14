@@ -1,6 +1,7 @@
 """Connect to an IRC server over TLS, or over a WebSocket the way a web
-client does, optionally logging in with SASL PLAIN or OAUTHBEARER, send
-COMMANDS once welcomed, and print every line the server sends."""
+client does, optionally logging in with SASL PLAIN, EXTERNAL or
+OAUTHBEARER, send COMMANDS once welcomed, and print every line the server
+sends."""
 
 import argparse
 import base64
@@ -11,10 +12,12 @@ import ssl
 QUIET_SECONDS = 2
 
 
-def connect(host, port, name=None):
+def connect(host, port, name=None, cert=None):
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
+    if cert:
+        context.load_cert_chain(cert)
     sock = socket.create_connection((host, port), timeout=10)
     return context.wrap_socket(sock, server_hostname=name or host)
 
@@ -127,7 +130,8 @@ class Connection:
 def authenticate(conn, mechanism, payload):
     conn.send("CAP REQ :sasl")
     conn.send(f"AUTHENTICATE {mechanism}")
-    conn.send("AUTHENTICATE " + base64.b64encode(payload.encode()).decode())
+    encoded = base64.b64encode(payload.encode()).decode()
+    conn.send("AUTHENTICATE " + (encoded or "+"))
     if conn.read_until("903", "904") != "903":
         raise SystemExit(f"SASL {mechanism} login failed")
 
@@ -139,21 +143,26 @@ def main():
     parser.add_argument("--password")
     parser.add_argument("--token", help="an OAuth 2.0 bearer token")
     parser.add_argument(
+        "--cert", help="a PEM file with the key and certificate to present",
+    )
+    parser.add_argument(
         "--websocket", metavar="NAME",
         help="connect to wss://NAME/socket at the host, as a web client",
     )
     parser.add_argument("commands", nargs="*")
     args = parser.parse_args()
-    if args.account and not args.password:
-        parser.error("--account needs --password")
+    if args.account and not (args.password or args.cert):
+        parser.error("--account needs --password or --cert")
 
     if args.websocket:
         sock = connect(args.host, 443, args.websocket)
         conn = Connection(WebSocket(sock, args.websocket))
     else:
-        conn = Connection(connect(args.host, 6697))
+        conn = Connection(connect(args.host, 6697, cert=args.cert))
     conn.send("CAP LS 302")
-    if args.account:
+    if args.cert:
+        authenticate(conn, "EXTERNAL", "")
+    elif args.account:
         plain = f"{args.account}\0{args.account}\0{args.password}"
         authenticate(conn, "PLAIN", plain)
     elif args.token:
