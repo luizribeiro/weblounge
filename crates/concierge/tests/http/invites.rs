@@ -2,7 +2,7 @@ use axum::http::header;
 use concierge::invite_rules::MAX_OPEN;
 use regex::Regex;
 
-use crate::{PUBLIC_URL, Site, body_text, location};
+use crate::{JOIN_URL, Site, body_text, location};
 
 fn invite_links(page: &str) -> Vec<String> {
     let link = Regex::new(r#"<code class="invite-link">(https://[^<]+)</code>"#).unwrap();
@@ -37,7 +37,7 @@ async fn a_new_invite_shows_its_link_and_qr_code_once() {
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let page = body_text(response).await;
     let [link] = invite_links(&page).try_into().unwrap();
-    assert!(link.starts_with(&format!("{PUBLIC_URL}/invite#")), "{link}");
+    assert!(link.starts_with(&format!("{JOIN_URL}/#")), "{link}");
     assert!(page.contains(&format!(r#"data-copy="{link}""#)), "{page}");
     assert!(page.contains(&concierge::qr::svg(&link)), "{page}");
     assert!(page.contains("works once, for 24 hours"), "{page}");

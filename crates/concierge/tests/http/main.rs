@@ -43,6 +43,7 @@ use tower::ServiceExt;
 
 const PUBLIC_URL: &str = "https://members.weblounge.org";
 const WEBCHAT_URL: &str = "https://irc.weblounge.org";
+const JOIN_URL: &str = "https://join.weblounge.org";
 const SESSION_KEY: &[u8] = b"a session key for tests, at least 32 bytes";
 const PASSWORD: &str = "correct-horse-battery";
 const INTROSPECTION_SECRET: &str = "a secret Ergo introspects tokens with";
@@ -75,6 +76,7 @@ impl Site {
             lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
             oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
             public_url: PUBLIC_URL.into(),
+            invite_links: format!("{JOIN_URL}/#"),
             webchat: Webchat {
                 origin: WEBCHAT_URL.into(),
             },

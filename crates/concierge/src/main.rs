@@ -37,6 +37,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
         oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
         public_url: config.public_url.clone(),
+        invite_links: config.invite_links.clone(),
         webchat: Webchat {
             origin: config.webchat_url.clone(),
         },

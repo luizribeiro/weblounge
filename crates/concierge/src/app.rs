@@ -32,6 +32,8 @@ pub struct App {
     pub oauth_requests: AddressLimiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
+    /// What invite links start with; the code follows.
+    pub invite_links: String,
     /// The web client, which signs members in through our OAuth server.
     pub webchat: Webchat,
     /// What Ergo authenticates with to introspect the web client's tokens.

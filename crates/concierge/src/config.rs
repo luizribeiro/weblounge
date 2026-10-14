@@ -17,6 +17,8 @@ const MIN_SESSION_KEY_BYTES: usize = 32;
 pub struct Config {
     pub listen: SocketAddr,
     pub public_url: String,
+    /// What invite links start with; the code follows.
+    pub invite_links: String,
     /// The web client's origin, the one OAuth client.
     pub webchat_url: String,
     pub irc_server: IrcServer,
@@ -90,6 +92,7 @@ impl Config {
         let listen = require("CONCIERGE_LISTEN")?;
         let public_url = require("CONCIERGE_PUBLIC_URL")?;
         let webchat_url = require("CONCIERGE_WEBCHAT_URL")?;
+        let join_url = var("CONCIERGE_JOIN_URL");
         let irc_server = require("CONCIERGE_IRC_SERVER")?;
         let ergo_api = var("CONCIERGE_ERGO_API").unwrap_or_else(|| DEFAULT_ERGO_API.into());
         let multiclient_default = |name| {
@@ -102,6 +105,24 @@ impl Config {
                 )
             })
         };
+        let public_url = parse_origin(&public_url).ok_or_else(|| {
+            invalid(
+                "CONCIERGE_PUBLIC_URL",
+                public_url.clone(),
+                "expected an http(s) origin, without a path",
+            )
+        })?;
+        let join_url = join_url
+            .map(|url| {
+                parse_origin(&url).ok_or_else(|| {
+                    invalid(
+                        "CONCIERGE_JOIN_URL",
+                        url.clone(),
+                        "expected an http(s) origin, without a path",
+                    )
+                })
+            })
+            .transpose()?;
         Ok(Self {
             listen: listen.parse().map_err(|_| {
                 invalid(
@@ -110,13 +131,8 @@ impl Config {
                     "expected an address:port",
                 )
             })?,
-            public_url: parse_origin(&public_url).ok_or_else(|| {
-                invalid(
-                    "CONCIERGE_PUBLIC_URL",
-                    public_url.clone(),
-                    "expected an http(s) origin, without a path",
-                )
-            })?,
+            invite_links: invite_links(&public_url, join_url.as_deref()),
+            public_url,
             webchat_url: parse_origin(&webchat_url).ok_or_else(|| {
                 invalid(
                     "CONCIERGE_WEBCHAT_URL",
@@ -149,7 +165,7 @@ impl Config {
     }
 
     pub fn invite_url(&self, code: &str) -> String {
-        invite_url(&self.public_url, code)
+        invite_url(&self.invite_links, code)
     }
 
     pub fn database_path(&self) -> PathBuf {
@@ -195,8 +211,17 @@ impl Config {
     }
 }
 
-pub fn invite_url(public_url: &str, code: &str) -> String {
-    format!("{public_url}/invite#{code}")
+pub fn invite_url(invite_links: &str, code: &str) -> String {
+    format!("{invite_links}{code}")
+}
+
+/// Where invite links lead: the join origin, which sends visitors on to
+/// the invite page with the fragment, or else the invite page itself.
+fn invite_links(public_url: &str, join_url: Option<&str>) -> String {
+    match join_url {
+        Some(join_url) => format!("{join_url}/#"),
+        None => format!("{public_url}/invite#"),
+    }
 }
 
 /// Whether an Ergo multiclient setting, such as `always-on`, turns the
@@ -226,9 +251,10 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 9] = [
+    const PRODUCTION: [(&str, &str); 10] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
+        ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
         ("CONCIERGE_WEBCHAT_URL", "https://irc.weblounge.org"),
         ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
         ("CONCIERGE_ALWAYS_ON_DEFAULT", "opt-out"),
@@ -266,6 +292,7 @@ mod tests {
             Ok(Config {
                 listen: "127.0.0.1:8080".parse().unwrap(),
                 public_url: "https://members.weblounge.org".into(),
+                invite_links: "https://join.weblounge.org/#".into(),
                 webchat_url: "https://irc.weblounge.org".into(),
                 irc_server: IrcServer {
                     host: "irc.weblounge.org".into(),
@@ -322,12 +349,36 @@ mod tests {
     }
 
     #[test]
-    fn builds_invite_links_on_the_public_url() {
+    fn builds_invite_links_on_the_join_url() {
         let config = parse_with(&[]).unwrap();
+        assert_eq!(
+            config.invite_url("q7Hx2mZp9vLcT4wRfBa-_w"),
+            "https://join.weblounge.org/#q7Hx2mZp9vLcT4wRfBa-_w"
+        );
+    }
+
+    #[test]
+    fn without_a_join_url_invite_links_lead_to_the_invite_page() {
+        let config = parse_with(&[("CONCIERGE_JOIN_URL", None)]).unwrap();
         assert_eq!(
             config.invite_url("q7Hx2mZp9vLcT4wRfBa-_w"),
             "https://members.weblounge.org/invite#q7Hx2mZp9vLcT4wRfBa-_w"
         );
+    }
+
+    #[test]
+    fn the_join_url_is_an_origin_too() {
+        let join = |url| parse_with(&[("CONCIERGE_JOIN_URL", Some(url))]);
+        assert_eq!(
+            join("https://join.weblounge.localhost:10443/")
+                .unwrap()
+                .invite_links,
+            "https://join.weblounge.localhost:10443/#"
+        );
+        assert!(matches!(
+            join("https://join.weblounge.org/invite"),
+            Err(ConfigError::Invalid { .. })
+        ));
     }
 
     #[test]

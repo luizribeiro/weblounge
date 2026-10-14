@@ -72,7 +72,7 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
     });
     match created.await {
         Ok(true) => {
-            let url = config::invite_url(&app.public_url, &code);
+            let url = config::invite_url(&app.invite_links, &code);
             render(&NewInvitePage {
                 layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Invites),
                 svg: qr::svg(&url),
