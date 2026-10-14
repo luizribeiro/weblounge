@@ -35,10 +35,15 @@
         (lib.mapAttrs (_: hooks: { git-hooks = hooks; }) gitHooks)
         (forEachSystem (pkgs: { web-typecheck = pkgs.weblounge.web.typecheck; }))
         {
-          x86_64-linux.credenza = import ./tests/credenza.nix {
-            inherit weblounge;
-            pkgs = nixpkgs.legacyPackages.x86_64-linux;
-          };
+          x86_64-linux = lib.mapAttrs
+            (_: test: import test {
+              inherit weblounge;
+              pkgs = nixpkgs.legacyPackages.x86_64-linux;
+            })
+            {
+              credenza = ./tests/credenza.nix;
+              ergo-api-loopback = ./tests/ergo-api-loopback.nix;
+            };
         }
       ];
 

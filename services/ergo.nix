@@ -28,6 +28,11 @@ in
   };
 
   config = {
+    assertions = [{
+      assertion = builtins.match "(127\\.0\\.0\\.1|\\[::1]|localhost):[0-9]+" cfg.settings.api.listener != null;
+      message = "Ergo's API must listen on loopback only, not on ${cfg.settings.api.listener}.";
+    }];
+
     weblounge.ergo.settings = {
       network.name = "weblounge";
       server = {
