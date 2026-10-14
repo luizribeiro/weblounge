@@ -18,7 +18,7 @@ let
   '';
 in
 {
-  imports = [ ./nginx.nix ./secrets.nix ];
+  imports = [ ./loopback.nix ./nginx.nix ./secrets.nix ];
 
   # The nixpkgs module's defaults leave out fakelag, login throttling, nick
   # reservation, cloaking and logging; Ergo's default.yaml keeps them on.
@@ -29,10 +29,7 @@ in
   };
 
   config = {
-    assertions = [{
-      assertion = builtins.match "(127\\.0\\.0\\.1|\\[::1]|localhost):[0-9]+" cfg.settings.api.listener != null;
-      message = "Ergo's API must listen on loopback only, not on ${cfg.settings.api.listener}.";
-    }];
+    weblounge.loopbackListeners."Ergo's API" = cfg.settings.api.listener;
 
     weblounge.ergo.settings = {
       network.name = "weblounge";
