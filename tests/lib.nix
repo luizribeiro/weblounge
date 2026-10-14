@@ -55,5 +55,8 @@ pkgs.testers.runNixOSTest {
     # admins and scanners, never members.
     with subtest("after everything above, only sshd's log names a client address"):
         assert_client_address_absent("journalctl | grep -vE ' sshd(-session|-auth)?\\[[0-9]+\\]: '")
+
+    with subtest("after everything above, no file on credenza names a client address"):
+        assert files_naming_client_address() == [], files_naming_client_address()
   '';
 }
