@@ -8,6 +8,7 @@ ergo_api := ergo_host + ":" + ergo_port
 
 export CONCIERGE_LISTEN := "127.0.0.1:8080"
 export CONCIERGE_PUBLIC_URL := "http://localhost:8080"
+export CONCIERGE_WEBCHAT_URL := "https://irc.weblounge.localhost:10443"
 export CONCIERGE_IRC_SERVER := "irc.weblounge.localhost:16697"
 export CONCIERGE_ERGO_API := "http://" + ergo_api
 export CONCIERGE_ASSETS := dev_dir / "assets"
@@ -19,7 +20,7 @@ dev:
   #!/usr/bin/env bash
   set -euo pipefail
   mkdir -p "$STATE_DIRECTORY" "$CREDENTIALS_DIRECTORY"
-  for secret in session-key ergo-api-token; do
+  for secret in session-key ergo-api-token oauth-introspection-secret; do
     [ -e "$CREDENTIALS_DIRECTORY/$secret" ] || od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$CREDENTIALS_DIRECTORY/$secret"
   done
   trap 'kill $(jobs -p) 2>/dev/null' EXIT

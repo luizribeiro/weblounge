@@ -46,6 +46,7 @@ in
 
     weblounge.secrets.session-key.loadedBy = [ "concierge" ];
     weblounge.secrets.ergo-api-token.loadedBy = [ "concierge" ];
+    weblounge.secrets.oauth-introspection-secret.loadedBy = [ "concierge" ];
 
     systemd.services.concierge = {
       description = "Concierge, the members' site";
@@ -60,6 +61,7 @@ in
         Environment = [
           "CONCIERGE_LISTEN=${cfg.listen}"
           "CONCIERGE_PUBLIC_URL=${publicUrl}"
+          "CONCIERGE_WEBCHAT_URL=${config.weblounge.origin config.weblounge.ergo.serverName}"
           "CONCIERGE_IRC_SERVER=${config.weblounge.ergo.address}"
           "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
           "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"

@@ -6,6 +6,7 @@ use ergo_api::{Client, Url};
 
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
 pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
+pub const INTROSPECTION_SECRET_CREDENTIAL: &str = "oauth-introspection-secret";
 const DEFAULT_ERGO_API: &str = "http://127.0.0.1:8089";
 const DATABASE: &str = "concierge.db";
 const MIN_SESSION_KEY_BYTES: usize = 32;
@@ -14,6 +15,8 @@ const MIN_SESSION_KEY_BYTES: usize = 32;
 pub struct Config {
     pub listen: SocketAddr,
     pub public_url: String,
+    /// The web client's origin, the one OAuth client.
+    pub webchat_url: String,
     pub irc_server: IrcServer,
     pub ergo_api: Url,
     pub assets_dir: PathBuf,
@@ -81,6 +84,7 @@ impl Config {
 
         let listen = require("CONCIERGE_LISTEN")?;
         let public_url = require("CONCIERGE_PUBLIC_URL")?;
+        let webchat_url = require("CONCIERGE_WEBCHAT_URL")?;
         let irc_server = require("CONCIERGE_IRC_SERVER")?;
         let ergo_api = var("CONCIERGE_ERGO_API").unwrap_or_else(|| DEFAULT_ERGO_API.into());
         Ok(Self {
@@ -95,6 +99,13 @@ impl Config {
                 invalid(
                     "CONCIERGE_PUBLIC_URL",
                     public_url.clone(),
+                    "expected an http(s) origin, without a path",
+                )
+            })?,
+            webchat_url: parse_origin(&webchat_url).ok_or_else(|| {
+                invalid(
+                    "CONCIERGE_WEBCHAT_URL",
+                    webchat_url.clone(),
                     "expected an http(s) origin, without a path",
                 )
             })?,
@@ -146,6 +157,17 @@ impl Config {
         Ok(Client::new(self.ergo_api.clone(), token))
     }
 
+    /// The secret Ergo authenticates with to introspect tokens.
+    pub fn read_introspection_secret(&self) -> anyhow::Result<String> {
+        let secret = self.read_credential(INTROSPECTION_SECRET_CREDENTIAL)?;
+        anyhow::ensure!(
+            secret.len() >= MIN_SESSION_KEY_BYTES,
+            "the {INTROSPECTION_SECRET_CREDENTIAL} credential holds {} bytes; it needs at least {MIN_SESSION_KEY_BYTES}",
+            secret.len()
+        );
+        Ok(secret)
+    }
+
     fn read_credential(&self, name: &str) -> anyhow::Result<String> {
         let path = self.credentials_dir.join(name);
         let value = std::fs::read_to_string(&path)
@@ -175,9 +197,10 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 6] = [
+    const PRODUCTION: [(&str, &str); 7] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
+        ("CONCIERGE_WEBCHAT_URL", "https://irc.weblounge.org"),
         ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
         (
             "CONCIERGE_ASSETS",
@@ -212,6 +235,7 @@ mod tests {
             Ok(Config {
                 listen: "127.0.0.1:8080".parse().unwrap(),
                 public_url: "https://members.weblounge.org".into(),
+                webchat_url: "https://irc.weblounge.org".into(),
                 irc_server: IrcServer {
                     host: "irc.weblounge.org".into(),
                     port: 6697,
@@ -255,6 +279,25 @@ mod tests {
                 "{url}"
             );
         }
+    }
+
+    #[test]
+    fn the_webchat_url_is_an_origin_too() {
+        let webchat = |url| parse_with(&[("CONCIERGE_WEBCHAT_URL", Some(url))]);
+        assert_eq!(
+            webchat("https://irc.weblounge.localhost:10443/")
+                .unwrap()
+                .webchat_url,
+            "https://irc.weblounge.localhost:10443"
+        );
+        assert!(matches!(
+            webchat("https://irc.weblounge.org/chat"),
+            Err(ConfigError::Invalid { .. })
+        ));
+        assert_eq!(
+            parse_with(&[("CONCIERGE_WEBCHAT_URL", None)]),
+            Err(ConfigError::Missing("CONCIERGE_WEBCHAT_URL"))
+        );
     }
 
     #[test]
@@ -333,6 +376,19 @@ mod tests {
         std::fs::write(dir.path().join(SESSION_KEY_CREDENTIAL), "hunter2\n").unwrap();
         let error = config.read_session_key().unwrap_err().to_string();
         assert!(error.contains("holds 7 bytes"), "{error}");
+    }
+
+    #[test]
+    fn reads_the_introspection_secret_and_refuses_a_short_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_with_credentials(dir.path());
+        assert!(config.read_introspection_secret().is_err());
+        let path = dir.path().join(INTROSPECTION_SECRET_CREDENTIAL);
+        std::fs::write(&path, "hunter2\n").unwrap();
+        assert!(config.read_introspection_secret().is_err());
+        let generated = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+        std::fs::write(&path, format!("{generated}\n")).unwrap();
+        assert_eq!(config.read_introspection_secret().unwrap(), generated);
     }
 
     #[test]

@@ -34,6 +34,7 @@ impl Fixture {
         let config = Config {
             listen: "127.0.0.1:8080".parse().unwrap(),
             public_url: "https://members.weblounge.localhost:10443".into(),
+            webchat_url: "https://irc.weblounge.localhost:10443".into(),
             irc_server: IrcServer {
                 host: "irc.weblounge.localhost".into(),
                 port: 16697,

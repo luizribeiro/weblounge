@@ -20,6 +20,13 @@ in
     description = "Ergo settings, merged over the default.yaml that Ergo ships.";
   };
 
+  options.weblounge.ergo.serverName = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = serverName;
+    description = "The IRC server's name, which is also the web client's host.";
+  };
+
   options.weblounge.ergo.websocketListener = lib.mkOption {
     type = lib.types.str;
     default = "127.0.0.1:8097";
