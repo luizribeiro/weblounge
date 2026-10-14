@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT MAX(version) AS \"version?\" FROM _sqlx_migrations WHERE success",
+  "describe": {
+    "columns": [
+      {
+        "name": "version?",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0562f4cda06466e9a1a650d7a710e5633c65521d452685a93a4e03a9511ab275"
+}

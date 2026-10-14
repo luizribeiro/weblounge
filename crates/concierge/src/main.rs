@@ -1,5 +1,5 @@
 use clap::Parser;
-use concierge::{app, assets::Assets, config::Config, status};
+use concierge::{app, assets::Assets, config::Config, db::Db, status};
 use tokio::net::TcpListener;
 
 /// The members' site of weblounge.org, and the admin commands behind it.
@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn serve(config: Config) -> anyhow::Result<()> {
     config.read_session_key()?;
+    Db::open(&config.database_path()).await?;
     let assets = Assets::load(&config.assets_dir)?;
     let listener = TcpListener::bind(config.listen).await?;
     eprintln!("Serving {} on {}", config.public_url, config.listen);

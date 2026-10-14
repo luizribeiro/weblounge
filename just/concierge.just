@@ -19,3 +19,15 @@ dev port="8080":
   STATE_DIRECTORY="$dev/state" \
   CREDENTIALS_DIRECTORY="$dev/credentials" \
     bacon --headless serve
+
+# Regenerate .sqlx, the query metadata offline builds check against, after changing a query or migration
+prepare:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  scratch="$(mktemp -d)"
+  trap 'rm -rf "$scratch"' EXIT
+  export DATABASE_URL="sqlite://$scratch/prepare.db"
+  sqlx database create
+  sqlx migrate run --source crates/concierge/migrations
+  cd crates/concierge
+  cargo sqlx prepare -- --all-targets

@@ -10,6 +10,8 @@ let
     inherit src;
     inherit (craneLib.crateNameFromCargoToml { cargoToml = ../crates/concierge/Cargo.toml; }) pname version;
     strictDeps = true;
+    # sqlx checks queries against the metadata in .sqlx, not a live database.
+    SQLX_OFFLINE = "true";
   };
 
   # Dependencies build once here, so editing our code doesn't rebuild them.

@@ -4,6 +4,7 @@ use anyhow::Context;
 use axum::http::Uri;
 
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
+const DATABASE: &str = "concierge.db";
 const MIN_SESSION_KEY_BYTES: usize = 32;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -76,6 +77,10 @@ impl Config {
             state_dir: require("STATE_DIRECTORY")?.into(),
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
         })
+    }
+
+    pub fn database_path(&self) -> PathBuf {
+        self.state_dir.join(DATABASE)
     }
 
     pub fn read_session_key(&self) -> anyhow::Result<Vec<u8>> {

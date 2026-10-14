@@ -13,6 +13,7 @@ pkgs.mkShell ({
     rust-analyzer
     rustc
     rustfmt
+    sqlx-cli
     typescript
   ]);
   RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
