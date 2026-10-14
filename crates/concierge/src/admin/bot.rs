@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -40,6 +40,7 @@ pub enum BotCommand {
     Ensure {
         owner: String,
         name: String,
+        /// The file holding the password, or - for standard input.
         #[arg(long)]
         password_file: PathBuf,
     },
@@ -97,10 +98,14 @@ async fn ensure(
     Ok(format!("updated {}\n", bot.account))
 }
 
-/// The password in `path`, without the newline that may end the file.
+/// The password in `path`, or on standard input for `-`, without the
+/// newline that may end it.
 fn read_password(path: &Path) -> anyhow::Result<Passphrase> {
-    let contents =
-        fs::read_to_string(path).with_context(|| format!("can't read {}", path.display()))?;
+    let contents = if path == Path::new("-") {
+        io::read_to_string(io::stdin()).context("can't read standard input")?
+    } else {
+        fs::read_to_string(path).with_context(|| format!("can't read {}", path.display()))?
+    };
     let password = contents.strip_suffix('\n').unwrap_or(&contents);
     password_rules::check(password, password)
         .with_context(|| format!("{} doesn't hold a usable password", path.display()))
