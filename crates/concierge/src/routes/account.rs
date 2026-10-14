@@ -4,17 +4,18 @@ use askama::Template;
 use axum::{
     Form,
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 
-use super::{Layout, internal_error, render, render_with};
+use super::{Layout, internal_error, invites::Invites, render, render_with};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
     clients::{CLIENTS, Client},
     config::IrcServer,
+    db,
     email::{self, Email},
 };
 
@@ -31,12 +32,15 @@ struct Account<'a> {
     email_max_length: usize,
     email_pattern: &'a str,
     clients: &'a [Client],
+    invites: Invites,
+    invited: bool,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Flash {
     saved: Option<String>,
+    invited: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -52,16 +56,22 @@ pub async fn show(
     Query(flash): Query<Flash>,
 ) -> Response {
     let member = &me.member;
+    let invites = match Invites::of(&app, member, db::now()).await {
+        Ok(invites) => invites,
+        Err(error) => return internal_error("Listing invites", error),
+    };
     let page = Account {
         saved: flash.saved.is_some(),
+        invited: flash.invited.is_some(),
         ..page(
             &app,
             &member.account,
             member.email.as_deref().unwrap_or(""),
             member.news_opt_in,
+            invites,
         )
     };
-    render(&page)
+    private(render(&page))
 }
 
 pub async fn update(
@@ -74,11 +84,15 @@ pub async fn update(
     let email = match Email::parse(&settings.email) {
         Ok(email) => email,
         Err(error) => {
+            let invites = match Invites::of(&app, &me.member, db::now()).await {
+                Ok(invites) => invites,
+                Err(error) => return internal_error("Listing invites", error),
+            };
             let page = Account {
                 email_error: Some(error.to_string()),
-                ..page(&app, account, &settings.email, news)
+                ..page(&app, account, &settings.email, news, invites)
             };
-            return render_with(StatusCode::UNPROCESSABLE_ENTITY, &page);
+            return private(render_with(StatusCode::UNPROCESSABLE_ENTITY, &page));
         }
     };
     match app.db.update_settings(account, email.as_str(), news).await {
@@ -87,7 +101,22 @@ pub async fn update(
     }
 }
 
-fn page<'a>(app: &'a App, nick: &'a str, email: &'a str, news: bool) -> Account<'a> {
+/// The page lists invite links, which are secrets: never cache it.
+fn private(mut response: Response) -> Response {
+    let no_store = HeaderValue::from_static("no-store");
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, no_store);
+    response
+}
+
+fn page<'a>(
+    app: &'a App,
+    nick: &'a str,
+    email: &'a str,
+    news: bool,
+    invites: Invites,
+) -> Account<'a> {
     Account {
         layout: Layout {
             assets: &app.assets,
@@ -102,5 +131,7 @@ fn page<'a>(app: &'a App, nick: &'a str, email: &'a str, news: bool) -> Account<
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
         clients: &CLIENTS,
+        invites,
+        invited: false,
     }
 }

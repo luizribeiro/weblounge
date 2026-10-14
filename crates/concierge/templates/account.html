@@ -11,6 +11,48 @@
           <h2 class="eyebrow" id="connect-title">Connect a client</h2>
           {%- call components::connection(irc, Some(nick), "The one you sign in with here.") %}{% endcall %}
         </section>
+        <section class="card invites" id="invites" aria-labelledby="invites-title">
+          <h2 class="eyebrow" id="invites-title">Invites</h2>
+          {%- if invited %}
+          <p class="notice" role="status">Invite created. Send the link yourself; it works once, for a week.</p>
+          {%- endif %}
+          {%- match invites.remaining %}
+          {%- when Some(0) %}
+          <p class="muted">No invites left.</p>
+          {%- else %}
+          <form method="post" action="/invites">
+            <button class="button" type="submit">Invite someone</button>
+            <span class="muted">
+              {%- if let Some(left) = invites.remaining %}{{ left }} left{% else %}Admins have no quota.{% endif -%}
+            </span>
+          </form>
+          {%- endmatch %}
+          {%- if !invites.open.is_empty() %}
+          <ul class="invite-list">
+            {%- for invite in invites.open %}
+            <li>
+              <code class="invite-link">{{ invite.url }}</code>
+              <div class="invite-actions">
+                <span class="muted">{{ invite.time_left }} left</span>
+                <button class="button button-small" type="button" data-copy="{{ invite.url }}" data-copy-label="invite link" hidden>Copy</button>
+                <form method="post" action="/invites/revoke">
+                  <input type="hidden" name="code" value="{{ invite.code }}">
+                  <button class="button button-small" type="submit">Revoke</button>
+                </form>
+              </div>
+            </li>
+            {%- endfor %}
+          </ul>
+          {%- endif %}
+          {%- if !invites.invitees.is_empty() %}
+          <h3 class="eyebrow">You invited</h3>
+          <ul class="invitees">
+            {%- for invitee in invites.invitees %}
+            <li>{{ invitee.account }}{% if invitee.removed %} <span class="muted">(left)</span>{% endif %}</li>
+            {%- endfor %}
+          </ul>
+          {%- endif %}
+        </section>
         <section class="card" aria-labelledby="settings-title">
           <h2 class="eyebrow" id="settings-title">Settings</h2>
           {%- if saved %}

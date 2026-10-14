@@ -119,7 +119,7 @@ impl Config {
     }
 
     pub fn invite_url(&self, code: &str) -> String {
-        format!("{}/invite/{code}", self.public_url)
+        invite_url(&self.public_url, code)
     }
 
     pub fn database_path(&self) -> PathBuf {
@@ -152,6 +152,10 @@ impl Config {
             .with_context(|| format!("can't read {}", path.display()))?;
         Ok(value.trim().to_owned())
     }
+}
+
+pub fn invite_url(public_url: &str, code: &str) -> String {
+    format!("{public_url}/invite/{code}")
 }
 
 fn parse_http_url(url: &str) -> Option<Url> {

@@ -5,6 +5,7 @@ mod account;
 mod checks;
 mod clients;
 mod invite;
+mod invites;
 mod pages;
 mod security;
 mod signin;

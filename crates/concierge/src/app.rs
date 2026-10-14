@@ -42,6 +42,8 @@ pub fn router(app: App) -> Router {
     let pages = Router::new()
         .route("/", get(routes::account::show))
         .route("/settings", post(routes::account::update))
+        .route("/invites", post(routes::invites::create))
+        .route("/invites/revoke", post(routes::invites::revoke))
         .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),

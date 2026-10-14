@@ -353,18 +353,41 @@ impl Db {
     }
 
     pub async fn insert_invite(&self, invite: &NewInvite<'_>) -> sqlx::Result<()> {
+        insert_invite(&self.pool, invite).await
+    }
+
+    /// Inserts `invite` if `allowed` says so, given the invites its creator
+    /// made already; answers whether it did. Concurrent calls take turns,
+    /// so they can't both see room for one more.
+    pub async fn insert_invite_if(
+        &self,
+        invite: &NewInvite<'_>,
+        allowed: impl FnOnce(&[Invite]) -> bool,
+    ) -> sqlx::Result<bool> {
+        let mut transaction = self.pool.begin().await?;
+        // Writing first takes the database's write lock for the whole
+        // transaction, before anything is read.
         sqlx::query!(
-            "INSERT INTO invites (code, created_by, note, created_at, expires_at)
-             VALUES (?, ?, ?, ?, ?)",
-            invite.code,
+            "UPDATE members SET invite_quota = invite_quota WHERE account = ?",
             invite.created_by,
-            invite.note,
-            invite.created_at,
-            invite.expires_at,
         )
-        .execute(&self.pool)
-        .await
-        .map(drop)
+        .execute(&mut *transaction)
+        .await?;
+        let invites = sqlx::query_as!(
+            Invite,
+            r#"SELECT code AS "code!", created_by, note, created_at, expires_at, claimed_at,
+                      redeemed_by, redeemed_at, revoked_at
+               FROM invites WHERE created_by = ?"#,
+            invite.created_by,
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        if !allowed(&invites) {
+            return Ok(false);
+        }
+        insert_invite(&mut *transaction, invite).await?;
+        transaction.commit().await?;
+        Ok(true)
     }
 
     pub async fn invite(&self, code: &str) -> sqlx::Result<Option<Invite>> {
@@ -513,6 +536,24 @@ async fn insert_member(
         member.joined_at,
         member.invite_quota,
         member.is_admin,
+    )
+    .execute(executor)
+    .await
+    .map(drop)
+}
+
+async fn insert_invite(
+    executor: impl SqliteExecutor<'_>,
+    invite: &NewInvite<'_>,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        "INSERT INTO invites (code, created_by, note, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?)",
+        invite.code,
+        invite.created_by,
+        invite.note,
+        invite.created_at,
+        invite.expires_at,
     )
     .execute(executor)
     .await

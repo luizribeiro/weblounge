@@ -250,3 +250,47 @@
     margin: 0;
   }
 }
+
+.invites {
+  & form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  & h3 {
+    margin-top: 1.5rem;
+  }
+}
+
+.invite-list,
+.invitees {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+
+  & li {
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--line);
+  }
+}
+
+.invite-link {
+  display: block;
+  font-size: 0.875rem;
+}
+
+.invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+
+  & .muted {
+    margin-right: auto;
+    font-size: 0.875rem;
+  }
+}
