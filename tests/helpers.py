@@ -1,17 +1,21 @@
 import json
-import re
 import shlex
 
 
-def ergo_api(endpoint, token, **fields):
+def ergo_api_token():
+    return credenza.succeed("cat /var/lib/weblounge-secrets/ergo-api-token").strip()
+
+
+def ergo_api(endpoint, token=None, **fields):
+    token = token or ergo_api_token()
     return credenza.succeed(shlex.join([
         "curl", "-s", "-w", "\\n%{http_code}", "-H", f"Authorization: Bearer {token}",
         "-d", json.dumps(fields), f"http://127.0.0.1:8089/v1/{endpoint}",
     ])).rsplit("\n", 1)
 
 
-def register(token, account, password):
-    body, _ = ergo_api("ns/saregister", token, accountName=account, passphrase=password)
+def register(account, password):
+    body, _ = ergo_api("ns/saregister", accountName=account, passphrase=password)
     return body
 
 
@@ -45,3 +49,4 @@ def assert_client_address_absent(logs):
 
 
 start_all()
+client.wait_for_unit("multi-user.target")
