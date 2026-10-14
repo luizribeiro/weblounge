@@ -9,6 +9,7 @@ let
     records = [
       [ "A" "credenza" "107.173.231.206" ]
       [ "CNAME" "irc" "credenza.weblounge.org." ]
+      [ "CNAME" "join" "credenza.weblounge.org." ]
       [ "CNAME" "members" "credenza.weblounge.org." ]
       [ "A" "@" "107.173.231.206" ]
       [ "CNAME" "www" "credenza.weblounge.org." ]
