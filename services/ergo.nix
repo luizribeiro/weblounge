@@ -7,15 +7,6 @@ let
   serverName = "irc.${domain}";
   credentials = "/run/credentials/ergochat.service";
 
-  # default.yaml's listeners, WebIRC gateway and admin oper are live
-  # examples, with published credentials, rather than defaults.
-  configFile = pkgs.runCommand "ergo.yaml" { nativeBuildInputs = [ pkgs.yq-go ]; } ''
-    yq eval-all '
-      (select(fi == 0) | del(.server.listeners, .server.webirc, .opers))
-        * select(fi == 1)
-      | ... comments = ""
-    ' ${pkgs.ergochat.src}/default.yaml ${yaml.generate "ergo-settings.yaml" cfg.settings} > $out
-  '';
 in
 {
   imports = [ ./loopback.nix ./nginx.nix ./secrets.nix ];
@@ -78,7 +69,7 @@ in
 
     services.ergochat = {
       enable = true;
-      inherit configFile;
+      configFile = pkgs.weblounge.ergoConfig cfg.settings;
     };
 
     weblounge.secrets.ergo-api-token.loadedBy = [ "ergochat" ];
