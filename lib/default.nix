@@ -28,7 +28,12 @@ let
       (name: host: { ${systemOf host} = mkOutput name host; })
       self.nixosConfigurations);
 
-  weblounge = { inherit overlay hosts hostModules; };
+  testErgo = import ./test-ergo.nix {
+    inherit lib;
+    inherit (hosts.credenza.config.weblounge.ergo) settings;
+  };
+
+  weblounge = { inherit overlay hosts hostModules testErgo; };
 
   testNames = map (lib.removeSuffix ".nix") (lib.attrNames (lib.filterAttrs
     (file: type: type == "regular" && lib.hasSuffix ".nix" file && file != "lib.nix")
