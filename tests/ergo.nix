@@ -53,6 +53,11 @@ vmTest ''
       whois = irc("WHOIS alice", **alice)
       assert re.search(r" 311 alice alice \S+ \S+\.weblounge ", whois), whois
 
+  with subtest("clients on credenza reach ergo by its public name over loopback"):
+      assert credenza.succeed("getent hosts irc.weblounge.org").split()[0] == "127.0.0.1"
+      session = credenza.succeed(irc_command(host="irc.weblounge.org", **alice))
+      assert " 001 alice " in session, session
+
   with subtest("logging in joins #lounge"):
       assert re.search(r"^:alice!\S+ JOIN #lounge", session, re.M), session
 

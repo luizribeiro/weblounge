@@ -34,6 +34,13 @@ in
     description = "Where Ergo takes WebSocket connections from nginx, as host:port, without TLS.";
   };
 
+  options.weblounge.ergo.localAddress = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = "${serverName}:${toString port}";
+    description = "Where clients on this machine reach Ergo over TLS, as host:port; the name resolves to loopback here.";
+  };
+
   options.weblounge.ergo.address = lib.mkOption {
     type = lib.types.str;
     readOnly = true;
@@ -138,6 +145,8 @@ in
       forceSSL = true;
       globalRedirect = lib.mkDefault domain;
     };
+
+    networking.hosts."127.0.0.1" = [ serverName ];
 
     networking.firewall.allowedTCPPorts = [ port ];
   };
