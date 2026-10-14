@@ -1,6 +1,9 @@
 //! One suite for every backend that answers like Ergo's API.
 
-use ergo_api::{Client, Error, ErrorCode, Passphrase, Registration, Url, fake::FakeErgo};
+use ergo_api::{
+    AccountSummary, Client, Error, ErrorCode, Passphrase, Preference, Registration, ReplayJoins,
+    Settings, SettingsChanges, Url, fake::FakeErgo,
+};
 
 trait Backend: Sized {
     async fn start() -> Self;
@@ -41,6 +44,8 @@ macro_rules! with_every_case {
             refuses_names_irc_cant_carry,
             wrong_credentials_sign_nobody_in,
             a_new_password_replaces_the_old,
+            describes_and_lists_accounts,
+            settings_round_trip,
             rejects_a_wrong_token,
             fails_to_reach_a_stopped_server,
         );
@@ -145,6 +150,91 @@ async fn a_new_password_replaces_the_old(ergo: impl Backend) {
         .await
         .unwrap_err();
     assert_eq!(error.code(), Some(&ErrorCode::AccountDoesNotExist));
+}
+
+async fn describes_and_lists_accounts(ergo: impl Backend) {
+    let client = registered(
+        &ergo,
+        &[("alice", "correct-horse"), ("Bob", "battery-staple")],
+    )
+    .await;
+    let email = SettingsChanges {
+        email: Some("alice@example.org".into()),
+        ..Default::default()
+    };
+    client.update_settings("alice", email).await.unwrap();
+
+    let alice = client.info("alice").await.unwrap().unwrap();
+    assert_eq!(alice.email.as_deref(), Some("alice@example.org"));
+    assert!(alice.registered_at.is_some(), "{alice:?}");
+    assert_eq!(client.info("carol").await.unwrap(), None);
+    let error = client.info("").await.unwrap_err();
+    assert_eq!(error.code(), Some(&ErrorCode::InvalidRequest));
+
+    let mut accounts = client.accounts().await.unwrap();
+    accounts.sort_by(|a, b| a.account_name.cmp(&b.account_name));
+    assert_eq!(
+        accounts,
+        [
+            AccountSummary {
+                account_name: "Bob".into(),
+                email: None,
+            },
+            AccountSummary {
+                account_name: "alice".into(),
+                email: Some("alice@example.org".into()),
+            },
+        ]
+    );
+}
+
+async fn settings_round_trip(ergo: impl Backend) {
+    let client = registered(&ergo, &[("alice", "correct-horse")]).await;
+    let defaults = Settings {
+        always_on: Preference::Default,
+        auto_away: Preference::Default,
+        email: None,
+        replay_joins: ReplayJoins::CommandsOnly,
+    };
+    assert_eq!(client.settings("alice").await.unwrap(), defaults);
+
+    let changes = SettingsChanges {
+        always_on: Some(Preference::Off),
+        replay_joins: Some(ReplayJoins::On),
+        email: Some("alice@example.org".into()),
+        ..Default::default()
+    };
+    let changed = Settings {
+        always_on: Preference::Off,
+        replay_joins: ReplayJoins::On,
+        email: Some("alice@example.org".into()),
+        ..defaults
+    };
+    assert_eq!(
+        client.update_settings("alice", changes).await.unwrap(),
+        changed
+    );
+    assert_eq!(client.settings("ALICE").await.unwrap(), changed);
+
+    let clear_email = SettingsChanges {
+        email: Some(String::new()),
+        ..Default::default()
+    };
+    let cleared = client.update_settings("alice", clear_email).await.unwrap();
+    assert_eq!(cleared.email, None);
+
+    for (name, code) in [
+        ("", ErrorCode::InvalidRequest),
+        ("bob", ErrorCode::AccountDoesNotExist),
+    ] {
+        let error = client.settings(name).await.unwrap_err();
+        assert_eq!(error.code(), Some(&code), "saget {name:?}");
+        let error = client
+            .update_settings(name, SettingsChanges::default())
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), Some(&code), "saset {name:?}");
+    }
 }
 
 async fn rejects_a_wrong_token(ergo: impl Backend) {

@@ -19,8 +19,9 @@ use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 
 use crate::{
-    Account, AccountName, Ack, Authenticated, CheckAuth, Client, Endpoint, ErrorCode, Info, Passwd,
-    Preference, ReplayJoins, SaRegister, ServerStatus, Settings, Status, UserCounts,
+    Account, AccountList, AccountName, AccountSummary, Ack, Authenticated, CheckAuth, Client,
+    Endpoint, ErrorCode, Info, List, Passwd, Preference, ReplayJoins, SaGet, SaRegister, SaSet,
+    ServerStatus, Settings, Status, UserCounts,
 };
 
 const TOKEN: &str = "fake-ergo-token";
@@ -67,6 +68,9 @@ impl FakeErgo {
             .route(CheckAuth::PATH, post(check_auth))
             .route(Passwd::PATH, post(passwd))
             .route(Info::PATH, post(info))
+            .route(List::PATH, post(list))
+            .route(SaGet::PATH, post(saget))
+            .route(SaSet::PATH, post(saset))
             .layer(middleware::from_fn_with_state(state.clone(), gatekeeper))
             .with_state(state.clone());
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -271,6 +275,47 @@ async fn info(State(state): State<Shared>, Json(request): Json<Info>) -> Respons
         })
     })
 }
+
+async fn list(State(state): State<Shared>) -> Response {
+    let accounts = lock(&state)
+        .accounts
+        .values()
+        .map(|account| AccountSummary {
+            account_name: account.name.clone(),
+            email: account.settings.email.clone(),
+        })
+        .collect();
+    succeeded(AccountList { accounts })
+}
+
+async fn saget(State(state): State<Shared>, Json(request): Json<SaGet>) -> Response {
+    with_named_account(
+        &state,
+        &request.account_name,
+        account_does_not_exist,
+        |account| succeeded(&account.settings),
+    )
+}
+
+async fn saset(State(state): State<Shared>, Json(request): Json<SaSet>) -> Response {
+    with_named_account(
+        &state,
+        &request.account_name,
+        account_does_not_exist,
+        |account| {
+            let changes = request.changes;
+            let settings = &mut account.settings;
+            settings.always_on = changes.always_on.unwrap_or(settings.always_on);
+            settings.auto_away = changes.auto_away.unwrap_or(settings.auto_away);
+            settings.replay_joins = changes.replay_joins.unwrap_or(settings.replay_joins);
+            if let Some(email) = changes.email {
+                settings.email = Some(email).filter(|email| !email.is_empty());
+            }
+            succeeded(&*settings)
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
