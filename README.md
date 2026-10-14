@@ -174,7 +174,7 @@ an oper still runs `/NS ERASE <account>`.
 | `hosts/`     | One directory per machine; each becomes a nixosConfiguration      |
 | `modules/`   | Configuration shared by every host                                |
 | `lib/`       | Host discovery and per-host flake outputs                         |
-| `tests/`     | NixOS VM tests, run by `just check`                               |
+| `tests/`     | NixOS VM tests, run by `just check` and CI                        |
 | `services/`  | Opt-in configuration, one file per service a host can run         |
 | `pkgs/`      | Our own packages, exposed to hosts as `pkgs.weblounge.*`          |
 | `crates/`    | Rust code: concierge, and ergo-api, its client for Ergo's API     |
