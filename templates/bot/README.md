@@ -66,7 +66,7 @@ With Go 1.24 or later:
 
 ```sh
 go test ./...
-go build -o bot .
+CGO_ENABLED=0 go build -o bot .
 IRC_NICK=bender IRC_CHANNELS='#lounge' IRC_PASSWORD_FILE=~/.config/bender/password ./bot
 ```
 
@@ -96,13 +96,30 @@ LoadCredential=password:/etc/bender/password
 DynamicUser=yes
 Restart=on-failure
 RestartSec=10
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-NoNewPrivileges=yes
+UMask=0077
 CapabilityBoundingSet=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+PrivateUsers=yes
+ProcSubset=pid
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectProc=invisible
+ProtectSystem=strict
 RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service ~@privileged
 
 [Install]
 WantedBy=multi-user.target
@@ -110,7 +127,9 @@ WantedBy=multi-user.target
 
 Then `systemctl enable --now bender`. systemd reads the password as root
 and hands it to the bot, which runs as a throwaway user that can't read
-`/etc/bender`.
+`/etc/bender`. The sandbox is the NixOS module's. It leaves out `AF_UNIX`,
+which is fine for a binary built with `CGO_ENABLED=0`, since Go then looks
+up names over DNS itself.
 
 ## In a container
 
