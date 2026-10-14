@@ -77,6 +77,11 @@ with subtest("only SSH, HTTP, HTTPS and IRC over TLS are reachable, even with a 
     scan = client.succeed("nmap -Pn -n -p- --min-rate 20000 --max-retries 1 --open -oG - credenza")
     assert set(re.findall(r"(\d+)/open/tcp", scan)) == {"22", "80", "443", "6697"}, scan
 
+with subtest("resolved answers no LLMNR or mDNS, and listens on loopback alone"):
+    credenza.wait_for_unit("systemd-resolved.service")
+    listeners = credenza.succeed("ss -Htulpn | grep systemd-resolve | awk '{print $5}'").split()
+    assert listeners and all(re.match(r"127\.0\.0\.5[34](%lo)?:53$", address) for address in listeners), listeners
+
 with subtest("there's no plaintext IRC"):
     credenza.fail("ss -Htln | grep -q ':6667 '")
     client.fail("nc -z -w 3 credenza 6667")
