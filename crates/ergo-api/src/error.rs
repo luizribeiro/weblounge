@@ -27,6 +27,16 @@ pub enum Error {
     Decode(#[from] serde_json::Error),
 }
 
+impl Error {
+    /// The `errorCode` Ergo refused the request with, if any.
+    pub fn code(&self) -> Option<&ErrorCode> {
+        match self {
+            Self::Refused { code, .. } => code.as_ref(),
+            _ => None,
+        }
+    }
+}
+
 fn describe_refusal(code: Option<&ErrorCode>, message: Option<&str>) -> String {
     match (code, message) {
         (Some(code), Some(message)) => format!("{code} ({message})"),
