@@ -11,7 +11,10 @@ workflow and layout.
 - `git add` new files before building: flakes only see tracked files.
 - Every host in `hosts/` gets a `toplevel-<host>` flake check and a
   `<host>-vm` package automatically; don't wire them up by hand.
-- Behaviour changes to a host should come with a subtest in `tests/`.
+- Behaviour changes to a host should come with a subtest in `tests/`, in
+  the file for that area (`host`, `landing`, `ergo`, `concierge`,
+  `security`). Every `tests/*.nix` becomes a flake check automatically;
+  VM tests are `{ vmTest, ... }: vmTest ''…''` and share `tests/helpers.py`.
 - Keep VM-only settings under `virtualisation.vmVariant` in
   `modules/vm.nix` so production configs never see them.
 - Name new servers after furniture (sideboard, armoire, ottoman, chaise…).
