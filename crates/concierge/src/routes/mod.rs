@@ -4,6 +4,7 @@ pub mod checks;
 pub mod clients;
 pub mod invite;
 pub mod invites;
+pub mod irc;
 pub mod oauth;
 pub mod pages;
 pub mod password;
@@ -18,6 +19,8 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::{Html, IntoResponse, Response},
 };
+
+use serde::Deserialize;
 
 use crate::{app::App, assets::Assets, auth::Visitor};
 
@@ -58,22 +61,34 @@ impl<'a> Layout<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Home,
+    Irc,
 }
 
 impl Tab {
-    pub const ALL: [Self; 1] = [Self::Home];
+    pub const ALL: [Self; 2] = [Self::Home, Self::Irc];
 
     pub fn path(self) -> &'static str {
         match self {
             Self::Home => "/",
+            Self::Irc => "/irc",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Home => "Home",
+            Self::Irc => "IRC",
         }
     }
+}
+
+/// What the last change, redirected to a tab, says it did.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub struct Flash {
+    pub saved: Option<String>,
+    pub invited: Option<String>,
+    pub password: Option<String>,
 }
 
 #[derive(Template)]

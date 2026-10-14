@@ -132,7 +132,6 @@ async fn sections_come_in_the_order_phones_stack_them() {
         ">Connect a client<",
         ">Invites<",
         ">Account settings<",
-        ">IRC settings<",
         r#"<a href="/tree">Invite tree</a>"#,
         r#"<a href="/certificates">Client certificates</a>"#,
     ]

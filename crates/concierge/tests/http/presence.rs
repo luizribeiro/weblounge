@@ -30,7 +30,7 @@ fn checked(page: &str, input: &str) -> bool {
 #[tokio::test]
 async fn the_network_default_shows_as_on_under_opt_out() {
     let (site, cookie) = signed_in_alice().await;
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    let page = body_text(site.get("/irc", Some(&cookie)).await).await;
     assert!(page.contains(r#"<form class="form" method="post" action="/irc-settings">"#));
     assert!(checked(&page, ALWAYS_ON), "{page}");
     assert!(checked(&page, AUTO_AWAY), "{page}");
@@ -45,7 +45,7 @@ async fn under_opt_in_the_default_shows_as_off_and_switching_on_pins_it() {
     };
     let (site, cookie) =
         signed_in_alice_on(Site::start_with(|app| app.presence_defaults = opt_in).await).await;
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    let page = body_text(site.get("/irc", Some(&cookie)).await).await;
     assert!(!checked(&page, ALWAYS_ON), "{page}");
     assert!(!checked(&page, AUTO_AWAY), "{page}");
     assert!(page.contains("Both off by default."), "{page}");
@@ -56,7 +56,7 @@ async fn under_opt_in_the_default_shows_as_off_and_switching_on_pins_it() {
         preferences(&site).await,
         (Preference::On, Preference::Default)
     );
-    let page = body_text(site.get("/?irc", Some(&cookie)).await).await;
+    let page = body_text(site.get("/irc?saved", Some(&cookie)).await).await;
     assert!(checked(&page, ALWAYS_ON), "{page}");
     assert!(!checked(&page, AUTO_AWAY), "{page}");
 }
@@ -74,7 +74,7 @@ async fn an_explicit_choice_in_ergo_shows_as_it_is() {
         .update_settings("alice", changes)
         .await
         .unwrap();
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
+    let page = body_text(site.get("/irc", Some(&cookie)).await).await;
     assert!(checked(&page, ALWAYS_ON), "{page}");
     assert!(!checked(&page, AUTO_AWAY), "{page}");
 }
@@ -88,12 +88,12 @@ async fn switching_off_sets_off_and_switching_on_goes_back_to_the_default() {
         .await;
 
     assert_eq!(response.status(), 303);
-    assert_eq!(location(&response), "/?irc#irc-settings");
+    assert_eq!(location(&response), "/irc?saved");
     assert_eq!(
         preferences(&site).await,
         (Preference::Off, Preference::Default)
     );
-    let page = body_text(site.get("/?irc", Some(&cookie)).await).await;
+    let page = body_text(site.get("/irc?saved", Some(&cookie)).await).await;
     assert!(!checked(&page, ALWAYS_ON), "{page}");
     assert!(checked(&page, AUTO_AWAY), "{page}");
     assert!(page.contains("IRC settings saved."), "{page}");
@@ -107,10 +107,10 @@ async fn switching_off_sets_off_and_switching_on_goes_back_to_the_default() {
 }
 
 #[tokio::test]
-async fn the_home_still_shows_when_ergo_cannot_answer() {
+async fn the_tab_still_shows_when_ergo_cannot_answer() {
     let (site, cookie) = signed_in_alice().await;
     site.ergo.fail_next(Failure::UnknownError);
-    let response = site.get("/", Some(&cookie)).await;
+    let response = site.get("/irc", Some(&cookie)).await;
     assert_eq!(response.status(), 200);
     let page = body_text(response).await;
     assert!(page.contains("Can&#39;t reach the chat server."), "{page}");
@@ -125,6 +125,10 @@ async fn a_failed_save_says_so_and_changes_nothing() {
     assert_eq!(response.status(), 503);
     let page = body_text(response).await;
     assert!(page.contains("Nothing changed"), "{page}");
+    assert!(
+        page.contains(r#"<a href="/irc" aria-current="page">"#),
+        "{page}"
+    );
     assert_eq!(
         preferences(&site).await,
         (Preference::Default, Preference::Default)
