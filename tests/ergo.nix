@@ -47,6 +47,10 @@ vmTest ''
       session = irc(**alice)
       assert " 903 " in session and " 001 alice " in session, session
 
+  with subtest("ergo hashes passwords with bcrypt at cost 12"):
+      # base64 of "$2a$12$", the start of the stored hash.
+      credenza.wait_until_succeeds("grep -q '\"PassphraseHash\":\"JDJhJDEyJ' /var/lib/ergo/ircd.db", timeout=10)
+
   with subtest("logging in shows weblounge's MOTD"):
       assert ":- Pull up a chair and make yourself at home." in session, session
 

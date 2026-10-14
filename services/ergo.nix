@@ -45,7 +45,11 @@ in
         ip-cloaking.netname = "weblounge";
       };
       accounts = {
-        registration.enabled = false;
+        registration = {
+          enabled = false;
+          # Members choose their own passwords; Ergo's default is 4.
+          bcrypt-cost = 12;
+        };
         require-sasl = {
           enabled = true;
           exempted = [ ];
