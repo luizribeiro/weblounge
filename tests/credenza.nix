@@ -136,6 +136,9 @@ pkgs.testers.runNixOSTest {
         reply = irc("PRIVMSG NickServ :REGISTER battery-staple", **alice)
         assert "NOTICE alice :This command has been disabled" in reply, reply
 
+    with subtest("logging in shows weblounge's MOTD"):
+        assert ":- Pull up a chair and make yourself at home." in session, session
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()

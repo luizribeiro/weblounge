@@ -44,6 +44,7 @@ in
           };
           min-tls-version = "1.2";
         };
+        motd = "${./ergo.motd}";
       };
       accounts = {
         registration.enabled = false;
