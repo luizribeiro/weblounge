@@ -2,6 +2,7 @@ mod vm 'just/vm.just'
 mod prod 'just/prod.just'
 mod web 'just/web.just'
 mod concierge 'just/concierge.just'
+mod dns 'just/dns.just'
 
 default:
   @just --list --list-submodules

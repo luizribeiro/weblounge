@@ -169,6 +169,22 @@ machine. They print plain lines a script can read:
 Ergo's API can't delete accounts, so after `member delete` or `bot delete`
 an oper still runs `/NS ERASE <account>`.
 
+## DNS
+
+deSEC hosts the `weblounge.org` zone, and this repository is its source
+of truth. `dns/zone.nix` generates it from the hosts: an A record for
+each host's own name, and a record for every name its nginx serves, so a
+new virtual host gets its DNS without anyone writing a record. The
+domain sends and receives no mail, and the zone says so.
+
+```sh
+just dns preview   # what would change at deSEC
+just dns push      # make deSEC match the repository
+```
+
+Both read a deSEC API token from `~/.config/weblounge/desec-token`.
+`push` also deletes records the repository doesn't have.
+
 ## Layout
 
 | Path         | What lives there                                                  |
@@ -182,7 +198,8 @@ an oper still runs `/NS ERASE <account>`.
 | `crates/`    | Rust code: concierge, and ergo-api, its client for Ergo's API     |
 | `web/`       | Sources of everything the browser loads                           |
 | `templates/` | `nix flake init` templates; `bot` is the template bots start from |
-| `just/`      | `just vm …`, `just prod …`, `just web …` and `just concierge …`   |
+| `dns/`       | The DNS zone, generated from the hosts, and its dnscontrol config |
+| `just/`      | `just vm …`, `just prod …`, `just dns …`, `just web …` and more   |
 | `scripts/`   | Helpers the recipes call                                          |
 
 Servers are named after furniture: `credenza` is the first.

@@ -5,9 +5,9 @@ workflow and layout.
 
 ## Rules
 
-- Never run `just prod push` or `just prod install` without explicit user
-  approval. `just prod build`, `just check` and everything under `just vm`
-  are fine to run on your own.
+- Never run `just prod push`, `just prod install` or `just dns push`
+  without explicit user approval. `just prod build`, `just dns preview`,
+  `just check` and everything under `just vm` are fine to run on your own.
 - `git add` new files before building: flakes only see tracked files.
 - Every host in `hosts/` gets a `toplevel-<host>` flake check and a
   `<host>-vm` package automatically; don't wire them up by hand.
