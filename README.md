@@ -155,17 +155,18 @@ an oper still runs `/NS ERASE <account>`.
 
 ## Layout
 
-| Path        | What lives there                                                |
-| ----------- | --------------------------------------------------------------- |
-| `hosts/`    | One directory per machine; each becomes a nixosConfiguration    |
-| `modules/`  | Configuration shared by every host                              |
-| `lib/`      | Host discovery and per-host flake outputs                       |
-| `tests/`    | NixOS VM tests, run by `just check`                             |
-| `services/` | Opt-in configuration, one file per service a host can run       |
-| `pkgs/`     | Our own packages, exposed to hosts as `pkgs.weblounge.*`        |
-| `crates/`   | Rust code: concierge, and ergo-api, its client for Ergo's API   |
-| `web/`      | Sources of everything the browser loads                         |
-| `just/`     | `just vm …`, `just prod …`, `just web …` and `just concierge …` |
-| `scripts/`  | Helpers the recipes call                                        |
+| Path         | What lives there                                                  |
+| ------------ | ----------------------------------------------------------------- |
+| `hosts/`     | One directory per machine; each becomes a nixosConfiguration      |
+| `modules/`   | Configuration shared by every host                                |
+| `lib/`       | Host discovery and per-host flake outputs                         |
+| `tests/`     | NixOS VM tests, run by `just check`                               |
+| `services/`  | Opt-in configuration, one file per service a host can run         |
+| `pkgs/`      | Our own packages, exposed to hosts as `pkgs.weblounge.*`          |
+| `crates/`    | Rust code: concierge, and ergo-api, its client for Ergo's API     |
+| `web/`       | Sources of everything the browser loads                           |
+| `templates/` | `nix flake init` templates; `bot` is the template bots start from |
+| `just/`      | `just vm …`, `just prod …`, `just web …` and `just concierge …`   |
+| `scripts/`   | Helpers the recipes call                                          |
 
 Servers are named after furniture: `credenza` is the first.
