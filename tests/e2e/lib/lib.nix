@@ -1,16 +1,11 @@
 # Builds a VM test of credenza's real configuration, probed from a client,
 # that runs tests/e2e/<name>.py. Takes { credenza, client, browsers } to
 # add to the nodes; browsers maps command names to Playwright scripts.
-# Until every test is a file, takes the script inline too, as a string or
-# under script.
 { pkgs, weblounge, name, script }:
 
 test:
 let
   inherit (pkgs) lib;
-  inline = builtins.isString test || test ? script;
-  scriptFile = if inline then pkgs.writeText "${name}.py" (test.script or test) else script;
-  test' = if builtins.isString test then { } else test;
   # Programs a test runs on credenza that production doesn't have.
   tools = {
     python3 = "${pkgs.python3}/bin/python3";
@@ -20,7 +15,7 @@ let
   runFile = label: file: ''exec(compile(open("${file}").read(), "${label}", "exec"))'';
   # ruff lints it with the rest of the repository's Python.
   ircClient = pkgs.writers.writePython3Bin "irc-client" { doCheck = false; } ../clients/irc-client.py;
-  browsers = test'.browsers or { };
+  browsers = test.browsers or { };
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
   # The headless shell is all a headless test needs.
   playwrightBrowsers = pkgs.playwright-driver.browsers.override {
@@ -47,7 +42,7 @@ pkgs.testers.runNixOSTest {
 
   nodes = {
     credenza = {
-      imports = weblounge.hostModules "credenza" ++ [ ../../../modules/offline-acme.nix (test'.credenza or { }) ];
+      imports = weblounge.hostModules "credenza" ++ [ ../../../modules/offline-acme.nix (test.credenza or { }) ];
       environment.systemPackages = [ pkgs.curl ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [
@@ -56,7 +51,7 @@ pkgs.testers.runNixOSTest {
       ];
     };
     client = {
-      imports = [ (test'.client or { }) ];
+      imports = [ (test.client or { }) ];
       environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ]
         ++ lib.mapAttrsToList browserCommand browsers;
       virtualisation.memorySize = lib.mkIf (browsers != { }) 2048;
@@ -66,7 +61,7 @@ pkgs.testers.runNixOSTest {
   testScript = lib.concatLines [
     "tools = ${builtins.toJSON tools}"
     (runFile "tests/e2e/lib/helpers.py" ./helpers.py)
-    (runFile "tests/e2e/${name}.py" scriptFile)
+    (runFile "tests/e2e/${name}.py" script)
     (runFile "tests/e2e/lib/epilogue.py" ./epilogue.py)
   ];
 }
