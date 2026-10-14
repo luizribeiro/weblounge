@@ -10,6 +10,10 @@ const DAY: i64 = 24 * 60 * 60;
 pub const DEFAULT_QUOTA: i64 = 5;
 /// How long an invite link stays open.
 pub const LIFETIME: i64 = 7 * DAY;
+/// How long a redemption holds its invite. Far longer than a redemption
+/// takes (Ergo's API times out after 10 seconds), so an older claim was
+/// abandoned by a process that died midway.
+pub const CLAIM_TIMEOUT: i64 = 2 * 60;
 
 pub fn expires_at(created_at: i64) -> i64 {
     created_at + LIFETIME
@@ -24,6 +28,7 @@ pub struct Inviter {
 
 pub struct Invite {
     pub expires_at: i64,
+    pub claimed_at: Option<i64>,
     pub redeemed_at: Option<i64>,
     pub revoked_at: Option<i64>,
 }
@@ -34,6 +39,8 @@ pub enum Status {
     Redeemed,
     Revoked,
     Expired,
+    /// Someone is redeeming it right now.
+    Claimed,
 }
 
 impl Invite {
@@ -44,6 +51,11 @@ impl Invite {
             Status::Revoked
         } else if now >= self.expires_at {
             Status::Expired
+        } else if self
+            .claimed_at
+            .is_some_and(|claimed_at| now < claimed_at + CLAIM_TIMEOUT)
+        {
+            Status::Claimed
         } else {
             Status::Open
         }
@@ -71,7 +83,7 @@ pub fn may_invite<'a>(
     }
     let used = invites
         .into_iter()
-        .filter(|invite| matches!(invite.status(now), Status::Open | Status::Redeemed))
+        .filter(|invite| !matches!(invite.status(now), Status::Expired | Status::Revoked))
         .count();
     if used as i64 >= inviter.invite_quota {
         return Err(Refusal::QuotaUsed {
@@ -98,6 +110,7 @@ mod tests {
     fn open(created_at: i64) -> Invite {
         Invite {
             expires_at: expires_at(created_at),
+            claimed_at: None,
             redeemed_at: None,
             revoked_at: None,
         }
@@ -126,6 +139,21 @@ mod tests {
     }
 
     #[test]
+    fn a_claim_holds_the_invite_until_it_goes_stale() {
+        let claimed = Invite {
+            claimed_at: Some(JOINED + DAY),
+            ..open(JOINED)
+        };
+        assert_eq!(claimed.status(JOINED + DAY), Status::Claimed);
+        assert_eq!(
+            claimed.status(JOINED + DAY + CLAIM_TIMEOUT - 1),
+            Status::Claimed
+        );
+        assert_eq!(claimed.status(JOINED + DAY + CLAIM_TIMEOUT), Status::Open);
+        assert_eq!(claimed.status(JOINED + LIFETIME), Status::Expired);
+    }
+
+    #[test]
     fn redeemed_and_revoked_invites_stay_so_after_expiring() {
         let later = JOINED + 2 * LIFETIME;
         assert_eq!(redeemed(JOINED).status(later), Status::Redeemed);
@@ -138,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn open_and_redeemed_invites_use_up_the_quota() {
+    fn open_claimed_and_redeemed_invites_use_up_the_quota() {
         let now = JOINED + 10 * DAY;
         let invites = [
             redeemed(JOINED),
@@ -147,7 +175,11 @@ mod tests {
             open(now - DAY),
         ];
         assert_eq!(may_invite(&member(), &invites, now), Ok(()));
-        let invites: Vec<_> = invites.into_iter().chain([open(now)]).collect();
+        let claimed = Invite {
+            claimed_at: Some(now),
+            ..open(now)
+        };
+        let invites: Vec<_> = invites.into_iter().chain([claimed]).collect();
         assert_eq!(
             may_invite(&member(), &invites, now),
             Err(Refusal::QuotaUsed {
