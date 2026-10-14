@@ -1,7 +1,7 @@
 { vmTest, ... }:
 
 vmTest {
-  browsers.account-browser = ./account-browser.py;
+  browsers.account-browser = ./clients/account-browser.py;
 
   script = ''
     import html

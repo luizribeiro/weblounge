@@ -5,7 +5,7 @@
 
 test:
 let
-  ircClient = pkgs.writers.writePython3Bin "irc-client" { } ./irc-client.py;
+  ircClient = pkgs.writers.writePython3Bin "irc-client" { } ../clients/irc-client.py;
   testScript = test.script or test;
   browsers = test.browsers or { };
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
@@ -16,7 +16,7 @@ let
     withWebkit = false;
     withFfmpeg = false;
   };
-  browserModule = pkgs.writeTextDir "browser.py" (builtins.readFile ./browser.py);
+  browserModule = pkgs.writeTextDir "browser.py" (builtins.readFile ../clients/browser.py);
   browserCommand = command: script: pkgs.writeShellScriptBin command ''
     PLAYWRIGHT_BROWSERS_PATH=${playwrightBrowsers} PYTHONPATH=${browserModule} \
       exec ${python}/bin/python3 ${script} "$@"
@@ -30,7 +30,7 @@ pkgs.testers.runNixOSTest {
 
   nodes = {
     credenza = {
-      imports = weblounge.hostModules "credenza" ++ [ ../modules/offline-acme.nix (test.credenza or { }) ];
+      imports = weblounge.hostModules "credenza" ++ [ ../../../modules/offline-acme.nix (test.credenza or { }) ];
       environment.systemPackages = [ pkgs.curl ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [

@@ -196,7 +196,7 @@ it. `push` also deletes records the repository doesn't have.
 | `hosts/`     | One directory per machine; each becomes a nixosConfiguration      |
 | `modules/`   | Configuration shared by every host                                |
 | `lib/`       | Host discovery and per-host flake outputs                         |
-| `tests/`     | NixOS VM tests, run by `just check` and CI                        |
+| `tests/`     | Flake checks of the Nix code; `tests/e2e/` holds the VM tests     |
 | `services/`  | Opt-in configuration, one file per service a host can run         |
 | `pkgs/`      | Our own packages, exposed to hosts as `pkgs.weblounge.*`          |
 | `crates/`    | Rust code: concierge, and ergo-api, its client for Ergo's API     |

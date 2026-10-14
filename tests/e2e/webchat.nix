@@ -1,7 +1,7 @@
 { pkgs, vmTest, ... }:
 
 vmTest {
-  browsers.webchat-browser = ./webchat-browser.py;
+  browsers.webchat-browser = ./clients/webchat-browser.py;
 
   script = ''
     import base64

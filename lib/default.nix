@@ -37,13 +37,14 @@ let
 
   weblounge = { inherit overlay hosts hostModules testErgo zone; };
 
-  testNames = map (lib.removeSuffix ".nix") (lib.attrNames (lib.filterAttrs
-    (file: type: type == "regular" && lib.hasSuffix ".nix" file && file != "lib.nix")
-    (builtins.readDir ../tests)));
+  nixFilesIn = dir: lib.mapAttrs' (file: _: lib.nameValuePair (lib.removeSuffix ".nix" file) (dir + "/${file}"))
+    (lib.filterAttrs (file: type: type == "regular" && lib.hasSuffix ".nix" file) (builtins.readDir dir));
 
-  checkOf = pkgs: name: import ../tests/${name}.nix {
+  tests = nixFilesIn ../tests // nixFilesIn ../tests/e2e;
+
+  checkOf = pkgs: name: file: import file {
     inherit pkgs weblounge;
-    vmTest = import ../tests/lib.nix { inherit pkgs weblounge name; };
+    vmTest = import ../tests/e2e/lib/lib.nix { inherit pkgs weblounge name; };
   };
 in
 weblounge // {
@@ -55,6 +56,7 @@ weblounge // {
     "toplevel-${name}" = host.config.system.build.toplevel;
   });
 
-  testChecks.x86_64-linux = lib.genAttrs testNames
-    (checkOf nixpkgs.legacyPackages.x86_64-linux);
+  testChecks.x86_64-linux = lib.mapAttrs
+    (checkOf nixpkgs.legacyPackages.x86_64-linux)
+    tests;
 }

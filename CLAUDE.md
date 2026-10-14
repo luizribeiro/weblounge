@@ -11,10 +11,11 @@ workflow and layout.
 - `git add` new files before building: flakes only see tracked files.
 - Every host in `hosts/` gets a `toplevel-<host>` flake check and a
   `<host>-vm` package automatically; don't wire them up by hand.
-- Behaviour changes to a host should come with a subtest in `tests/`, in
-  the file for that area (`host`, `landing`, `ergo`, `concierge`,
-  `security`). Every `tests/*.nix` becomes a flake check automatically;
-  VM tests are `{ vmTest, ... }: vmTest ''…''` and share `tests/helpers.py`.
+- Behaviour changes to a host should come with a subtest in `tests/e2e/`,
+  in the file for that area (`host`, `landing`, `ergo`, `concierge`,
+  `security`). Every `tests/*.nix` and `tests/e2e/*.nix` becomes a flake
+  check automatically; VM tests are `{ vmTest, ... }: vmTest ''…''` and
+  share `tests/e2e/lib/helpers.py`.
 - Web pages must work on phones and desktops (fluid layouts, 44px touch
   targets, 16px inputs); check both widths with a headless browser before
   committing UI changes.

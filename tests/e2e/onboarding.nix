@@ -1,7 +1,7 @@
 { vmTest, ... }:
 
 vmTest {
-  browsers.invite-browser = ./invite-browser.py;
+  browsers.invite-browser = ./clients/invite-browser.py;
 
   script = ''
     erin = {"account": "erin", "password": "lantern-orchard-71"}
