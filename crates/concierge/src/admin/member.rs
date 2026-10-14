@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::Context;
 use clap::Subcommand;
 
@@ -22,6 +24,9 @@ pub enum MemberCommand {
     /// Remove a member's personal data and sessions and revoke their open
     /// invites, keeping their place in the invite tree.
     Delete { account: String },
+    /// List Ergo accounts that aren't members, members Ergo lacks, and
+    /// removed members whose accounts are still to be erased.
+    Reconcile,
 }
 
 pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -32,6 +37,7 @@ pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result
         } => adopt(admin, &account, is_admin).await,
         MemberCommand::ResetPassword { account } => reset_password(admin, &account).await,
         MemberCommand::Delete { account } => delete(admin, &account).await,
+        MemberCommand::Reconcile => reconcile(admin).await,
     }
 }
 
@@ -85,6 +91,35 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
          Ergo's API can't delete accounts: an oper must run /NS ERASE {account}\n",
         removal.sessions_ended, removal.invites_revoked
     ))
+}
+
+async fn reconcile(admin: &Admin) -> anyhow::Result<String> {
+    let mut in_ergo: BTreeMap<String, String> = admin
+        .ergo
+        .accounts()
+        .await?
+        .into_iter()
+        .map(|account| String::from(account.account_name.as_str()))
+        .map(|name| (name.to_ascii_lowercase(), name))
+        .collect();
+    let mut lines = Vec::new();
+    for member in admin.db.member_accounts().await? {
+        let known_to_ergo = in_ergo
+            .remove(&member.account.to_ascii_lowercase())
+            .is_some();
+        match (member.removed, known_to_ergo) {
+            (false, false) => lines.push(format!("only in concierge: {}", member.account)),
+            (true, true) => lines.push(format!("removed but still in ergo: {}", member.account)),
+            _ => {}
+        }
+    }
+    lines.extend(
+        in_ergo
+            .into_values()
+            .map(|name| format!("only in ergo: {name}")),
+    );
+    lines.sort();
+    Ok(lines.into_iter().map(|line| line + "\n").collect())
 }
 
 /// The member named `name`, unless there's none or they were removed.

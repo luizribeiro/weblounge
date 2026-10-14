@@ -49,6 +49,13 @@ pub struct Member {
     pub removed_at: Option<i64>,
 }
 
+/// A member's name, and whether only their placeholder is left.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemberAccount {
+    pub account: String,
+    pub removed: bool,
+}
+
 pub struct NewSession<'a> {
     pub token_hash: &'a [u8],
     pub account: &'a str,
@@ -148,6 +155,17 @@ impl Db {
             account
         )
         .fetch_optional(&self.pool)
+        .await
+    }
+
+    /// Every member's account, removed ones included.
+    pub async fn member_accounts(&self) -> sqlx::Result<Vec<MemberAccount>> {
+        sqlx::query_as!(
+            MemberAccount,
+            r#"SELECT account AS "account!", removed_at IS NOT NULL AS "removed!: bool"
+               FROM members ORDER BY account"#
+        )
+        .fetch_all(&self.pool)
         .await
     }
 

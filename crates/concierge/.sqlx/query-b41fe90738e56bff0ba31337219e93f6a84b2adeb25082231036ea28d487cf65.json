@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT account AS \"account!\", removed_at IS NOT NULL AS \"removed!: bool\"\n               FROM members ORDER BY account",
+  "describe": {
+    "columns": [
+      {
+        "name": "account!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "removed!: bool",
+        "ordinal": 1,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b41fe90738e56bff0ba31337219e93f6a84b2adeb25082231036ea28d487cf65"
+}

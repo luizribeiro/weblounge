@@ -17,6 +17,10 @@ impl Fixture {
 
     async fn add_member(&self, account: &str, invited_by: Option<&str>) {
         self.register(account).await;
+        self.insert_member(account, invited_by).await;
+    }
+
+    async fn insert_member(&self, account: &str, invited_by: Option<&str>) {
         let member = NewMember {
             account,
             email: Some("someone@example.org"),
@@ -258,5 +262,57 @@ mod delete {
             .await
             .unwrap_err();
         assert_eq!(error.to_string(), "nobody is not a member");
+    }
+}
+
+mod reconcile {
+    use super::*;
+
+    #[tokio::test]
+    async fn prints_nothing_when_ergo_and_concierge_agree() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.add_member("bob", Some("alice")).await;
+        assert_eq!(fixture.run(&["member", "reconcile"]).await.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn reports_orphans_missing_accounts_and_accounts_left_to_erase() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.register("Orphan").await;
+        fixture.register("Zed").await;
+        fixture.insert_member("Gone", Some("alice")).await;
+        fixture.add_member("dave", Some("alice")).await;
+        fixture.run(&["member", "delete", "dave"]).await.unwrap();
+        fixture.add_member("erin", Some("alice")).await;
+        fixture.run(&["member", "delete", "erin"]).await.unwrap();
+
+        let output = fixture.run(&["member", "reconcile"]).await.unwrap();
+
+        assert_eq!(
+            output,
+            "only in concierge: Gone\n\
+             only in ergo: Orphan\n\
+             only in ergo: Zed\n\
+             removed but still in ergo: dave\n\
+             removed but still in ergo: erin\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn matches_names_whatever_their_case() {
+        let fixture = Fixture::start().await;
+        fixture.register("Alice").await;
+        fixture.insert_member("aLiCe", None).await;
+        assert_eq!(fixture.run(&["member", "reconcile"]).await.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn fails_when_ergo_does() {
+        let fixture = Fixture::start().await;
+        fixture.ergo.fail_next(Failure::Unauthorized);
+        let error = fixture.run(&["member", "reconcile"]).await.unwrap_err();
+        assert!(error.to_string().contains("API token"), "{error}");
     }
 }
