@@ -9,4 +9,5 @@ pub mod nick;
 pub mod password;
 mod random;
 mod routes;
+pub mod session;
 pub mod status;

@@ -1,5 +1,8 @@
 use rand::seq::IndexedRandom;
 
+/// base64url's alphabet: nothing in it needs escaping in a URL or a cookie.
+pub const URL_SAFE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
 /// `length` characters drawn uniformly from `alphabet` by a CSPRNG.
 pub fn string(alphabet: &[u8], length: usize) -> String {
     let mut rng = rand::rng();

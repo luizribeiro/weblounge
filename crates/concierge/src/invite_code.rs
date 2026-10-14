@@ -2,8 +2,7 @@
 
 use crate::random;
 
-/// base64url's alphabet: nothing in it needs escaping in a URL.
-const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+const ALPHABET: &[u8] = random::URL_SAFE;
 const LENGTH: usize = 22;
 
 pub fn generate() -> String {
