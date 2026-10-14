@@ -10,6 +10,10 @@ in
       default = "weblounge.org";
       description = "The domain every public name, certificate and link derives from.";
     };
+    publicIPv4 = lib.mkOption {
+      type = lib.types.str;
+      description = "The address this host's public names resolve to.";
+    };
     httpsPort = lib.mkOption {
       type = lib.types.port;
       default = 443;
