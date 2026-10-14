@@ -25,10 +25,7 @@ pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember)
     };
     let nick = me.member.account.as_str();
     render(&Tree {
-        layout: Layout {
-            assets: &app.assets,
-            nick: Some(nick),
-        },
+        layout: Layout::new(&app, Some(nick)),
         nick,
         lines: tree::lines(branches),
     })

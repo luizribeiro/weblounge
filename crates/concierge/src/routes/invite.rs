@@ -271,10 +271,7 @@ fn welcome(
     cookie: Option<HeaderValue>,
 ) -> Response {
     let page = Welcome {
-        layout: Layout {
-            assets: &app.assets,
-            nick: cookie.as_ref().map(|_| nick),
-        },
+        layout: Layout::new(app, cookie.as_ref().map(|_| nick)),
         nick,
         irc: &app.irc_server,
         recommended: clients::recommended(platform),
@@ -296,10 +293,7 @@ async fn open_invite(app: &App, code: &str) -> sqlx::Result<Option<Invite>> {
 
 fn page<'a>(app: &'a App, invite: &'a Invite, form: SignupForm<'a>) -> InvitePage<'a> {
     InvitePage {
-        layout: Layout {
-            assets: &app.assets,
-            nick: None,
-        },
+        layout: Layout::new(app, None),
         code: &invite.code,
         inviter: invite.created_by.as_deref(),
         form,

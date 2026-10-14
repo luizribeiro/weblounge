@@ -32,10 +32,7 @@ struct Guide<'a> {
 pub async fn show(State(app): State<AppState>, visitor: Visitor) -> Response {
     let nick = visitor.nick();
     render(&Guide {
-        layout: Layout {
-            assets: &app.assets,
-            nick,
-        },
+        layout: Layout::new(&app, nick),
         irc: &app.irc_server,
         generate: generate(nick.unwrap_or(NICK_PLACEHOLDER)),
         fingerprint: snippet(

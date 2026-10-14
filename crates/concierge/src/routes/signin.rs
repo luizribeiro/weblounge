@@ -112,10 +112,7 @@ fn page<'a>(
     error: Option<&'a str>,
 ) -> SignIn<'a> {
     SignIn {
-        layout: Layout {
-            assets: &app.assets,
-            nick: None,
-        },
+        layout: Layout::new(app, None),
         nick,
         next,
         error,

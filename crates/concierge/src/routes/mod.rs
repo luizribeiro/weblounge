@@ -32,6 +32,15 @@ pub struct Layout<'a> {
     pub nick: Option<&'a str>,
 }
 
+impl<'a> Layout<'a> {
+    pub fn new(app: &'a App, nick: Option<&'a str>) -> Self {
+        Self {
+            assets: &app.assets,
+            nick,
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "message.html")]
 struct Message<'a> {
@@ -51,10 +60,7 @@ pub fn message(
     lines: &[&str],
 ) -> Response {
     let page = Message {
-        layout: Layout {
-            assets: &app.assets,
-            nick: visitor.nick(),
-        },
+        layout: Layout::new(app, visitor.nick()),
         eyebrow,
         title,
         lines,

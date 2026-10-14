@@ -39,10 +39,7 @@ pub async fn show(
     };
     let nick = visitor.nick();
     render(&Guide {
-        layout: Layout {
-            assets: &app.assets,
-            nick,
-        },
+        layout: Layout::new(&app, nick),
         nick,
         irc: &app.irc_server,
         client,

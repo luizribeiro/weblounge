@@ -155,10 +155,7 @@ pub async fn home(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         email_error: None,
     });
     let page = Account {
-        layout: Layout {
-            assets: &app.assets,
-            nick: Some(&member.account),
-        },
+        layout: Layout::new(app, Some(&member.account)),
         nick: &member.account,
         irc: &app.irc_server,
         clients: &CLIENTS,

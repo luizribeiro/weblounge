@@ -81,10 +81,7 @@ pub async fn show_qr(
 ) -> Response {
     match open_invite(&app, &me.member, &id, db::now()).await {
         Ok(Some(invite)) => render(&QrPage {
-            layout: Layout {
-                assets: &app.assets,
-                nick: Some(&me.member.account),
-            },
+            layout: Layout::new(&app, Some(&me.member.account)),
             svg: qr::svg(&invite.url),
             invite,
         }),

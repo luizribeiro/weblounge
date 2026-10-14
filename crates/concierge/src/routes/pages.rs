@@ -20,18 +20,12 @@ struct Privacy<'a> {
 
 pub async fn rules(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&Rules {
-        layout: Layout {
-            assets: &app.assets,
-            nick: visitor.nick(),
-        },
+        layout: Layout::new(&app, visitor.nick()),
     })
 }
 
 pub async fn privacy(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&Privacy {
-        layout: Layout {
-            assets: &app.assets,
-            nick: visitor.nick(),
-        },
+        layout: Layout::new(&app, visitor.nick()),
     })
 }
