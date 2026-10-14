@@ -42,6 +42,19 @@ in
 
     security.acme.acceptTerms = true;
 
+    # An order fails while the CA can't see the challenge yet, as when a new
+    # name hasn't reached every nameserver, and nixpkgs leaves it to the
+    # daily renewal timer. Retrying after nixpkgs' RestartSec of 15 minutes,
+    # at most four times in two hours, stays within Let's Encrypt's five
+    # failed validations per name an hour.
+    systemd.services = lib.mapAttrs'
+      (cert: _: lib.nameValuePair "acme-order-renew-${cert}" {
+        serviceConfig.Restart = "on-failure";
+        startLimitBurst = 4;
+        startLimitIntervalSec = 2 * 60 * 60;
+      })
+      config.security.acme.certs;
+
     services.nginx = {
       enable = true;
       recommendedGzipSettings = true;
