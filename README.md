@@ -146,6 +146,7 @@ machine. They print plain lines a script can read:
 | `member grant-invites <account> <n>`      | Raises a member's invite quota by n                             |
 | `bot create <owner> <name> [--note …]`    | Registers a member's bot, prints its generated password once    |
 | `bot list [<owner>]`                      | Lists bots, of everyone or one member: name, owner, date, note  |
+| `bot reset-password <name>`               | Sets a bot's new generated password, prints it once             |
 
 Ergo's API can't delete accounts, so after `member delete` an oper still
 runs `/NS ERASE <account>`.

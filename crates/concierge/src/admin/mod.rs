@@ -12,7 +12,7 @@ use ergo_api::{Client, Passphrase};
 use crate::{
     config::Config,
     db::{Db, Member},
-    status,
+    password, status,
 };
 
 /// The members' site of weblounge.org, and the admin commands behind it.
@@ -78,6 +78,21 @@ impl Admin {
             member.account
         );
         Ok(member)
+    }
+
+    /// Replaces `account`'s password in Ergo.
+    async fn set_password(&self, account: &str, password: &Passphrase) -> anyhow::Result<()> {
+        self.ergo
+            .set_password(account, password)
+            .await
+            .with_context(|| format!("Ergo didn't take {account}'s new password"))
+    }
+
+    /// Gives `account` a new generated password in Ergo, and answers it.
+    async fn set_generated_password(&self, account: &str) -> anyhow::Result<Passphrase> {
+        let password = password::generate();
+        self.set_password(account, &password).await?;
+        Ok(password)
     }
 }
 

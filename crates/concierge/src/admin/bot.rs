@@ -4,7 +4,7 @@ use ergo_api::{Passphrase, Preference, Registration, SettingsChanges};
 
 use super::{Admin, print_once};
 use crate::{
-    db::{self, NewBot},
+    db::{self, Bot, NewBot},
     nick::Nick,
     password, tree,
 };
@@ -23,6 +23,9 @@ pub enum BotCommand {
     /// List the bots, of one member or of everyone: name, owner, creation
     /// date and note.
     List { owner: Option<String> },
+    /// Give a bot a new generated password, and print it once. Turns its
+    /// always-on and auto-away off again too.
+    ResetPassword { name: String },
 }
 
 pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -31,6 +34,7 @@ pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<St
             create(admin, &owner, &name, note.as_deref()).await
         }
         BotCommand::List { owner } => list(admin, owner.as_deref()).await,
+        BotCommand::ResetPassword { name } => reset_password(admin, &name).await,
     }
 }
 
@@ -62,6 +66,24 @@ async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
             fields.join(" ") + "\n"
         })
         .collect())
+}
+
+async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
+    let bot = live_bot(admin, name).await?;
+    stay_offline_when_stopped(admin, &bot.account).await?;
+    let password = admin.set_generated_password(&bot.account).await?;
+    Ok(print_once(&password))
+}
+
+/// The bot named `name`, unless there's none or it was deleted.
+async fn live_bot(admin: &Admin, name: &str) -> anyhow::Result<Bot> {
+    let bot = admin
+        .db
+        .bot(name)
+        .await?
+        .with_context(|| format!("{name} is not a bot"))?;
+    anyhow::ensure!(bot.removed_at.is_none(), "{} was deleted", bot.account);
+    Ok(bot)
 }
 
 /// Registers the Ergo account `name` with `password` and records it as a
@@ -97,7 +119,7 @@ async fn register(
         })
         .await
         .with_context(|| format!("Ergo created {nick}, but recording it as a bot failed"))?;
-    stay_offline_when_stopped(admin, &nick)
+    stay_offline_when_stopped(admin, nick.as_str())
         .await
         .with_context(|| {
             format!("{nick} was created, but not set up; bot reset-password {nick} tries again")
@@ -107,7 +129,7 @@ async fn register(
 
 /// Turns the bot's always-on and auto-away off, so a stopped bot leaves the
 /// channels instead of lingering in them.
-async fn stay_offline_when_stopped(admin: &Admin, nick: &Nick) -> anyhow::Result<()> {
+async fn stay_offline_when_stopped(admin: &Admin, account: &str) -> anyhow::Result<()> {
     let changes = SettingsChanges {
         always_on: Some(Preference::Off),
         auto_away: Some(Preference::Off),
@@ -115,8 +137,8 @@ async fn stay_offline_when_stopped(admin: &Admin, nick: &Nick) -> anyhow::Result
     };
     admin
         .ergo
-        .update_settings(nick.clone(), changes)
+        .update_settings(account, changes)
         .await
-        .with_context(|| format!("Ergo didn't turn {nick}'s always-on and auto-away off"))?;
+        .with_context(|| format!("Ergo didn't turn {account}'s always-on and auto-away off"))?;
     Ok(())
 }

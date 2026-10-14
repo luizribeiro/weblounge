@@ -187,6 +187,82 @@ mod create {
     }
 }
 
+mod reset_password {
+    use ergo_api::SettingsChanges;
+
+    use super::*;
+    use crate::OLD_PASSWORD;
+
+    async fn with_bender() -> (Fixture, String) {
+        let fixture = Fixture::with_owners().await;
+        let output = fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap();
+        let password = printed_password(&output).to_owned();
+        (fixture, password)
+    }
+
+    #[tokio::test]
+    async fn sets_a_new_password_and_turns_always_on_off_again() {
+        let (fixture, old) = with_bender().await;
+        let always_on = SettingsChanges {
+            always_on: Some(Preference::On),
+            ..Default::default()
+        };
+        let client = fixture.ergo.client();
+        client.update_settings("bender", always_on).await.unwrap();
+
+        let output = fixture
+            .run(&["bot", "reset-password", "BENDER"])
+            .await
+            .unwrap();
+
+        let password = printed_password(&output);
+        assert!(fixture.signs_in_to_ergo("bender", password).await);
+        assert!(!fixture.signs_in_to_ergo("bender", &old).await);
+        let settings = client.settings("bender").await.unwrap();
+        assert_eq!(settings.always_on, Preference::Off);
+    }
+
+    #[tokio::test]
+    async fn refuses_members_and_deleted_bots() {
+        let (fixture, _) = with_bender().await;
+        fixture.insert_deleted_bot("dalek").await;
+        for (name, message) in [
+            ("luiz", "luiz is not a bot"),
+            ("Dalek", "dalek was deleted"),
+            ("nobody", "nobody is not a bot"),
+        ] {
+            let error = fixture
+                .run(&["bot", "reset-password", name])
+                .await
+                .unwrap_err();
+            assert_eq!(error.to_string(), message);
+        }
+        assert!(fixture.signs_in_to_ergo("luiz", OLD_PASSWORD).await);
+    }
+
+    #[tokio::test]
+    async fn keeps_the_password_when_ergo_refuses_it() {
+        let (fixture, old) = with_bender().await;
+        fixture.ergo.pass_next();
+        fixture.ergo.fail_next(Failure::UnknownError);
+
+        let error = fixture
+            .run(&["bot", "reset-password", "bender"])
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            format!("{error:#}"),
+            "Ergo didn't take bender's new password: \
+             Ergo refused the request: UNKNOWN_ERROR (simulated failure)"
+        );
+        assert!(fixture.signs_in_to_ergo("bender", &old).await);
+    }
+}
+
 mod list {
     use super::*;
 

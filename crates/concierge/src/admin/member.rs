@@ -6,7 +6,7 @@ use clap::Subcommand;
 use super::{Admin, print_once};
 use crate::{
     db::{self, NewMember},
-    invite_rules, password,
+    invite_rules,
 };
 
 #[derive(Subcommand)]
@@ -80,12 +80,7 @@ async fn adopt(admin: &Admin, name: &str, is_admin: bool) -> anyhow::Result<Stri
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
     let member = admin.current_member(name).await?;
-    let password = password::generate();
-    admin
-        .ergo
-        .set_password(member.account.as_str(), &password)
-        .await
-        .with_context(|| format!("Ergo didn't take {}'s new password", member.account))?;
+    let password = admin.set_generated_password(&member.account).await?;
     admin.db.end_sessions(&member.account).await?;
     Ok(print_once(&password))
 }
