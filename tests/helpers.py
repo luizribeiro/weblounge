@@ -35,12 +35,6 @@ def https(name, path="/", *flags):
     ))
 
 
-def assert_loopback_only(port, path):
-    listeners = credenza.succeed(f"ss -Htln 'sport = :{port}'")
-    assert listeners.split()[3] == f"127.0.0.1:{port}" and listeners.count("\n") == 1, listeners
-    client.fail(f"curl -s --max-time 3 http://credenza:{port}{path}")
-
-
 def assert_client_address_absent(logs):
     addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
     patterns = shlex.join(arg for address in addresses for arg in ["-e", address])

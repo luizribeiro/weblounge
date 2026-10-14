@@ -1,14 +1,20 @@
-{ vmTest, ... }:
+{ pkgs, vmTest, ... }:
 
 vmTest ''
   import re
   from html.parser import HTMLParser
 
+  mallory = {"account": "mallory", "password": "an-insider-gone-bad"}
   sites = ["weblounge.org", "members.weblounge.org", "irc.weblounge.org"]
   directives_pages_need = {
       "weblounge.org": {"script-src", "style-src", "img-src"},
       "members.weblounge.org": {"style-src", "img-src"},
   }
+
+  def assert_loopback_only(port, path):
+      listeners = credenza.succeed(f"ss -Htln 'sport = :{port}'")
+      assert listeners.split()[3] == f"127.0.0.1:{port}" and listeners.count("\n") == 1, listeners
+      client.fail(f"curl -s --max-time 3 http://credenza:{port}{path}")
 
   def headers_of(name, path):
       response = https(name, path, "-I").lower()
@@ -43,6 +49,48 @@ vmTest ''
   credenza.wait_for_unit("nginx.service")
   credenza.wait_for_unit("concierge.service")
   credenza.wait_for_open_port(8080)
+  credenza.wait_for_unit("ergochat.service")
+  credenza.wait_for_open_port(6697)
+
+  with subtest("firewall drops ports nothing should listen on"):
+      credenza.succeed("systemd-run --unit=stray-listener -- ${pkgs.python3}/bin/python3 -m http.server 9000")
+      credenza.wait_for_open_port(9000)
+      client.succeed("nc -z credenza 22")
+      client.fail("curl -sf --max-time 3 http://credenza:9000/")
+
+  with subtest("there's no plaintext IRC"):
+      credenza.fail("ss -Htln | grep -q ':6667 '")
+
+  with subtest("ergo's API and concierge listen on credenza's loopback only"):
+      assert_loopback_only(8089, "/v1/status")
+      assert_loopback_only(8080, "/healthz")
+
+  with subtest("ergo's API refuses any token but the generated one"):
+      for token in ["not-the-token", "example"]:
+          _, status = ergo_api("status", token=token)
+          assert status == "401", (token, status)
+
+  with subtest("the API token and session key stay out of the Nix store, readable by root alone"):
+      secrets = "/var/lib/weblounge-secrets"
+      modes = credenza.succeed(f"stat -c '%a %U' {secrets} {secrets}/ergo-api-token {secrets}/session-key")
+      assert modes == "700 root\n600 root\n600 root\n", modes
+      for secret, config in [
+          ("ergo-api-token", "systemctl cat ergochat; cat /etc/ergo.yaml"),
+          ("session-key", "systemctl cat concierge; cat $(readlink -f $(command -v concierge-admin))"),
+      ]:
+          credenza.fail(f"{{ {config}; }} | grep -qF $(cat {secrets}/{secret})")
+
+  with subtest("default.yaml's example oper and WebIRC gateway, with published credentials, are left out"):
+      credenza.fail("grep -qE '^opers:|webirc' /etc/ergo.yaml")
+
+  with subtest("a client that doesn't log in with SASL is turned away, even from loopback"):
+      for reply in [irc(), irc(machine=credenza, host="localhost")]:
+          assert " 001 " not in reply and re.search(r"^ERROR .*SASL", reply, re.M), reply
+
+  with subtest("NickServ won't register new accounts, even for a member"):
+      register(**mallory)
+      reply = irc("PRIVMSG NickServ :REGISTER battery-staple", **mallory)
+      assert "NOTICE mallory :This command has been disabled" in reply, reply
 
   with subtest("every site sends HSTS, nosniff, a referrer policy and a CSP that forbids framing"):
       for name in sites:
