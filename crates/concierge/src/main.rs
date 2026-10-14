@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use clap::Parser;
 use concierge::{
     admin::{self, Command},
@@ -5,6 +7,7 @@ use concierge::{
     assets::Assets,
     config::Config,
     db::{self, Db},
+    rate_limit::Limiter,
     session,
 };
 use tokio::net::TcpListener;
@@ -29,10 +32,12 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         db,
         ergo: config.ergo_client()?,
         sessions: session::Hasher::new(&config.read_session_key()?),
+        limiter: Limiter::default(),
         public_url: config.public_url.clone(),
     };
     let listener = TcpListener::bind(config.listen).await?;
     eprintln!("Serving {} on {}", config.public_url, config.listen);
-    axum::serve(listener, app::router(app)).await?;
+    let service = app::router(app).into_make_service_with_connect_info::<SocketAddr>();
+    axum::serve(listener, service).await?;
     Ok(())
 }

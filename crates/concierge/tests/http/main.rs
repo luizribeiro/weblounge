@@ -18,6 +18,7 @@ use concierge::{
     assets::Assets,
     db::{self, Db, NewMember},
     invite_rules::DEFAULT_QUOTA,
+    rate_limit::Limiter,
     session::{self, Token},
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
@@ -47,6 +48,7 @@ impl Site {
             db: db.clone(),
             ergo: ergo.client(),
             sessions: session::Hasher::new(SESSION_KEY),
+            limiter: Limiter::default(),
             public_url: PUBLIC_URL.into(),
         });
         Self {

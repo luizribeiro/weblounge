@@ -14,6 +14,7 @@ use crate::{
     assets::{self, Assets},
     auth, csrf,
     db::Db,
+    rate_limit::Limiter,
     routes, session,
 };
 
@@ -23,6 +24,7 @@ pub struct App {
     pub db: Db,
     pub ergo: Client,
     pub sessions: session::Hasher,
+    pub limiter: Limiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
 }

@@ -126,6 +126,14 @@ vmTest ''
 
   outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
 
+  def sign_in(account, password, *headers):
+      flags = [arg for header in headers for arg in ["-H", header]]
+      fields = ["--data-urlencode", f"nick={account}", "--data-urlencode", f"password={password}"]
+      return https(members, "/signin", *outcome, *flags, *fields)
+
+  def sign_in_from_our_pages(account, password, *headers):
+      return sign_in(account, password, f"Origin: https://{members}", *headers)
+
   with subtest("signed-out visitors to members' pages are sent to sign in"):
       assert https(members, "/", *outcome) == f"303 https://{members}/signin"
       assert https(members, "/?saved", *outcome) == f"303 https://{members}/signin?next=%2F%3Fsaved"
@@ -144,4 +152,20 @@ vmTest ''
       for headers in [["-H", "Origin: https://evil.example"], ["-H", "Referer: https://evil.example/"], []]:
           status = https(members, "/signin", "-o", "/dev/null", "-w", "%{http_code}", "--data", "", *headers)
           assert status == "403", (headers, status)
+
+  # The limits are concierge's rate_limit::PER_ACCOUNT and PER_ADDRESS.
+  per_account, per_address = 5, 20
+
+  with subtest("wrong passwords for one account get it rate-limited, even with the right one"):
+      for _ in range(per_account):
+          assert sign_in_from_our_pages("mallory", "guess") == "401 "
+      limited = sign_in_from_our_pages("mallory", mallory["password"])
+      assert limited == "429 ", limited
+
+  with subtest("forging X-Forwarded-For or X-Real-IP doesn't get around the per-address limit"):
+      for n in range(per_address - per_account):
+          forged = [f"X-Forwarded-For: 203.0.113.{n}", f"X-Real-IP: 198.51.100.{n}"]
+          assert sign_in_from_our_pages(f"guess{n}", "guess", *forged) == "401 ", n
+      limited = sign_in_from_our_pages("someone", "guess", "X-Real-IP: 192.0.2.1", "X-Forwarded-For: 192.0.2.1")
+      assert limited == "429 ", limited
 ''

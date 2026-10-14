@@ -1,5 +1,7 @@
 //! Signing in with the IRC password, which Ergo checks, and signing out.
 
+use std::time::Instant;
+
 use askama::Template;
 use axum::{
     Form,
@@ -14,12 +16,13 @@ use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
     db::{self, Member, NewSession},
-    nick,
+    nick, rate_limit,
     session::{self, Token},
 };
 
 /// The same answer whether the account exists or not.
 const WRONG: &str = "Wrong nick or password.";
+const LIMITED: &str = "Too many attempts. Try again in 15 minutes.";
 const UNAVAILABLE: &str = "Can't check passwords right now. Try again in a minute.";
 /// Ergo's limit; anything longer can't be anyone's password.
 const MAX_PASSWORD_BYTES: usize = 300;
@@ -63,6 +66,7 @@ pub async fn show(
 pub async fn submit(
     State(app): State<AppState>,
     visitor: Visitor,
+    address: rate_limit::ClientAddress,
     Form(credentials): Form<Credentials>,
 ) -> Response {
     let Credentials {
@@ -75,9 +79,19 @@ pub async fn submit(
     if !plausible(nick, password) {
         return refuse(StatusCode::UNAUTHORIZED, WRONG);
     }
+    let now = Instant::now();
+    if !app.limiter.allows(nick, address.0, now) {
+        return refuse(StatusCode::TOO_MANY_REQUESTS, LIMITED);
+    }
     match authenticate(&app, nick, password).await {
-        Ok(Some(member)) => start_session(&app, &visitor, &member, next.unwrap_or("/")).await,
-        Ok(None) => refuse(StatusCode::UNAUTHORIZED, WRONG),
+        Ok(Some(member)) => {
+            app.limiter.record_success(nick);
+            start_session(&app, &visitor, &member, next.unwrap_or("/")).await
+        }
+        Ok(None) => {
+            app.limiter.record_failure(nick, address.0, now);
+            refuse(StatusCode::UNAUTHORIZED, WRONG)
+        }
         Err(error) => {
             eprintln!("Checking a password failed: {error:#}");
             refuse(StatusCode::SERVICE_UNAVAILABLE, UNAVAILABLE)
@@ -113,7 +127,8 @@ fn page<'a>(
     }
 }
 
-/// Whether the form holds something worth asking Ergo about.
+/// Whether the form holds something worth asking Ergo about, and counting
+/// against the limits.
 fn plausible(nick: &str, password: &str) -> bool {
     (1..=nick::MAX_LENGTH).contains(&nick.len())
         && (1..=MAX_PASSWORD_BYTES).contains(&password.len())

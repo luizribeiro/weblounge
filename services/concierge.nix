@@ -98,7 +98,17 @@ in
     services.nginx.virtualHosts.${hostName} = {
       enableACME = true;
       forceSSL = true;
-      locations."/".proxyPass = "http://${cfg.listen}";
+      locations."/" = {
+        proxyPass = "http://${cfg.listen}";
+        # Concierge trusts X-Real-IP for its sign-in limits, so nginx sets it
+        # from the connection, replacing anything the client sent. The
+        # recommended settings would add X-Forwarded-For too, which nothing
+        # reads.
+        recommendedProxySettings = false;
+        extraConfig = ''
+          proxy_set_header X-Real-IP $remote_addr;
+        '';
+      };
     };
   };
 }
