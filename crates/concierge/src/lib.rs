@@ -3,5 +3,7 @@ pub mod assets;
 pub mod config;
 pub mod db;
 pub mod nick;
+pub mod password;
+mod random;
 mod routes;
 pub mod status;
