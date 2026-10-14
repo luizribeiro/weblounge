@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE bots SET removed_at = ? WHERE account = ? AND removed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a34229b52921935af1005cf7c09ffc905598028cc9e323f20b34bdbed5db5a2c"
+}

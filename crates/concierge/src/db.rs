@@ -179,6 +179,24 @@ pub struct Removal {
     pub invites_revoked: u64,
 }
 
+pub struct NewBot<'a> {
+    /// Ergo's canonical spelling of the account name.
+    pub account: &'a str,
+    pub owner: &'a str,
+    pub note: Option<&'a str>,
+    pub created_at: i64,
+}
+
+/// A bot, or the row a deleted bot leaves to keep its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bot {
+    pub account: String,
+    pub owner: String,
+    pub note: Option<String>,
+    pub created_at: i64,
+    pub removed_at: Option<i64>,
+}
+
 /// Concierge's SQLite database, migrated to the schema this build knows.
 #[derive(Clone)]
 pub struct Db {
@@ -659,6 +677,58 @@ impl Db {
         )
         .fetch_optional(&self.pool)
         .await
+    }
+
+    pub async fn insert_bot(&self, bot: &NewBot<'_>) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)",
+            bot.account,
+            bot.owner,
+            bot.note,
+            bot.created_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    /// The bot whose account is `account`, in any case, deleted or not.
+    pub async fn bot(&self, account: &str) -> sqlx::Result<Option<Bot>> {
+        sqlx::query_as!(
+            Bot,
+            r#"SELECT account AS "account!", owner, note, created_at, removed_at
+               FROM bots WHERE account = ?"#,
+            account
+        )
+        .fetch_optional(&self.pool)
+        .await
+    }
+
+    /// The bots that haven't been deleted, of `owner` or of everyone, by
+    /// name.
+    pub async fn bots(&self, owner: Option<&str>) -> sqlx::Result<Vec<Bot>> {
+        sqlx::query_as!(
+            Bot,
+            r#"SELECT account AS "account!", owner, note, created_at, removed_at
+               FROM bots WHERE removed_at IS NULL AND (?1 IS NULL OR owner = ?1 COLLATE NOCASE)
+               ORDER BY account"#,
+            owner
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Marks a bot deleted, keeping its row so its name stays taken;
+    /// answers whether it was live.
+    pub async fn remove_bot(&self, account: &str, now: i64) -> sqlx::Result<bool> {
+        let removed = sqlx::query!(
+            "UPDATE bots SET removed_at = ? WHERE account = ? AND removed_at IS NULL",
+            now,
+            account,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(removed.rows_affected() == 1)
     }
 
     /// Members who haven't been removed.
@@ -1256,6 +1326,85 @@ pub(crate) mod tests {
         .await
         .unwrap();
         assert_eq!(db.access_token(b"\xd1", 0).await.unwrap(), None);
+    }
+
+    /// luiz runs bender and dalek, alice runs Marvin; dalek was deleted.
+    async fn with_bots() -> (Db, tempfile::TempDir) {
+        let (db, dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, joined_at, invite_quota)
+             VALUES ('luiz', 0, 5), ('alice', 0, 5)",
+        )
+        .await
+        .unwrap();
+        for (account, owner, note) in [
+            ("bender", "luiz", Some("answers !ping")),
+            ("dalek", "luiz", None),
+            ("Marvin", "alice", Some("posts the weather")),
+        ] {
+            db.insert_bot(&NewBot {
+                account,
+                owner,
+                note,
+                created_at: 100,
+            })
+            .await
+            .unwrap();
+        }
+        assert!(db.remove_bot("DALEK", 200).await.unwrap());
+        (db, dir)
+    }
+
+    #[tokio::test]
+    async fn a_bot_is_found_by_its_name_in_any_case() {
+        let (db, _dir) = with_bots().await;
+        assert_eq!(
+            db.bot("BENDER").await.unwrap(),
+            Some(Bot {
+                account: "bender".into(),
+                owner: "luiz".into(),
+                note: Some("answers !ping".into()),
+                created_at: 100,
+                removed_at: None,
+            })
+        );
+        assert_eq!(
+            db.bot("dalek").await.unwrap().unwrap().removed_at,
+            Some(200)
+        );
+        assert_eq!(db.bot("luiz").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn lists_the_live_bots_of_one_owner_or_of_everyone() {
+        let (db, _dir) = with_bots().await;
+        let names =
+            |bots: Vec<Bot>| -> Vec<String> { bots.into_iter().map(|bot| bot.account).collect() };
+        assert_eq!(names(db.bots(None).await.unwrap()), ["bender", "Marvin"]);
+        assert_eq!(names(db.bots(Some("LUIZ")).await.unwrap()), ["bender"]);
+        assert!(db.bots(Some("nobody")).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_bot_is_removed_once_and_needs_an_owner_and_a_free_name() {
+        let (db, _dir) = with_bots().await;
+        assert!(!db.remove_bot("dalek", 300).await.unwrap());
+        assert!(!db.remove_bot("nobody", 300).await.unwrap());
+        assert_eq!(
+            db.bot("dalek").await.unwrap().unwrap().removed_at,
+            Some(200)
+        );
+        let bot = |account, owner| NewBot {
+            account,
+            owner,
+            note: None,
+            created_at: 300,
+        };
+        let error = db.insert_bot(&bot("hal", "nobody")).await.unwrap_err();
+        assert!(error.to_string().contains("FOREIGN KEY"), "{error}");
+        let error = db.insert_bot(&bot("Dalek", "alice")).await.unwrap_err();
+        assert!(error.to_string().contains("UNIQUE"), "{error}");
     }
 
     #[tokio::test]
