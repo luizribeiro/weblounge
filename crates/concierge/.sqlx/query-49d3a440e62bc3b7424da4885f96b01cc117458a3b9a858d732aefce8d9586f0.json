@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT code_hash AS \"code!\" FROM invites WHERE length(code_hash) != ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "code!",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "49d3a440e62bc3b7424da4885f96b01cc117458a3b9a858d732aefce8d9586f0"
+}

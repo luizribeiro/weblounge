@@ -199,6 +199,21 @@ impl Site {
         self.db.insert_invite(&invite).await.unwrap();
     }
 
+    /// Sets `assignments` on `code`'s invite, which no query of the site's
+    /// does, to set up a test.
+    async fn update_invite(&self, code: &str, assignments: &str) {
+        let url = format!("sqlite://{}", self.database_path().display());
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        sqlx::query(&format!(
+            "UPDATE invites SET {assignments} WHERE code_hash = ?"
+        ))
+        .bind(concierge::invite_code::hash(code))
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+    }
+
     async fn sign_in_form(&self, nick: &str, password: &str) -> Response {
         self.post("/signin", &[("nick", nick), ("password", password)], None)
             .await

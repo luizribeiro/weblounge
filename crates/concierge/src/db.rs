@@ -10,7 +10,7 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
 };
 
-use crate::{invite_rules, tree::Branch};
+use crate::{invite_code, invite_rules, tree::Branch};
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -101,6 +101,7 @@ pub struct AccessToken {
 }
 
 pub struct NewInvite<'a> {
+    /// The code itself, which only its hash is kept of.
     pub code: &'a str,
     /// `None` for a root invite.
     pub created_by: Option<&'a str>,
@@ -110,7 +111,7 @@ pub struct NewInvite<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invite {
-    pub code: String,
+    pub code_hash: Vec<u8>,
     pub created_by: Option<String>,
     pub created_at: i64,
     pub expires_at: i64,
@@ -139,7 +140,7 @@ impl Invite {
 /// An invite held for one redemption, from [`Db::claim_invite`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Claim {
-    pub code: String,
+    pub code_hash: Vec<u8>,
     pub claimed_at: i64,
     pub created_by: Option<String>,
 }
@@ -416,7 +417,7 @@ impl Db {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let invites = sqlx::query_as!(
             Invite,
-            r#"SELECT code AS "code!", created_by, created_at, expires_at, claimed_at,
+            r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
                       redeemed_by, redeemed_at, revoked_at
                FROM invites WHERE created_by = ?"#,
             invite.created_by,
@@ -432,12 +433,13 @@ impl Db {
     }
 
     pub async fn invite(&self, code: &str) -> sqlx::Result<Option<Invite>> {
+        let code_hash = invite_code::hash(code);
         sqlx::query_as!(
             Invite,
-            r#"SELECT code AS "code!", created_by, created_at, expires_at, claimed_at,
+            r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
                       redeemed_by, redeemed_at, revoked_at
-               FROM invites WHERE code = ?"#,
-            code
+               FROM invites WHERE code_hash = ?"#,
+            code_hash
         )
         .fetch_optional(&self.pool)
         .await
@@ -447,9 +449,9 @@ impl Db {
     pub async fn invites_created_by(&self, account: &str) -> sqlx::Result<Vec<Invite>> {
         sqlx::query_as!(
             Invite,
-            r#"SELECT code AS "code!", created_by, created_at, expires_at, claimed_at,
+            r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
                       redeemed_by, redeemed_at, revoked_at
-               FROM invites WHERE created_by = ? ORDER BY created_at DESC, code"#,
+               FROM invites WHERE created_by = ? ORDER BY created_at DESC, rowid DESC"#,
             account
         )
         .fetch_all(&self.pool)
@@ -492,15 +494,15 @@ impl Db {
         // since it was read.
         let claimed = sqlx::query!(
             "UPDATE invites SET claimed_at = ?
-             WHERE code = ? AND claimed_at IS ? AND redeemed_at IS NULL AND revoked_at IS NULL",
+             WHERE code_hash = ? AND claimed_at IS ? AND redeemed_at IS NULL AND revoked_at IS NULL",
             now,
-            code,
+            invite.code_hash,
             invite.claimed_at,
         )
         .execute(&self.pool)
         .await?;
         Ok((claimed.rows_affected() == 1).then_some(Claim {
-            code: invite.code,
+            code_hash: invite.code_hash,
             claimed_at: now,
             created_by: invite.created_by,
         }))
@@ -510,8 +512,8 @@ impl Db {
     pub async fn release_claim(&self, claim: &Claim) -> sqlx::Result<()> {
         sqlx::query!(
             "UPDATE invites SET claimed_at = NULL
-             WHERE code = ? AND claimed_at = ? AND redeemed_at IS NULL",
-            claim.code,
+             WHERE code_hash = ? AND claimed_at = ? AND redeemed_at IS NULL",
+            claim.code_hash,
             claim.claimed_at,
         )
         .execute(&self.pool)
@@ -530,10 +532,10 @@ impl Db {
         insert_member(&mut *transaction, member).await?;
         let redeemed = sqlx::query!(
             "UPDATE invites SET redeemed_by = ?, redeemed_at = ?
-             WHERE code = ? AND claimed_at = ? AND redeemed_at IS NULL AND revoked_at IS NULL",
+             WHERE code_hash = ? AND claimed_at = ? AND redeemed_at IS NULL AND revoked_at IS NULL",
             member.account,
             member.joined_at,
-            claim.code,
+            claim.code_hash,
             claim.claimed_at,
         )
         .execute(&mut *transaction)
@@ -752,10 +754,11 @@ async fn insert_invite(
     executor: impl SqliteExecutor<'_>,
     invite: &NewInvite<'_>,
 ) -> sqlx::Result<()> {
+    let code_hash = invite_code::hash(invite.code);
     sqlx::query!(
-        "INSERT INTO invites (code, created_by, created_at, expires_at)
+        "INSERT INTO invites (code_hash, created_by, created_at, expires_at)
          VALUES (?, ?, ?, ?)",
-        invite.code,
+        code_hash,
         invite.created_by,
         invite.created_at,
         invite.expires_at,
@@ -782,6 +785,7 @@ async fn migrate(pool: &SqlitePool) -> anyhow::Result<()> {
 
 async fn migrate_and_check(connection: &mut SqliteConnection) -> anyhow::Result<()> {
     MIGRATOR.run_direct(&mut *connection).await?;
+    hash_carried_over_codes(&mut *connection).await?;
     let broken = sqlx::query("PRAGMA foreign_key_check")
         .fetch_all(&mut *connection)
         .await?;
@@ -790,6 +794,30 @@ async fn migrate_and_check(connection: &mut SqliteConnection) -> anyhow::Result<
         "{} rows refer to rows that aren't there",
         broken.len()
     );
+    Ok(())
+}
+
+/// Hashes the codes that migration 20261019120000 carried over as they
+/// were, which SQL couldn't hash. Every hash is HASH_LENGTH bytes, and no
+/// code ever was.
+async fn hash_carried_over_codes(connection: &mut SqliteConnection) -> sqlx::Result<()> {
+    let length = invite_code::HASH_LENGTH as i64;
+    let codes = sqlx::query_scalar!(
+        r#"SELECT code_hash AS "code!" FROM invites WHERE length(code_hash) != ?"#,
+        length
+    )
+    .fetch_all(&mut *connection)
+    .await?;
+    for code in codes {
+        let hash = invite_code::hash(&String::from_utf8_lossy(&code));
+        sqlx::query!(
+            "UPDATE invites SET code_hash = ? WHERE code_hash = ?",
+            hash,
+            code
+        )
+        .execute(&mut *connection)
+        .await?;
+    }
     Ok(())
 }
 
@@ -907,6 +935,64 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn codes_kept_before_hashing_are_hashed_and_still_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261018120000,
+            "INSERT INTO members (account, joined_at) VALUES ('alice', 0);
+             INSERT INTO invites (code, created_by, created_at, expires_at)
+             VALUES ('q7Hx2mZp9vLcT4wRfBa-_w', 'alice', 1, 2), ('v0Ri8dEa2kWnL5yTcHq-_x', NULL, 3, 4);",
+        )
+        .await;
+
+        let db = Db::open(&path).await.unwrap();
+
+        let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
+        assert_eq!(invite.created_by.as_deref(), Some("alice"));
+        assert!(db.invite("v0Ri8dEa2kWnL5yTcHq-_x").await.unwrap().is_some());
+        let kept: Vec<Vec<u8>> = sqlx::query_scalar("SELECT code_hash FROM invites ORDER BY rowid")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+        let hashes = ["q7Hx2mZp9vLcT4wRfBa-_w", "v0Ri8dEa2kWnL5yTcHq-_x"].map(invite_code::hash);
+        assert_eq!(kept, hashes);
+    }
+
+    #[tokio::test]
+    async fn hashing_finishes_what_an_interrupted_open_started_and_then_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261019120000,
+            "INSERT INTO invites (code_hash, created_at, expires_at)
+             VALUES (CAST('q7Hx2mZp9vLcT4wRfBa-_w' AS BLOB), 1, 2);",
+        )
+        .await;
+        let hashed = invite_code::hash("v0Ri8dEa2kWnL5yTcHq-_x");
+        let pool = SqlitePool::connect(&format!("sqlite://{}", path.display()))
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO invites (code_hash, created_at, expires_at) VALUES (?, 3, 4)")
+            .bind(&hashed)
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+
+        Db::open(&path).await.unwrap();
+        let db = Db::open(&path).await.unwrap();
+
+        let kept: Vec<Vec<u8>> = sqlx::query_scalar("SELECT code_hash FROM invites ORDER BY rowid")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(kept, [invite_code::hash("q7Hx2mZp9vLcT4wRfBa-_w"), hashed]);
+    }
+
+    #[tokio::test]
     async fn a_database_whose_references_dont_hold_doesnt_open() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("concierge.db");
@@ -936,7 +1022,7 @@ pub(crate) mod tests {
         assert_eq!(mode, "wal");
         let error = execute(
             &db,
-            "INSERT INTO invites (code, created_by, created_at, expires_at) VALUES ('c', 'nobody', 0, 1)",
+            "INSERT INTO invites (code_hash, created_by, created_at, expires_at) VALUES (x'00', 'nobody', 0, 1)",
         )
         .await
         .unwrap_err();
@@ -982,15 +1068,20 @@ pub(crate) mod tests {
                     ('alice', 'alice@example.org', 'root', 10),
                     ('bob', 'bob@example.org', 'alice', 20);
              UPDATE members SET email_verified_at = 11, news_opt_in = TRUE, is_admin = TRUE
-             WHERE account = 'alice';
-             INSERT INTO invites (code, created_by, created_at, expires_at, redeemed_by, redeemed_at)
-             VALUES ('to-alice', 'root', 5, 100, 'alice', 10),
-                    ('to-bob', 'alice', 15, 100, 'bob', 20),
-                    ('stale', 'alice', 15, 100, NULL, NULL),
-                    ('open', 'alice', 150, 300, NULL, NULL);",
+             WHERE account = 'alice';",
         )
         .await
         .unwrap();
+        for (code, created_by, created_at, expires_at) in [
+            ("to-alice", "root", 5, 100),
+            ("to-bob", "alice", 15, 100),
+            ("stale", "alice", 15, 100),
+            ("open", "alice", 150, 300),
+        ] {
+            add_invite(&db, code, Some(created_by), created_at, expires_at).await;
+        }
+        update_invite(&db, "to-alice", "redeemed_by = 'alice', redeemed_at = 10").await;
+        update_invite(&db, "to-bob", "redeemed_by = 'bob', redeemed_at = 20").await;
 
         let removal = db.remove_member("alice", 200).await.unwrap();
 
@@ -1026,20 +1117,46 @@ pub(crate) mod tests {
 
     const CREATED: i64 = 1_000;
 
+    /// Adds `code`'s invite the way the site does.
+    async fn add_invite(
+        db: &Db,
+        code: &str,
+        created_by: Option<&str>,
+        created_at: i64,
+        expires_at: i64,
+    ) {
+        let invite = NewInvite {
+            code,
+            created_by,
+            created_at,
+            expires_at,
+        };
+        db.insert_invite(&invite).await.unwrap();
+    }
+
+    /// Sets `assignments` on `code`'s invite, which no query of the site's
+    /// does, to set up a test.
+    async fn update_invite(db: &Db, code: &str, assignments: &str) {
+        sqlx::query(&format!(
+            "UPDATE invites SET {assignments} WHERE code_hash = ?"
+        ))
+        .bind(invite_code::hash(code))
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
     /// alice invited someone with the code "open", which nobody used yet.
     async fn with_open_invite() -> (Db, tempfile::TempDir) {
         let (db, dir) = temp_db().await;
         execute(
             &db,
-            &format!(
-                "INSERT INTO members (account, joined_at) VALUES ('alice', 0);
-                 INSERT INTO invites (code, created_by, created_at, expires_at)
-                 VALUES ('open', 'alice', {CREATED}, {})",
-                invite_rules::expires_at(CREATED)
-            ),
+            "INSERT INTO members (account, joined_at) VALUES ('alice', 0)",
         )
         .await
         .unwrap();
+        let expires_at = invite_rules::expires_at(CREATED);
+        add_invite(&db, "open", Some("alice"), CREATED, expires_at).await;
         (db, dir)
     }
 
@@ -1062,7 +1179,7 @@ pub(crate) mod tests {
         assert_eq!(
             claim,
             Claim {
-                code: "open".into(),
+                code_hash: invite_code::hash("open"),
                 claimed_at: now,
                 created_by: Some("alice".into()),
             }
@@ -1120,9 +1237,7 @@ pub(crate) mod tests {
     async fn an_invite_revoked_mid_redemption_adds_nobody() {
         let (db, _dir) = with_open_invite().await;
         let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
-        execute(&db, "UPDATE invites SET revoked_at = 1 WHERE code = 'open'")
-            .await
-            .unwrap();
+        update_invite(&db, "open", "revoked_at = 1").await;
         let redeemed = db.redeem_invite(&claim, &newcomer("bob", CREATED)).await;
         assert_eq!(redeemed.unwrap(), Redemption::Lost);
         assert_eq!(db.member("bob").await.unwrap(), None);
@@ -1147,18 +1262,22 @@ pub(crate) mod tests {
         db.redeem_invite(&claim, &newcomer("bob", CREATED + 5))
             .await
             .unwrap();
-        db.insert_invite(&NewInvite {
-            code: "newer",
-            created_by: Some("alice"),
-            created_at: CREATED + 10,
-            expires_at: invite_rules::expires_at(CREATED + 10),
-        })
-        .await
-        .unwrap();
+        let newer = CREATED + 10;
+        for code in ["newer", "made-in-the-same-second"] {
+            add_invite(
+                &db,
+                code,
+                Some("alice"),
+                newer,
+                invite_rules::expires_at(newer),
+            )
+            .await;
+        }
 
-        let codes: Vec<_> = db.invites_created_by("alice").await.unwrap();
-        let codes: Vec<_> = codes.iter().map(|invite| invite.code.as_str()).collect();
-        assert_eq!(codes, ["newer", "open"]);
+        let invites = db.invites_created_by("alice").await.unwrap();
+        let hashes: Vec<_> = invites.into_iter().map(|invite| invite.code_hash).collect();
+        let newest_first = ["made-in-the-same-second", "newer", "open"].map(invite_code::hash);
+        assert_eq!(hashes, newest_first);
         assert_eq!(
             db.invitees("alice").await.unwrap(),
             [Invitee {
@@ -1175,9 +1294,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_open_invite().await;
         let expired = invite_rules::expires_at(CREATED);
         assert_eq!(db.claim_invite("open", expired).await.unwrap(), None);
-        execute(&db, "UPDATE invites SET revoked_at = 1 WHERE code = 'open'")
-            .await
-            .unwrap();
+        update_invite(&db, "open", "revoked_at = 1").await;
         assert_eq!(db.claim_invite("open", CREATED).await.unwrap(), None);
     }
 

@@ -54,6 +54,7 @@ vmTest {
         assert "<li>frank</li>" in tab, tab
         assert "frank" not in concierge_admin("member", "reconcile")
         assert " 903 " in irc(**frank)
+        _, open_link = erins_browser.create_invite()
 
     with subtest("member reset-password locks the old password out of IRC and ends the website session"):
         new_password = concierge_admin("member", "reset-password", "erin").strip()
@@ -65,5 +66,9 @@ vmTest {
         credenza.succeed("journalctl --sync")
         for secret in [erin["password"], frank["password"], new_password, invite_code(link), invite_code(franks_link)]:
             credenza.fail(f"journalctl | grep -qF {secret}")
+
+    with subtest("concierge's database keeps no invite code, only its hash"):
+        for code in [invite_code(link), invite_code(franks_link), invite_code(open_link)]:
+            credenza.fail(f"grep -aqF {code} /var/lib/private/concierge/concierge.db*")
   '';
 }

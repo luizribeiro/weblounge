@@ -31,7 +31,10 @@ async fn the_signup_page_asks_for_the_code_and_the_account() {
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["cache-control"], "no-store");
     let page = body_text(response).await;
-    assert!(page.contains("<h1 data-invite-heading>You're invited.</h1>"), "{page}");
+    assert!(
+        page.contains("<h1 data-invite-heading>You're invited.</h1>"),
+        "{page}"
+    );
     assert!(page.contains(r#"action="/invite""#), "{page}");
     for field in [
         r#"name="code" value="" required autocomplete="off""#,
@@ -59,7 +62,10 @@ async fn a_mistake_keeps_the_code_and_names_whoever_sent_it() {
 
     assert_eq!(response.status(), 422);
     let page = body_text(response).await;
-    assert!(page.contains("<h1 data-invite-heading>Alice saved you a seat.</h1>"), "{page}");
+    assert!(
+        page.contains("<h1 data-invite-heading>Alice saved you a seat.</h1>"),
+        "{page}"
+    );
     assert!(
         page.contains(&format!(r#"name="code" value="{CODE}""#)),
         "{page}"
@@ -88,14 +94,16 @@ async fn every_unusable_code_gets_the_same_answer() {
     for code in ["used", "revoked", "expired", "claimed"] {
         site.add_invite(code, Some("alice")).await;
     }
-    site.execute(&format!(
-        "INSERT INTO members (account, joined_at) VALUES ('carol', 0);
-         UPDATE invites SET redeemed_by = 'carol', redeemed_at = 1 WHERE code = 'used';
-         UPDATE invites SET revoked_at = 1 WHERE code = 'revoked';
-         UPDATE invites SET created_at = {}, expires_at = {expired_at} WHERE code = 'expired';",
+    site.execute("INSERT INTO members (account, joined_at) VALUES ('carol', 0)")
+        .await;
+    site.update_invite("used", "redeemed_by = 'carol', redeemed_at = 1")
+        .await;
+    site.update_invite("revoked", "revoked_at = 1").await;
+    let lifetime = format!(
+        "created_at = {}, expires_at = {expired_at}",
         expired_at - LIFETIME
-    ))
-    .await;
+    );
+    site.update_invite("expired", &lifetime).await;
     site.db
         .claim_invite("claimed", concierge::db::now())
         .await

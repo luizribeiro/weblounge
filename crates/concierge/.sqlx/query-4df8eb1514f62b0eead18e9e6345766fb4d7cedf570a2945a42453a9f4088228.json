@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE invites SET claimed_at = NULL\n             WHERE code_hash = ? AND claimed_at = ? AND redeemed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4df8eb1514f62b0eead18e9e6345766fb4d7cedf570a2945a42453a9f4088228"
+}

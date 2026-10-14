@@ -118,10 +118,12 @@ async fn invite_lookup(site: &Site, code: &str, origin: &str) -> (u16, String) {
 async fn says_who_sent_an_open_invite_and_why_others_wont_work() {
     let site = Site::start().await;
     site.add_member("alice").await;
-    site.add_invite("q7Hx2mZp9vLcT4wRfBa-_w", Some("alice")).await;
+    site.add_invite("q7Hx2mZp9vLcT4wRfBa-_w", Some("alice"))
+        .await;
     site.add_invite("rootRootRootRootRoot-_", None).await;
-    site.add_invite("usedUsedUsedUsedUsed-_", Some("alice")).await;
-    site.execute("UPDATE invites SET revoked_at = 1 WHERE code = 'usedUsedUsedUsedUsed-_'")
+    site.add_invite("usedUsedUsedUsedUsed-_", Some("alice"))
+        .await;
+    site.update_invite("usedUsedUsedUsedUsed-_", "revoked_at = 1")
         .await;
     let from_alice = r#"{"status":"open","inviter":"alice"}"#;
     let unusable = r#"{"status":"unusable","error":"This invite doesn't work. Invites work once and expire after 24 hours; ask for a new one."}"#;
@@ -131,7 +133,10 @@ async fn says_who_sent_an_open_invite_and_why_others_wont_work() {
             "https://members.weblounge.org/invite#q7Hx2mZp9vLcT4wRfBa-_w",
             from_alice,
         ),
-        ("rootRootRootRootRoot-_", r#"{"status":"open","inviter":null}"#),
+        (
+            "rootRootRootRootRoot-_",
+            r#"{"status":"open","inviter":null}"#,
+        ),
         ("usedUsedUsedUsedUsed-_", unusable),
         ("unknown", unusable),
         ("", unusable),

@@ -247,8 +247,9 @@ vmTest ''
   with subtest("used, expired and unknown codes all get the same answer"):
       used, expired = mint_invite(), mint_invite()
       assert sign_up(used, "trudy", f"https://{members}") == "200"
-      expire = ("import sqlite3; db = sqlite3.connect('/var/lib/private/concierge/concierge.db'); "
-                f"db.execute(\"UPDATE invites SET created_at = 0, expires_at = 1 WHERE code = '{invite_code(expired)}'\"); db.commit()")
+      expire = ("import hashlib, sqlite3; db = sqlite3.connect('/var/lib/private/concierge/concierge.db'); "
+                "db.execute('UPDATE invites SET created_at = 0, expires_at = 1 WHERE code_hash = ?', "
+                f"[hashlib.sha256(b'{invite_code(expired)}').digest()]); db.commit()")
       credenza.succeed(f"${pkgs.python3}/bin/python3 -c {shlex.quote(expire)}")
       answers = [sign_up(link, "mallet", f"https://{members}", flags=("-w", "\n%{http_code}"))
                  for link in [used, expired, "q7Hx2mZp9vLcT4wRfBa-_w"]]

@@ -14,9 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use super::invite;
-use crate::{
-    app::AppState, invite_code, nick::Nick, password_rules, rate_limit::ClientAddress,
-};
+use crate::{app::AppState, invite_code, nick::Nick, password_rules, rate_limit::ClientAddress};
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
