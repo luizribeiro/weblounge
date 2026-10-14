@@ -1,9 +1,11 @@
 # Builds a VM test of credenza's real configuration, probed from a client.
+# Takes the test script, or { script, client } to add to the client node.
 { pkgs, weblounge, name }:
 
-testScript:
+test:
 let
   ircClient = pkgs.writers.writePython3Bin "irc-client" { } ./irc-client.py;
+  testScript = test.script or test;
 in
 pkgs.testers.runNixOSTest {
   inherit name;
@@ -21,7 +23,10 @@ pkgs.testers.runNixOSTest {
         "-device virtio-net-pci,netdev=wan,mac=00:16:3c:1a:01:be"
       ];
     };
-    client.environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ];
+    client = {
+      imports = [ (test.client or { }) ];
+      environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ];
+    };
   };
 
   testScript = ''
