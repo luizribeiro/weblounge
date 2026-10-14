@@ -9,6 +9,7 @@ pub mod invite_rules;
 pub mod nick;
 pub mod password;
 mod random;
+pub mod rate_limit;
 mod routes;
 pub mod session;
 pub mod status;

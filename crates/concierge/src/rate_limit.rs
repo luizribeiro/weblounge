@@ -1,0 +1,217 @@
+//! Slows down password guessing on the website. Ergo doesn't throttle
+//! `check_auth`, so this is the only guard; it lives in memory, and failed
+//! website attempts never lock anyone out of IRC.
+
+use std::{
+    collections::{HashMap, VecDeque},
+    net::{IpAddr, SocketAddr},
+    sync::Mutex,
+    time::{Duration, Instant},
+};
+
+use axum::{
+    extract::{ConnectInfo, FromRequestParts},
+    http::{HeaderMap, request::Parts},
+};
+
+/// How long a failed attempt counts against its account and address.
+pub const WINDOW: Duration = Duration::from_secs(15 * 60);
+/// Enough for a member fumbling their own password a few times.
+pub const PER_ACCOUNT: usize = 5;
+/// Enough for a household or an office behind one address.
+pub const PER_ADDRESS: usize = 20;
+/// Past this many tracked keys, keys without recent failures are dropped.
+const PRUNE_ABOVE: usize = 10_000;
+
+/// The header nginx puts the client's address in, replacing whatever the
+/// client sent. Concierge listens on loopback only, so nothing but nginx
+/// can set it.
+const REAL_IP: &str = "x-real-ip";
+
+/// Where a request comes from: what nginx says, or the peer itself when
+/// there's no nginx in front, as in the dev loop. Kept in memory only, and
+/// never logged.
+pub struct ClientAddress(pub Option<IpAddr>);
+
+impl ClientAddress {
+    fn of(headers: &HeaderMap, peer: Option<SocketAddr>) -> Self {
+        match headers.get(REAL_IP) {
+            Some(value) => Self(value.to_str().ok().and_then(|value| value.parse().ok())),
+            None => Self(peer.map(|peer| peer.ip())),
+        }
+    }
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for ClientAddress {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        let peer = parts.extensions.get::<ConnectInfo<SocketAddr>>();
+        Ok(Self::of(
+            &parts.headers,
+            peer.map(|ConnectInfo(peer)| *peer),
+        ))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Key {
+    /// Lowercased, as Ergo's casemapping folds names.
+    Account(String),
+    Address(IpAddr),
+}
+
+/// Failed sign-in attempts in the last [`WINDOW`], by account and by client
+/// address.
+#[derive(Default)]
+pub struct Limiter {
+    failures: Mutex<HashMap<Key, VecDeque<Instant>>>,
+}
+
+impl Limiter {
+    /// Whether another attempt at `account` from `address` may go ahead.
+    pub fn allows(&self, account: &str, address: Option<IpAddr>, now: Instant) -> bool {
+        let mut failures = self.lock();
+        keys(account, address).all(|(key, limit)| {
+            failures
+                .get_mut(&key)
+                .is_none_or(|times| recent(times, now).len() < limit)
+        })
+    }
+
+    pub fn record_failure(&self, account: &str, address: Option<IpAddr>, now: Instant) {
+        let mut failures = self.lock();
+        if failures.len() > PRUNE_ABOVE {
+            failures.retain(|_, times| !recent(times, now).is_empty());
+        }
+        for (key, _) in keys(account, address) {
+            failures.entry(key).or_default().push_back(now);
+        }
+    }
+
+    /// Forgets the account's failures once its member signs in. The
+    /// address's stay, so signing in to one account can't buy more guesses
+    /// at others.
+    pub fn record_success(&self, account: &str) {
+        self.lock().remove(&account_key(account));
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<Key, VecDeque<Instant>>> {
+        self.failures
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+fn account_key(account: &str) -> Key {
+    Key::Account(account.to_ascii_lowercase())
+}
+
+fn keys(account: &str, address: Option<IpAddr>) -> impl Iterator<Item = (Key, usize)> {
+    let address = address.map(|address| (Key::Address(address), PER_ADDRESS));
+    [(account_key(account), PER_ACCOUNT)]
+        .into_iter()
+        .chain(address)
+}
+
+/// Drops the failures older than [`WINDOW`] and returns the rest.
+fn recent(times: &mut VecDeque<Instant>, now: Instant) -> &VecDeque<Instant> {
+    while times
+        .front()
+        .is_some_and(|&time| now.duration_since(time) >= WINDOW)
+    {
+        times.pop_front();
+    }
+    times
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HOME: Option<IpAddr> = Some(IpAddr::V4(std::net::Ipv4Addr::new(192, 0, 2, 7)));
+    const CAFE: Option<IpAddr> = Some(IpAddr::V4(std::net::Ipv4Addr::new(198, 51, 100, 9)));
+
+    fn fail(limiter: &Limiter, account: &str, address: Option<IpAddr>, times: usize, now: Instant) {
+        for _ in 0..times {
+            limiter.record_failure(account, address, now);
+        }
+    }
+
+    #[test]
+    fn the_address_comes_from_nginx_and_else_from_the_peer() {
+        let peer: SocketAddr = "127.0.0.1:51234".parse().unwrap();
+        let mut headers = HeaderMap::new();
+        assert_eq!(ClientAddress::of(&headers, Some(peer)).0, Some(peer.ip()));
+        assert_eq!(ClientAddress::of(&headers, None).0, None);
+        headers.insert(REAL_IP, "2001:db8::7".parse().unwrap());
+        assert_eq!(
+            ClientAddress::of(&headers, Some(peer)).0,
+            Some("2001:db8::7".parse().unwrap())
+        );
+        headers.insert(REAL_IP, "unknown".parse().unwrap());
+        assert_eq!(ClientAddress::of(&headers, Some(peer)).0, None);
+    }
+
+    #[test]
+    fn an_account_gets_five_tries_from_anywhere() {
+        let (limiter, now) = (Limiter::default(), Instant::now());
+        fail(&limiter, "alice", HOME, PER_ACCOUNT - 1, now);
+        assert!(limiter.allows("alice", CAFE, now));
+        fail(&limiter, "alice", CAFE, 1, now);
+        assert!(!limiter.allows("alice", CAFE, now));
+        assert!(!limiter.allows("ALICE", None, now));
+        assert!(limiter.allows("bob", HOME, now));
+    }
+
+    #[test]
+    fn an_address_gets_twenty_tries_across_accounts() {
+        let (limiter, now) = (Limiter::default(), Instant::now());
+        for n in 0..PER_ADDRESS - 1 {
+            fail(&limiter, &format!("guess{n}"), HOME, 1, now);
+        }
+        assert!(limiter.allows("someone", HOME, now));
+        fail(&limiter, "guess-last", HOME, 1, now);
+        assert!(!limiter.allows("someone", HOME, now));
+        assert!(limiter.allows("someone", CAFE, now));
+    }
+
+    #[test]
+    fn failures_stop_counting_after_the_window() {
+        let (limiter, start) = (Limiter::default(), Instant::now());
+        fail(&limiter, "alice", HOME, PER_ACCOUNT, start);
+        assert!(!limiter.allows("alice", HOME, start + WINDOW - Duration::from_secs(1)));
+        assert!(limiter.allows("alice", HOME, start + WINDOW));
+    }
+
+    #[test]
+    fn signing_in_clears_the_account_but_not_the_address() {
+        let (limiter, now) = (Limiter::default(), Instant::now());
+        fail(&limiter, "alice", HOME, PER_ACCOUNT, now);
+        for n in 0..PER_ADDRESS - PER_ACCOUNT {
+            fail(&limiter, &format!("guess{n}"), HOME, 1, now);
+        }
+        limiter.record_success("Alice");
+        assert!(limiter.allows("alice", CAFE, now));
+        assert!(!limiter.allows("alice", HOME, now));
+    }
+
+    #[test]
+    fn without_an_address_only_the_account_counts() {
+        let (limiter, now) = (Limiter::default(), Instant::now());
+        for n in 0..PER_ADDRESS {
+            fail(&limiter, &format!("guess{n}"), None, 1, now);
+        }
+        assert!(limiter.allows("someone", None, now));
+    }
+
+    #[test]
+    fn forgets_keys_without_recent_failures_once_it_tracks_many() {
+        let (limiter, start) = (Limiter::default(), Instant::now());
+        for n in 0..=PRUNE_ABOVE {
+            fail(&limiter, &format!("guess{n}"), None, 1, start);
+        }
+        fail(&limiter, "alice", HOME, 1, start + WINDOW);
+        assert_eq!(limiter.lock().len(), 2);
+    }
+}
