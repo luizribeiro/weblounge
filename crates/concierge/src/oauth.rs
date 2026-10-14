@@ -35,6 +35,13 @@ impl Webchat {
     pub fn redirect_uri(&self) -> String {
         format!("{}/", self.origin)
     }
+
+    /// Where members open the chat, as they'd type it.
+    pub fn address(&self) -> &str {
+        self.origin
+            .split_once("://")
+            .map_or(&self.origin, |(_, address)| address)
+    }
 }
 
 /// The query of a request to the authorization endpoint.
@@ -302,6 +309,15 @@ mod tests {
             assert_eq!(refusal, Refusal::UnknownClient, "{client_id:?}");
             assert_eq!(refusal.redirect(), None);
         }
+    }
+
+    #[test]
+    fn the_address_is_the_origin_without_its_scheme() {
+        assert_eq!(webchat().address(), "irc.weblounge.org");
+        let vm = Webchat {
+            origin: "https://irc.weblounge.localhost:10443".into(),
+        };
+        assert_eq!(vm.address(), "irc.weblounge.localhost:10443");
     }
 
     #[test]

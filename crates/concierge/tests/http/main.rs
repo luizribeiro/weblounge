@@ -236,6 +236,13 @@ fn session_cookie(response: &Response) -> Option<String> {
     pair.starts_with(session::COOKIE).then(|| pair.to_owned())
 }
 
+/// Whether a page leads with the button that opens the web client.
+fn opens_the_chat(page: &str) -> bool {
+    page.contains(
+        r#"<a class="button button-primary" href="https://irc.weblounge.org/">Open chat</a>"#,
+    ) && page.contains(r#"<code class="muted">irc.weblounge.org in your browser</code>"#)
+}
+
 fn location(response: &Response) -> &str {
     response.headers()[header::LOCATION].to_str().unwrap()
 }

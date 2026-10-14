@@ -23,6 +23,7 @@ use crate::{
     email::{self, Email},
     invite_rules,
     nick::{self, Nick},
+    oauth::Webchat,
     password_rules::{self, Refusal, Rule},
     platform::VisitorPlatform,
     rate_limit::{self, ClientAddress},
@@ -64,6 +65,7 @@ struct Welcome<'a> {
     irc: &'a IrcServer,
     recommended: Vec<&'a Client>,
     clients: &'a [Client],
+    webchat: &'a Webchat,
 }
 
 #[derive(Deserialize, Default)]
@@ -288,6 +290,7 @@ fn welcome(
         irc: &app.irc_server,
         recommended: clients::recommended(platform),
         clients: &CLIENTS,
+        webchat: &app.webchat,
     };
     let mut response = render(&page);
     if let Some(cookie) = cookie {

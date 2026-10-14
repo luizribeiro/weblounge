@@ -17,6 +17,7 @@ use crate::{
     config::IrcServer,
     db,
     email::{self, Email},
+    oauth::Webchat,
 };
 
 #[derive(Template)]
@@ -34,6 +35,7 @@ struct Account<'a> {
     clients: &'a [Client],
     invites: Invites,
     invited: bool,
+    webchat: &'a Webchat,
 }
 
 #[derive(Deserialize, Default)]
@@ -124,5 +126,6 @@ fn page<'a>(
         clients: &CLIENTS,
         invites,
         invited: false,
+        webchat: &app.webchat,
     }
 }

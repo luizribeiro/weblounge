@@ -51,6 +51,7 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     let cookie = session_cookie(&response).expect("a session cookie");
     let page = body_text(response).await;
     assert!(page.contains("<h1>You're in, Bob.</h1>"), "{page}");
+    assert!(crate::opens_the_chat(&page), "{page}");
     assert!(page.contains("The one you just set."), "{page}");
     assert!(page.contains(r#"data-copy="Bob""#), "{page}");
     assert!(!page.contains(NEW_PASSWORD), "{page}");

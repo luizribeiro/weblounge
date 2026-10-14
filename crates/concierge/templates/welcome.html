@@ -7,6 +7,7 @@
       <p class="eyebrow">Account created</p>
       <h1>You're in, {{ nick }}.</h1>
       <p class="lede">Make yourself at home in #lounge.</p>
+      {%- call components::open_chat(webchat) %}{% endcall %}
       <div class="account-grid">
         <section class="card" aria-labelledby="connect-title">
           <h2 class="eyebrow" id="connect-title">Use your own client</h2>

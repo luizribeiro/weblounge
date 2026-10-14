@@ -101,6 +101,24 @@
   color: var(--muted);
 }
 
+.open-chat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 0 0 2rem;
+
+  & .button {
+    min-height: 56px;
+    padding: 0 2rem;
+    font-size: 1.125rem;
+  }
+
+  & code {
+    font-size: 0.875rem;
+  }
+}
+
 .links {
   display: flex;
   flex-wrap: wrap;

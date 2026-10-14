@@ -6,6 +6,7 @@
 {% block content %}
       <p class="eyebrow">Account</p>
       <h1>{{ nick }}</h1>
+      {%- call components::open_chat(webchat) %}{% endcall %}
       <div class="account-grid">
         <section class="card" aria-labelledby="connect-title">
           <h2 class="eyebrow" id="connect-title">Connect a client</h2>

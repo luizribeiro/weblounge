@@ -11,6 +11,7 @@ async fn shows_how_to_connect_a_client_with_copyable_values() {
     assert_eq!(response.status(), 200);
     let page = body_text(response).await;
     assert!(page.contains("<h1>Alice</h1>"), "{page}");
+    assert!(crate::opens_the_chat(&page), "{page}");
     for value in ["irc.weblounge.org", "6697", "Alice"] {
         assert!(
             page.contains(&format!(r#"<code>{value}</code>"#)),

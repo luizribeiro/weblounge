@@ -1,3 +1,10 @@
+{% macro open_chat(webchat) %}
+      <p class="open-chat">
+        <a class="button button-primary" href="{{ webchat.redirect_uri() }}">Open chat</a>
+        <code class="muted">{{ webchat.address() }} in your browser</code>
+      </p>
+{%- endmacro %}
+
 {% macro connection(irc, nick, password) %}
           <dl class="settings-list">
             {%- call copyable("Server", irc.host) %}{% endcall %}
