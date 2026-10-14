@@ -20,12 +20,6 @@ pub fn hash(code: &str) -> Vec<u8> {
     Sha256::digest(code.as_bytes()).to_vec()
 }
 
-/// Whether `text` uses only the characters codes are made of, so it can
-/// go into a URL as it is.
-pub fn is_url_safe(text: &str) -> bool {
-    text.bytes().all(|byte| ALPHABET.contains(&byte))
-}
-
 /// The code in what someone typed into the invite code field: the code
 /// itself, or the whole link pasted in.
 pub fn from_input(input: &str) -> &str {
@@ -65,14 +59,6 @@ mod tests {
                 .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'),
             "{code}"
         );
-    }
-
-    #[test]
-    fn tells_what_can_go_into_a_url_as_it_is() {
-        assert!(is_url_safe(&generate()));
-        for unsafe_text in ["a b", "a#b", "a/b", "ä", "a\r\nLocation: x"] {
-            assert!(!is_url_safe(unsafe_text), "{unsafe_text:?}");
-        }
     }
 
     #[test]

@@ -100,9 +100,7 @@ pub fn router(app: App) -> Router {
             get(routes::invite::show)
                 .post(routes::invite::redeem)
                 .layer(map_response(routes::no_store)),
-        )
-        .route("/invite/{code}", get(routes::invite::legacy_link))
-        .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
+        )        .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
     // The web client calls these from its own origin, so they sit outside
     // the guard for our pages; the token endpoint takes posts from that
     // origin alone, and PKCE and single-use codes protect it.

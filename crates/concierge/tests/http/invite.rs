@@ -1,4 +1,3 @@
-use axum::http::header;
 use concierge::invite_rules::LIFETIME;
 use regex::Regex;
 
@@ -71,19 +70,6 @@ async fn a_mistake_keeps_the_code_and_names_whoever_sent_it() {
         "{page}"
     );
     assert_eq!(code_error(&page), None, "{page}");
-}
-
-#[tokio::test]
-async fn links_with_the_code_in_their_path_lead_to_it_in_the_fragment() {
-    let site = Site::start().await;
-    for (path, location) in [
-        (format!("/invite/{CODE}"), format!("/invite#{CODE}")),
-        ("/invite/not%20a%0d%0acode".into(), "/invite".into()),
-    ] {
-        let response = site.get(&path, None).await;
-        assert_eq!(response.status(), 303, "{path}");
-        assert_eq!(response.headers()[header::LOCATION], location.as_str());
-    }
 }
 
 #[tokio::test]

@@ -217,26 +217,24 @@ vmTest ''
   def mint_invite():
       return credenza.succeed("su - luiz -c 'concierge-admin invite create --root'").strip()
 
-  with subtest("nginx logs links with the code in their path, and pages that link from one, without the code"):
-      code = invite_code(mint_invite())
-      path = f"/invite/{code}"
-      https(members, path, "-f", "-o", "/dev/null")
-      https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}{path}")
-      https(members, f"/signin?next=%2Finvite%2F{code}", "-f", "-o", "/dev/null")
-      for spelling in [f"/%69nvite/{code}", f"/INVITE/{code}", f"/./invite/{code}"]:
-          https(members, spelling, "--path-as-is", "-o", "/dev/null")
-      https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}/%69nvite/{code}")
-      access_log = credenza.succeed("cat /var/log/nginx/access.log")
-      assert re.search(r'"GET /invite/\[redacted\] HTTP/[\d.]+" 303', access_log), access_log
-      assert code not in access_log, access_log
-      credenza.succeed("journalctl --sync")
-      credenza.fail(f"journalctl | grep -qF {code}")
-
   def sign_up(link, nick, origin, flags=("-o", "/dev/null", "-w", "%{http_code}")):
       fields = [f"code={invite_code(link)}", f"nick={nick}", f"email={nick}@example.org",
                 "password=lantern-orchard-71", "confirmation=lantern-orchard-71"]
       return https(members, "/invite", "-H", f"Origin: {origin}", *flags,
                    *[arg for field in fields for arg in ["--data-urlencode", field]])
+
+  with subtest("opening an invite link and signing up leaves the code out of nginx's log and the journal"):
+      link = mint_invite()
+      code = invite_code(link)
+      https(members, "/invite", "-f", "-o", "/dev/null")
+      https(members, "/signup/invite", "-f", "-o", "/dev/null", "-H", f"Origin: https://{members}",
+            "--data-urlencode", f"code={code}")
+      assert sign_up(link, "walter", f"https://{members}") == "200"
+      access_log = credenza.succeed("cat /var/log/nginx/access.log")
+      assert re.search(r'"POST /invite HTTP/[\d.]+" 200', access_log), access_log
+      assert code not in access_log, access_log
+      credenza.succeed("journalctl --sync")
+      credenza.fail(f"journalctl | grep -qF {code}")
 
   with subtest("a signup posted from another origin is refused, and the invite still works"):
       link = mint_invite()
@@ -263,8 +261,9 @@ vmTest ''
       def lookup(n):
           return https(members, "/signup/nick", "-o", "/dev/null", "-w", "%{http_code}", "-H", f"Origin: https://{members}",
                        "-H", f"X-Real-IP: 198.51.100.{n % 250}", "--data", "nick=bob")
-      # mallory's, eve's and trudy's signups above counted as one each.
-      allowed = lookups_per_address - 3
+      # mallory's, walter's, eve's and trudy's signups above counted as one
+      # each, and so did the lookup of walter's code.
+      allowed = lookups_per_address - 5
       statuses = [lookup(n) for n in range(allowed + 1)]
       assert statuses == ["200"] * allowed + ["429"], statuses
 ''

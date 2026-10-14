@@ -7,9 +7,9 @@ use std::time::Instant;
 use askama::Template;
 use axum::{
     Form,
-    extract::{Path, State},
+    extract::State,
     http::{HeaderValue, StatusCode, header},
-    response::{Redirect, Response},
+    response::Response,
 };
 use ergo_api::{Passphrase, Registration};
 use serde::Deserialize;
@@ -91,15 +91,6 @@ pub async fn show(State(app): State<AppState>, visitor: Visitor) -> Response {
         return already_a_member(&app, &visitor);
     }
     render(&page(&app, None, SignupForm::default()))
-}
-
-/// Where links that carry the code in their path still lead.
-pub async fn legacy_link(Path(code): Path<String>) -> Redirect {
-    if invite_code::is_url_safe(&code) {
-        Redirect::to(&format!("/invite#{code}"))
-    } else {
-        Redirect::to("/invite")
-    }
 }
 
 pub async fn redeem(
