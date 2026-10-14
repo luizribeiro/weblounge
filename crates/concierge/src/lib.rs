@@ -10,6 +10,7 @@ pub mod invite_code;
 pub mod invite_rules;
 pub mod nick;
 pub mod password;
+pub mod password_rules;
 mod random;
 pub mod rate_limit;
 mod routes;
