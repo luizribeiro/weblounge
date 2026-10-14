@@ -146,6 +146,26 @@ in
       };
     };
 
+    # Ergo deletes expired history rows, but SQLite leaves their bytes in
+    # free pages and the write-ahead log; rewriting both clears them out.
+    systemd.services.ergo-history-vacuum = {
+      description = "Clear expired chat history out of Ergo's database files";
+      startAt = "hourly";
+      serviceConfig = {
+        Type = "oneshot";
+        # The same dynamic user as Ergo's, which owns the database.
+        User = "ergochat";
+        DynamicUser = true;
+        StateDirectory = "ergo";
+        WorkingDirectory = "/var/lib/ergo";
+        ExecStart = pkgs.writeShellScript "ergo-history-vacuum" ''
+          checkpoint=$(${lib.getExe pkgs.sqlite} -cmd '.timeout 10000' ergo_history.db \
+            'VACUUM' 'PRAGMA wal_checkpoint(TRUNCATE)')
+          [[ $checkpoint == 0\|* ]] || { echo "the write-ahead log was busy: $checkpoint"; exit 1; }
+        '';
+      };
+    };
+
     security.acme.certs.${serverName}.reloadServices = [ "ergochat.service" ];
 
     services.nginx.virtualHosts.${serverName} = {

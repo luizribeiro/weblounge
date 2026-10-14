@@ -86,4 +86,18 @@ vmTest ''
 
   with subtest("messages: direct messages never reach the disk"):
       assert files_containing(said_in_private) == [], files_containing(said_in_private)
+
+  # Moves the clock, so it goes last.
+  with subtest("messages: a week on, channel messages leave the disk"):
+      assert files_containing(said_in_channel) != []
+      credenza.succeed("date -s '+8 days'")
+      credenza.succeed("systemctl restart ergochat")
+      credenza.wait_for_open_port(6697)
+      credenza.wait_until_succeeds(
+          f"systemctl start ergo-history-vacuum && ! grep -rqaF {said_in_channel} /var/lib/private/ergo", timeout=60
+      )
+      assert files_containing(said_in_channel) == [], files_containing(said_in_channel)
+      assert said_in_channel not in lounge_history()
+      owners = credenza.succeed("stat -c %u /var/lib/private/ergo /var/lib/private/ergo/ergo_history.db*").split()
+      assert len(set(owners)) == 1, owners
 ''
