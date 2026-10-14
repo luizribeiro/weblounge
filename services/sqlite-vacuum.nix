@@ -11,8 +11,10 @@ let
     in lib.nameValuePair "${service}-vacuum" {
       description = "Clear deleted data out of ${database}";
       startAt = "hourly";
-      serviceConfig = lib.filterAttrs (key: _: lib.elem key shared) owner // {
+      serviceConfig = config.weblounge.sandbox // lib.filterAttrs (key: _: lib.elem key shared) owner // {
         Type = "oneshot";
+        PrivateNetwork = true;
+        RestrictAddressFamilies = "none";
         User = owner.User or service;
         ExecStart = pkgs.writeShellScript "${service}-vacuum" ''
           checkpoint=$(${lib.getExe pkgs.sqlite} -cmd '.timeout 10000' ${database} \
@@ -23,6 +25,8 @@ let
     };
 in
 {
+  imports = [ ./sandbox.nix ];
+
   options.weblounge.sqliteVacuum = lib.mkOption {
     type = lib.types.attrsOf lib.types.str;
     default = { };
