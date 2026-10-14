@@ -45,6 +45,7 @@ in
           min-tls-version = "1.2";
         };
         motd = "${./ergo.motd}";
+        ip-cloaking.netname = "weblounge";
       };
       accounts = {
         registration.enabled = false;

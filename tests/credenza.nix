@@ -139,6 +139,10 @@ pkgs.testers.runNixOSTest {
     with subtest("logging in shows weblounge's MOTD"):
         assert ":- Pull up a chair and make yourself at home." in session, session
 
+    with subtest("members' addresses are cloaked under weblounge"):
+        whois = irc("WHOIS alice", **alice)
+        assert re.search(r" 311 alice alice \S+ \S+\.weblounge ", whois), whois
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()
