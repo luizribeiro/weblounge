@@ -1,0 +1,33 @@
+{% macro connection(irc, nick, password) %}
+          <dl class="settings-list">
+            {%- call copyable("Server", irc.host) %}{% endcall %}
+            {%- call copyable("Port", irc.port) %}<span class="muted">· TLS</span>{% endcall %}
+            <div class="settings-row">
+              <dt>SASL</dt>
+              <dd><code>PLAIN</code></dd>
+            </div>
+            {%- if let Some(nick) = nick %}
+            {%- call copyable("Username", nick) %}{% endcall %}
+            {%- else %}
+            <div class="settings-row">
+              <dt>Username</dt>
+              <dd>Your nick.</dd>
+            </div>
+            {%- endif %}
+            <div class="settings-row">
+              <dt>Password</dt>
+              <dd>{{ password }}</dd>
+            </div>
+          </dl>
+          <p class="copy-status visually-hidden" aria-live="polite" data-copy-status></p>
+{%- endmacro %}
+
+{% macro copyable(label, value) %}
+            <div class="settings-row">
+              <dt>{{ label }}</dt>
+              <dd>
+                <code>{{ value }}</code>{{ caller() }}
+                <button class="button button-small" type="button" data-copy="{{ value }}" hidden>Copy</button>
+              </dd>
+            </div>
+{%- endmacro %}

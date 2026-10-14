@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "components.html" as components %}
 
 {% block title %}Account{% endblock %}
 
@@ -8,20 +9,7 @@
       <div class="account-grid">
         <section class="card" aria-labelledby="connect-title">
           <h2 class="eyebrow" id="connect-title">Connect a client</h2>
-          <dl class="settings-list">
-            {%- call copyable("Server", irc.host) %}{% endcall %}
-            {%- call copyable("Port", irc.port) %}<span class="muted">· TLS</span>{% endcall %}
-            <div class="settings-row">
-              <dt>SASL</dt>
-              <dd><code>PLAIN</code></dd>
-            </div>
-            {%- call copyable("Username", nick) %}{% endcall %}
-            <div class="settings-row">
-              <dt>Password</dt>
-              <dd>The one you sign in with here.</dd>
-            </div>
-          </dl>
-          <p class="copy-status visually-hidden" aria-live="polite" data-copy-status></p>
+          {%- call components::connection(irc, Some(nick), "The one you sign in with here.") %}{% endcall %}
         </section>
         <section class="card" aria-labelledby="settings-title">
           <h2 class="eyebrow" id="settings-title">Settings</h2>
@@ -47,13 +35,3 @@
         </section>
       </div>
 {%- endblock %}
-
-{% macro copyable(label, value) %}
-            <div class="settings-row">
-              <dt>{{ label }}</dt>
-              <dd>
-                <code>{{ value }}</code>{{ caller() }}
-                <button class="button button-small" type="button" data-copy="{{ value }}" hidden>Copy</button>
-              </dd>
-            </div>
-{%- endmacro %}
