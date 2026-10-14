@@ -75,6 +75,7 @@ endpoint!(Info, "/v1/ns/info" => Account);
 pub struct Account {
     /// The account's canonical spelling.
     pub account_name: AccountName,
+    /// The account's email address, if it has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
     /// When the account was registered, in ISO 8601.
@@ -100,6 +101,7 @@ pub struct AccountList {
 pub struct AccountSummary {
     /// The account's canonical spelling.
     pub account_name: AccountName,
+    /// The account's email address, if it has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
 }
@@ -229,6 +231,20 @@ mod tests {
                 email: None,
                 registered_at: Some("2026-10-14T03:23:57.810Z".into()),
                 channels: vec!["#lounge".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn decodes_an_account_without_optional_details() {
+        let account: Account = decode(r#"{"success":true,"accountName":"Alice"}"#).unwrap();
+        assert_eq!(
+            account,
+            Account {
+                account_name: "Alice".into(),
+                email: None,
+                registered_at: None,
+                channels: Vec::new(),
             }
         );
     }
