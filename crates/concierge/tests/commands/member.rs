@@ -1,5 +1,8 @@
-use concierge::invite_rules::DEFAULT_QUOTA;
-use ergo_api::{Passphrase, Registration, SettingsChanges};
+use concierge::{
+    db::{NewMember, NewSession},
+    invite_rules::DEFAULT_QUOTA,
+};
+use ergo_api::{Passphrase, Registration, SettingsChanges, fake::Failure};
 
 use crate::Fixture;
 
@@ -10,6 +13,34 @@ impl Fixture {
         let passphrase: Passphrase = OLD_PASSWORD.parse().unwrap();
         let registration = self.ergo.client().register(account, &passphrase).await;
         assert_eq!(registration.unwrap(), Registration::Created);
+    }
+
+    async fn add_member(&self, account: &str, invited_by: Option<&str>) {
+        self.register(account).await;
+        let member = NewMember {
+            account,
+            email: Some("someone@example.org"),
+            invited_by,
+            joined_at: 1_760_000_000,
+            invite_quota: DEFAULT_QUOTA,
+            is_admin: false,
+        };
+        self.db().await.insert_member(&member).await.unwrap();
+    }
+
+    async fn sign_in(&self, account: &str, token_hash: &[u8]) {
+        let session = NewSession {
+            token_hash,
+            account,
+            created_at: 1_760_000_000,
+            expires_at: 1_762_592_000,
+        };
+        self.db().await.insert_session(&session).await.unwrap();
+    }
+
+    async fn signs_in_to_ergo(&self, account: &str, password: &str) -> bool {
+        let authenticated = self.ergo.client().check_auth(account, password).await;
+        authenticated.unwrap().is_some()
     }
 }
 
@@ -81,5 +112,65 @@ mod adopt {
             .await
             .unwrap_err();
         assert_eq!(error.to_string(), "alice is already a member");
+    }
+}
+
+mod reset_password {
+    use super::*;
+
+    #[tokio::test]
+    async fn sets_a_new_password_in_ergo_prints_it_and_ends_the_members_sessions() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.add_member("bob", None).await;
+        fixture.sign_in("alice", b"alice-laptop").await;
+        fixture.sign_in("alice", b"alice-phone").await;
+        fixture.sign_in("bob", b"bob-laptop").await;
+
+        let output = fixture
+            .run(&["member", "reset-password", "ALICE"])
+            .await
+            .unwrap();
+
+        let password = output.strip_suffix('\n').unwrap();
+        assert_eq!(password.len(), 26, "{output:?}");
+        assert!(fixture.signs_in_to_ergo("alice", password).await);
+        assert!(!fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
+        let db = fixture.db().await;
+        assert_eq!(db.end_sessions("alice").await.unwrap(), 0);
+        assert_eq!(db.end_sessions("bob").await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn refuses_someone_who_is_not_a_member() {
+        let fixture = Fixture::start().await;
+        fixture.register("carol").await;
+        let error = fixture
+            .run(&["member", "reset-password", "carol"])
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "carol is not a member");
+        assert!(fixture.signs_in_to_ergo("carol", OLD_PASSWORD).await);
+    }
+
+    #[tokio::test]
+    async fn keeps_the_sessions_when_ergo_refuses_the_password() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.sign_in("alice", b"alice-laptop").await;
+        fixture.ergo.fail_next(Failure::UnknownError);
+
+        let error = fixture
+            .run(&["member", "reset-password", "alice"])
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            format!("{error:#}"),
+            "Ergo didn't take alice's new password: \
+             Ergo refused the request: UNKNOWN_ERROR (simulated failure)"
+        );
+        assert!(fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
+        assert_eq!(fixture.db().await.end_sessions("alice").await.unwrap(), 1);
     }
 }

@@ -3,8 +3,8 @@ use clap::Subcommand;
 
 use super::Admin;
 use crate::{
-    db::{self, NewMember},
-    invite_rules,
+    db::{self, Member, NewMember},
+    invite_rules, password,
 };
 
 #[derive(Subcommand)]
@@ -16,6 +16,9 @@ pub enum MemberCommand {
         #[arg(long)]
         admin: bool,
     },
+    /// Give a member a new generated password, end their sessions, and print
+    /// the password once.
+    ResetPassword { account: String },
 }
 
 pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -24,6 +27,7 @@ pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result
             account,
             admin: is_admin,
         } => adopt(admin, &account, is_admin).await,
+        MemberCommand::ResetPassword { account } => reset_password(admin, &account).await,
     }
 }
 
@@ -54,4 +58,31 @@ async fn adopt(admin: &Admin, name: &str, is_admin: bool) -> anyhow::Result<Stri
         .await?;
     let role = if is_admin { " as an admin" } else { "" };
     Ok(format!("adopted {account_name}{role}\n"))
+}
+
+async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
+    let member = current_member(admin, name).await?;
+    let password = password::generate();
+    admin
+        .ergo
+        .set_password(member.account.as_str(), &password)
+        .await
+        .with_context(|| format!("Ergo didn't take {}'s new password", member.account))?;
+    admin.db.end_sessions(&member.account).await?;
+    Ok(format!("{}\n", password.as_str()))
+}
+
+/// The member named `name`, unless there's none or they were removed.
+async fn current_member(admin: &Admin, name: &str) -> anyhow::Result<Member> {
+    let member = admin
+        .db
+        .member(name)
+        .await?
+        .with_context(|| format!("{name} is not a member"))?;
+    anyhow::ensure!(
+        member.removed_at.is_none(),
+        "{} was removed",
+        member.account
+    );
+    Ok(member)
 }

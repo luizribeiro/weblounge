@@ -49,6 +49,13 @@ pub struct Member {
     pub removed_at: Option<i64>,
 }
 
+pub struct NewSession<'a> {
+    pub token_hash: &'a [u8],
+    pub account: &'a str,
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
 pub struct NewInvite<'a> {
     pub code: &'a str,
     /// `None` for a root invite.
@@ -135,6 +142,27 @@ impl Db {
         )
         .fetch_optional(&self.pool)
         .await
+    }
+
+    pub async fn insert_session(&self, session: &NewSession<'_>) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT INTO sessions (token_hash, account, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            session.token_hash,
+            session.account,
+            session.created_at,
+            session.expires_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    /// Ends every session of `account`, answering how many there were.
+    pub async fn end_sessions(&self, account: &str) -> sqlx::Result<u64> {
+        let deleted = sqlx::query!("DELETE FROM sessions WHERE account = ?", account)
+            .execute(&self.pool)
+            .await?;
+        Ok(deleted.rows_affected())
     }
 
     pub async fn insert_invite(&self, invite: &NewInvite<'_>) -> sqlx::Result<()> {

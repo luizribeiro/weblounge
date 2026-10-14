@@ -67,4 +67,15 @@ vmTest ''
       assert adopted == "adopted Dana as an admin\n", adopted
       status = concierge_admin("status")
       assert "(migration 20261014120000, 1 members)" in status, status
+
+  with subtest("concierge-admin member reset-password replaces the IRC password and prints the new one"):
+      password = concierge_admin("member", "reset-password", "dana").strip()
+      assert re.fullmatch("[a-z2-9]{26}", password), password
+      client.fail(irc_command(**dana))
+      session = irc(account="Dana", password=password)
+      assert " 903 " in session, session
+
+  with subtest("the printed password never reaches the journal"):
+      credenza.succeed("journalctl --sync")
+      credenza.fail(f"journalctl | grep -qF {password}")
 ''
