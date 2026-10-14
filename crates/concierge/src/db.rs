@@ -10,6 +10,8 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
 };
 
+use crate::invite_rules;
+
 static MIGRATOR: Migrator = sqlx::migrate!();
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -28,6 +30,7 @@ pub struct NewMember<'a> {
     /// Ergo's canonical spelling of the account name.
     pub account: &'a str,
     pub email: Option<&'a str>,
+    pub news_opt_in: bool,
     /// `None` for a root of the invite tree.
     pub invited_by: Option<&'a str>,
     pub joined_at: i64,
@@ -85,6 +88,35 @@ pub struct Invite {
     pub revoked_at: Option<i64>,
 }
 
+impl Invite {
+    pub fn status(&self, now: i64) -> invite_rules::Status {
+        invite_rules::Invite {
+            expires_at: self.expires_at,
+            claimed_at: self.claimed_at,
+            redeemed_at: self.redeemed_at,
+            revoked_at: self.revoked_at,
+        }
+        .status(now)
+    }
+}
+
+/// An invite held for one redemption, from [`Db::claim_invite`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Claim {
+    pub code: String,
+    pub claimed_at: i64,
+    pub created_by: Option<String>,
+}
+
+/// What came of [`Db::redeem_invite`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Redemption {
+    Redeemed,
+    /// The invite was revoked, or the claim went stale and another
+    /// redemption took it over; nothing was written.
+    Lost,
+}
+
 /// A session that hasn't expired, of a member who hasn't been removed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Session {
@@ -137,19 +169,7 @@ impl Db {
     }
 
     pub async fn insert_member(&self, member: &NewMember<'_>) -> sqlx::Result<()> {
-        sqlx::query!(
-            "INSERT INTO members (account, email, invited_by, joined_at, invite_quota, is_admin)
-             VALUES (?, ?, ?, ?, ?, ?)",
-            member.account,
-            member.email,
-            member.invited_by,
-            member.joined_at,
-            member.invite_quota,
-            member.is_admin,
-        )
-        .execute(&self.pool)
-        .await
-        .map(drop)
+        insert_member(&self.pool, member).await
     }
 
     /// The member whose account is `account`, in any case.
@@ -347,6 +367,71 @@ impl Db {
         .await
     }
 
+    /// Holds the invite `code` for one redemption, if it's open now.
+    pub async fn claim_invite(&self, code: &str, now: i64) -> sqlx::Result<Option<Claim>> {
+        let Some(invite) = self.invite(code).await? else {
+            return Ok(None);
+        };
+        if invite.status(now) != invite_rules::Status::Open {
+            return Ok(None);
+        }
+        // Takes the invite only if nobody claimed, redeemed or revoked it
+        // since it was read.
+        let claimed = sqlx::query!(
+            "UPDATE invites SET claimed_at = ?
+             WHERE code = ? AND claimed_at IS ? AND redeemed_at IS NULL AND revoked_at IS NULL",
+            now,
+            code,
+            invite.claimed_at,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok((claimed.rows_affected() == 1).then_some(Claim {
+            code: invite.code,
+            claimed_at: now,
+            created_by: invite.created_by,
+        }))
+    }
+
+    /// Gives a claimed invite back, unless another redemption took it over.
+    pub async fn release_claim(&self, claim: &Claim) -> sqlx::Result<()> {
+        sqlx::query!(
+            "UPDATE invites SET claimed_at = NULL
+             WHERE code = ? AND claimed_at = ? AND redeemed_at IS NULL",
+            claim.code,
+            claim.claimed_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    /// Adds `member` and marks the claimed invite redeemed by them, both or
+    /// neither.
+    pub async fn redeem_invite(
+        &self,
+        claim: &Claim,
+        member: &NewMember<'_>,
+    ) -> sqlx::Result<Redemption> {
+        let mut transaction = self.pool.begin().await?;
+        insert_member(&mut *transaction, member).await?;
+        let redeemed = sqlx::query!(
+            "UPDATE invites SET redeemed_by = ?, redeemed_at = ?
+             WHERE code = ? AND claimed_at = ? AND redeemed_at IS NULL AND revoked_at IS NULL",
+            member.account,
+            member.joined_at,
+            claim.code,
+            claim.claimed_at,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        if redeemed.rows_affected() == 0 {
+            return Ok(Redemption::Lost);
+        }
+        transaction.commit().await?;
+        Ok(Redemption::Redeemed)
+    }
+
     /// Members who haven't been removed.
     pub async fn member_count(&self) -> sqlx::Result<i64> {
         sqlx::query_scalar!(
@@ -355,6 +440,26 @@ impl Db {
         .fetch_one(&self.pool)
         .await
     }
+}
+
+async fn insert_member(
+    executor: impl SqliteExecutor<'_>,
+    member: &NewMember<'_>,
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        "INSERT INTO members (account, email, news_opt_in, invited_by, joined_at, invite_quota, is_admin)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        member.account,
+        member.email,
+        member.news_opt_in,
+        member.invited_by,
+        member.joined_at,
+        member.invite_quota,
+        member.is_admin,
+    )
+    .execute(executor)
+    .await
+    .map(drop)
 }
 
 async fn delete_sessions(executor: impl SqliteExecutor<'_>, account: &str) -> sqlx::Result<u64> {
@@ -499,6 +604,134 @@ pub(crate) mod tests {
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(bob.invited_by.as_deref(), Some("alice"));
         assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
+    }
+
+    const CREATED: i64 = 1_000;
+
+    /// alice invited someone with the code "open", which nobody used yet.
+    async fn with_open_invite() -> (Db, tempfile::TempDir) {
+        let (db, dir) = temp_db().await;
+        execute(
+            &db,
+            &format!(
+                "INSERT INTO members (account, joined_at, invite_quota) VALUES ('alice', 0, 5);
+                 INSERT INTO invites (code, created_by, created_at, expires_at)
+                 VALUES ('open', 'alice', {CREATED}, {})",
+                invite_rules::expires_at(CREATED)
+            ),
+        )
+        .await
+        .unwrap();
+        (db, dir)
+    }
+
+    fn newcomer(account: &str, joined_at: i64) -> NewMember<'_> {
+        NewMember {
+            account,
+            email: Some("bob@example.org"),
+            news_opt_in: true,
+            invited_by: Some("alice"),
+            joined_at,
+            invite_quota: invite_rules::DEFAULT_QUOTA,
+            is_admin: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn claiming_holds_an_open_invite_for_one_redemption() {
+        let (db, _dir) = with_open_invite().await;
+        let now = CREATED + 10;
+        let claim = db.claim_invite("open", now).await.unwrap().unwrap();
+        assert_eq!(
+            claim,
+            Claim {
+                code: "open".into(),
+                claimed_at: now,
+                created_by: Some("alice".into()),
+            }
+        );
+        assert_eq!(db.claim_invite("open", now).await.unwrap(), None);
+        assert_eq!(db.claim_invite("unknown", now).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn a_released_claim_frees_the_invite() {
+        let (db, _dir) = with_open_invite().await;
+        let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
+        db.release_claim(&claim).await.unwrap();
+        assert!(db.claim_invite("open", CREATED).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn a_stale_claim_is_taken_over_and_can_neither_release_nor_redeem() {
+        let (db, _dir) = with_open_invite().await;
+        let stale = db.claim_invite("open", CREATED).await.unwrap().unwrap();
+        let later = CREATED + invite_rules::CLAIM_TIMEOUT;
+        let fresh = db.claim_invite("open", later).await.unwrap().unwrap();
+
+        db.release_claim(&stale).await.unwrap();
+        assert_eq!(db.claim_invite("open", later).await.unwrap(), None);
+        let redeemed = db.redeem_invite(&stale, &newcomer("bob", later)).await;
+        assert_eq!(redeemed.unwrap(), Redemption::Lost);
+        assert_eq!(db.member("bob").await.unwrap(), None);
+
+        let redeemed = db.redeem_invite(&fresh, &newcomer("carol", later)).await;
+        assert_eq!(redeemed.unwrap(), Redemption::Redeemed);
+    }
+
+    #[tokio::test]
+    async fn redeeming_adds_the_member_and_uses_the_invite_up() {
+        let (db, _dir) = with_open_invite().await;
+        let now = CREATED + 10;
+        let claim = db.claim_invite("open", now).await.unwrap().unwrap();
+
+        let redeemed = db.redeem_invite(&claim, &newcomer("Bob", now)).await;
+
+        assert_eq!(redeemed.unwrap(), Redemption::Redeemed);
+        let bob = db.member("bob").await.unwrap().unwrap();
+        assert_eq!(bob.invited_by.as_deref(), Some("alice"));
+        assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
+        assert!(bob.news_opt_in);
+        let invite = db.invite("open").await.unwrap().unwrap();
+        assert_eq!(invite.redeemed_by.as_deref(), Some("Bob"));
+        assert_eq!(invite.status(now), invite_rules::Status::Redeemed);
+        db.release_claim(&claim).await.unwrap();
+        assert_eq!(db.claim_invite("open", now + 1_000).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn an_invite_revoked_mid_redemption_adds_nobody() {
+        let (db, _dir) = with_open_invite().await;
+        let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
+        execute(&db, "UPDATE invites SET revoked_at = 1 WHERE code = 'open'")
+            .await
+            .unwrap();
+        let redeemed = db.redeem_invite(&claim, &newcomer("bob", CREATED)).await;
+        assert_eq!(redeemed.unwrap(), Redemption::Lost);
+        assert_eq!(db.member("bob").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn a_taken_name_fails_the_redemption_and_leaves_the_invite_unused() {
+        let (db, _dir) = with_open_invite().await;
+        let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
+        assert!(
+            db.redeem_invite(&claim, &newcomer("ALICE", CREATED))
+                .await
+                .is_err()
+        );
+        assert_eq!(db.invite("open").await.unwrap().unwrap().redeemed_at, None);
+    }
+
+    #[tokio::test]
+    async fn expired_revoked_and_redeemed_invites_cannot_be_claimed() {
+        let (db, _dir) = with_open_invite().await;
+        let expired = invite_rules::expires_at(CREATED);
+        assert_eq!(db.claim_invite("open", expired).await.unwrap(), None);
+        execute(&db, "UPDATE invites SET revoked_at = 1 WHERE code = 'open'")
+            .await
+            .unwrap();
+        assert_eq!(db.claim_invite("open", CREATED).await.unwrap(), None);
     }
 
     async fn with_sessions() -> (Db, tempfile::TempDir) {

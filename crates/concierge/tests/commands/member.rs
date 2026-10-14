@@ -24,6 +24,7 @@ impl Fixture {
         let member = NewMember {
             account,
             email: Some("someone@example.org"),
+            news_opt_in: false,
             invited_by,
             joined_at: 1_760_000_000,
             invite_quota: DEFAULT_QUOTA,

@@ -67,6 +67,7 @@ async fn adopt(admin: &Admin, name: &str, is_admin: bool) -> anyhow::Result<Stri
         .insert_member(&NewMember {
             account: account_name,
             email: account.email.as_deref(),
+            news_opt_in: false,
             invited_by: None,
             joined_at: db::now(),
             invite_quota: invite_rules::DEFAULT_QUOTA,
