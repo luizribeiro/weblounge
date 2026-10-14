@@ -61,6 +61,7 @@ in
         Environment = [
           "CONCIERGE_LISTEN=${cfg.listen}"
           "CONCIERGE_PUBLIC_URL=${publicUrl}"
+          "CONCIERGE_IRC_SERVER=${config.weblounge.ergo.address}"
           "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
           "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"
         ];

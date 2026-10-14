@@ -134,12 +134,3 @@ async fn guests_asking_for_the_account_home_are_sent_to_sign_in() {
     let response = site.get("/?saved", None).await;
     assert_eq!(location(&response), "/signin?next=%2F%3Fsaved");
 }
-
-#[tokio::test]
-async fn members_are_greeted_at_the_entrance() {
-    let site = Site::start().await;
-    site.add_member("alice").await;
-    let cookie = site.sign_in("alice").await;
-    let page = body_text(site.get("/", Some(&cookie)).await).await;
-    assert!(page.contains("<h1>Members' entrance.</h1>"), "{page}");
-}

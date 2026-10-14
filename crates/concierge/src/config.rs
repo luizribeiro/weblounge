@@ -14,10 +14,29 @@ const MIN_SESSION_KEY_BYTES: usize = 32;
 pub struct Config {
     pub listen: SocketAddr,
     pub public_url: String,
+    pub irc_server: IrcServer,
     pub ergo_api: Url,
     pub assets_dir: PathBuf,
     pub state_dir: PathBuf,
     pub credentials_dir: PathBuf,
+}
+
+/// The address members' IRC clients connect to, over TLS.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrcServer {
+    pub host: String,
+    pub port: u16,
+}
+
+impl IrcServer {
+    fn parse(address: &str) -> Option<Self> {
+        let (host, port) = address.rsplit_once(':')?;
+        let port = port.parse().ok().filter(|&port| port != 0)?;
+        (!host.is_empty()).then(|| Self {
+            host: host.to_owned(),
+            port,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,6 +81,7 @@ impl Config {
 
         let listen = require("CONCIERGE_LISTEN")?;
         let public_url = require("CONCIERGE_PUBLIC_URL")?;
+        let irc_server = require("CONCIERGE_IRC_SERVER")?;
         let ergo_api = var("CONCIERGE_ERGO_API").unwrap_or_else(|| DEFAULT_ERGO_API.into());
         Ok(Self {
             listen: listen.parse().map_err(|_| {
@@ -76,6 +96,13 @@ impl Config {
                     "CONCIERGE_PUBLIC_URL",
                     public_url.clone(),
                     "expected an http(s) origin, without a path",
+                )
+            })?,
+            irc_server: IrcServer::parse(&irc_server).ok_or_else(|| {
+                invalid(
+                    "CONCIERGE_IRC_SERVER",
+                    irc_server.clone(),
+                    "expected a host:port",
                 )
             })?,
             ergo_api: parse_http_url(&ergo_api).ok_or_else(|| {
@@ -144,9 +171,10 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 5] = [
+    const PRODUCTION: [(&str, &str); 6] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
+        ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
         (
             "CONCIERGE_ASSETS",
             "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members",
@@ -180,6 +208,10 @@ mod tests {
             Ok(Config {
                 listen: "127.0.0.1:8080".parse().unwrap(),
                 public_url: "https://members.weblounge.org".into(),
+                irc_server: IrcServer {
+                    host: "irc.weblounge.org".into(),
+                    port: 6697,
+                },
                 ergo_api: "http://127.0.0.1:8089".parse().unwrap(),
                 assets_dir: "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members"
                     .into(),
@@ -217,6 +249,23 @@ mod tests {
             assert!(
                 matches!(public_url(url), Err(ConfigError::Invalid { .. })),
                 "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_an_irc_server_without_a_host_or_port() {
+        for address in [
+            "irc.weblounge.org",
+            "irc.weblounge.org:",
+            ":6697",
+            "irc.weblounge.org:0",
+            "irc.weblounge.org:tls",
+        ] {
+            let config = parse_with(&[("CONCIERGE_IRC_SERVER", Some(address))]);
+            assert!(
+                matches!(config, Err(ConfigError::Invalid { .. })),
+                "{address}"
             );
         }
     }

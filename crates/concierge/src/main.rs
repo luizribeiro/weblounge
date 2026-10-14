@@ -1,6 +1,6 @@
+use clap::Parser;
 use std::net::SocketAddr;
 
-use clap::Parser;
 use concierge::{
     admin::{self, Command},
     app::{self, App},
@@ -34,6 +34,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         sessions: session::Hasher::new(&config.read_session_key()?),
         limiter: Limiter::default(),
         public_url: config.public_url.clone(),
+        irc_server: config.irc_server.clone(),
     };
     let listener = TcpListener::bind(config.listen).await?;
     eprintln!("Serving {} on {}", config.public_url, config.listen);

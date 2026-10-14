@@ -1,4 +1,4 @@
-pub mod index;
+pub mod account;
 pub mod pages;
 pub mod signin;
 

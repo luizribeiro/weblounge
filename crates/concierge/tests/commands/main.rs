@@ -10,7 +10,7 @@ use std::{fs, path::Path};
 use clap::Parser;
 use concierge::{
     admin::{self, Command},
-    config::{Config, ERGO_API_TOKEN_CREDENTIAL, SESSION_KEY_CREDENTIAL},
+    config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, SESSION_KEY_CREDENTIAL},
     db::Db,
 };
 use ergo_api::fake::FakeErgo;
@@ -34,6 +34,10 @@ impl Fixture {
         let config = Config {
             listen: "127.0.0.1:8080".parse().unwrap(),
             public_url: "https://members.weblounge.localhost:10443".into(),
+            irc_server: IrcServer {
+                host: "irc.weblounge.localhost".into(),
+                port: 16697,
+            },
             ergo_api: ergo.url(),
             assets_dir: "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members".into(),
             state_dir: state.path().into(),

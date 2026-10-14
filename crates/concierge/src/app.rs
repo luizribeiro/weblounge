@@ -12,7 +12,9 @@ use ergo_api::Client;
 
 use crate::{
     assets::{self, Assets},
-    auth, csrf,
+    auth,
+    config::IrcServer,
+    csrf,
     db::Db,
     rate_limit::Limiter,
     routes, session,
@@ -27,6 +29,8 @@ pub struct App {
     pub limiter: Limiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
+    /// Where members point their IRC clients.
+    pub irc_server: IrcServer,
 }
 
 pub type AppState = Arc<App>;
@@ -35,7 +39,7 @@ pub fn router(app: App) -> Router {
     let public_url = app.public_url.clone();
     let state = Arc::new(app);
     let pages = Router::new()
-        .route("/", get(routes::index::show))
+        .route("/", get(routes::account::show))
         .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),

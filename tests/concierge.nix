@@ -104,7 +104,8 @@ vmTest ''
       signed_in = sign_in("dana", password)
       assert signed_in == f"303 https://{members}/", signed_in
       home = members_get("/", "-f")
-      assert '<span class="session-nick">Dana</span>' in home, home
+      assert "<h1>Dana</h1>" in home, home
+      assert "<code>irc.weblounge.org</code>" in home and "<code>6697</code>" in home, home
 
   with subtest("signing out ends the session"):
       signed_out = members_post("/signout")

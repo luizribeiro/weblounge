@@ -5,6 +5,7 @@ let
   yaml = pkgs.formats.yaml { };
   inherit (config.weblounge) domain;
   serverName = "irc.${domain}";
+  port = 6697;
   credentials = "/run/credentials/ergochat.service";
 
 in
@@ -19,6 +20,13 @@ in
     description = "Ergo settings, merged over the default.yaml that Ergo ships.";
   };
 
+  options.weblounge.ergo.address = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = "${serverName}:${toString port}";
+    description = "Where IRC clients connect, over TLS, as host:port.";
+  };
+
   config = {
     weblounge.loopbackListeners."Ergo's API" = cfg.settings.api.listener;
 
@@ -26,7 +34,7 @@ in
       network.name = "weblounge";
       server = {
         name = serverName;
-        listeners.":6697" = {
+        listeners.":${toString port}" = {
           tls = {
             cert = "${credentials}/fullchain.pem";
             key = "${credentials}/key.pem";
@@ -103,6 +111,6 @@ in
       globalRedirect = domain;
     };
 
-    networking.firewall.allowedTCPPorts = [ 6697 ];
+    networking.firewall.allowedTCPPorts = [ port ];
   };
 }

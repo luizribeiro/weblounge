@@ -1,6 +1,7 @@
 //! The site, driven through its router with a temporary database and a
 //! fake Ergo.
 
+mod account;
 mod pages;
 mod security;
 mod signin;
@@ -16,6 +17,7 @@ use axum::{
 use concierge::{
     app::{self, App},
     assets::Assets,
+    config::IrcServer,
     db::{self, Db, NewMember},
     invite_rules::DEFAULT_QUOTA,
     rate_limit::Limiter,
@@ -50,6 +52,10 @@ impl Site {
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),
             public_url: PUBLIC_URL.into(),
+            irc_server: IrcServer {
+                host: "irc.weblounge.org".into(),
+                port: 6697,
+            },
         });
         Self {
             router,

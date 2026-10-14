@@ -6,6 +6,55 @@
 @import "./components/form.css";
 @import "./components/card.css";
 
+.account-grid {
+  display: grid;
+  gap: 1.5rem;
+  align-items: start;
+
+  @media (min-width: 52rem) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.settings-list {
+  margin: 0;
+}
+
+.settings-row {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line);
+
+  &:first-child {
+    border-top: 0;
+  }
+
+  & dt {
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  & dd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    margin: 0;
+  }
+
+  & .button {
+    margin-left: auto;
+  }
+
+  @media (min-width: 30rem) {
+    grid-template-columns: 6.5rem 1fr;
+    align-items: center;
+    gap: 1rem;
+  }
+}
+
 .prose {
   max-width: 40rem;
   font-size: 1.125rem;
