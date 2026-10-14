@@ -73,6 +73,14 @@ pkgs.testers.runNixOSTest {
         for path in ["/", *assets]:
             client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")
 
+    with subtest("nginx logs requests without the client's address, even when they fail"):
+        client_addresses = set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
+        client.succeed("curl -sk -o /dev/null https://credenza/no-such-page")
+        credenza.succeed("grep -q 'GET /no-such-page HTTP/[0-9.]*\" 404' /var/log/nginx/access.log")
+        credenza.succeed("journalctl --sync")
+        patterns = shlex.join(arg for address in client_addresses for arg in ["-e", address])
+        credenza.fail(f"{{ cat /var/log/nginx/*; journalctl -u nginx; }} | grep -qF {patterns}")
+
     with subtest("ergo serves IRC over TLS on 6697 with irc.weblounge.org's certificate"):
         credenza.wait_for_unit("ergochat.service")
         credenza.wait_for_open_port(6697)
