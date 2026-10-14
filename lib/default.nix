@@ -33,7 +33,9 @@ let
     inherit (hosts.credenza.config.weblounge.ergo) settings;
   };
 
-  weblounge = { inherit overlay hosts hostModules testErgo; };
+  zone = import ../dns/zone.nix { inherit lib hosts; };
+
+  weblounge = { inherit overlay hosts hostModules testErgo zone; };
 
   testNames = map (lib.removeSuffix ".nix") (lib.attrNames (lib.filterAttrs
     (file: type: type == "regular" && lib.hasSuffix ".nix" file && file != "lib.nix")
