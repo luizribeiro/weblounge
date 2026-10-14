@@ -43,6 +43,13 @@ in
     description = "The members' site's origin, which is also the OAuth issuer.";
   };
 
+  options.weblounge.concierge.admin = lib.mkOption {
+    type = lib.types.package;
+    readOnly = true;
+    default = admin;
+    description = "concierge-admin, which runs an admin command as the service.";
+  };
+
   options.weblounge.concierge.listen = lib.mkOption {
     type = lib.types.str;
     default = "127.0.0.1:8080";

@@ -7,6 +7,7 @@
     ../../services/ergo.nix
     ../../services/concierge.nix
     ../../services/webchat.nix
+    ../../services/bender.nix
   ];
 
   system.stateVersion = "26.05";
