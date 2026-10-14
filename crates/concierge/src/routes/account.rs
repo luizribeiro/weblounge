@@ -102,7 +102,7 @@ pub async fn update(
         }
     };
     match app.db.update_settings(account, email.as_str(), news).await {
-        Ok(()) => Redirect::to("/account?saved").into_response(),
+        Ok(()) => Redirect::to("/account?saved#email-and-news").into_response(),
         Err(error) => internal_error("Saving settings", error),
     }
 }

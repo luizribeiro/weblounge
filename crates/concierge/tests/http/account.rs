@@ -27,12 +27,13 @@ async fn saves_the_settings_and_says_so() {
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(response.status(), 303);
-    assert_eq!(location(&response), "/account?saved");
+    assert_eq!(location(&response), "/account?saved#email-and-news");
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("alice@example.net"));
     assert!(member.news_opt_in);
     let page = body_text(site.get("/account?saved", Some(&cookie)).await).await;
     assert!(page.contains("Saved."), "{page}");
+    assert!(page.contains(r#"id="email-and-news""#), "{page}");
     assert!(page.contains(r#"value="alice@example.net""#), "{page}");
     assert!(
         page.contains(r#"<input name="news" type="checkbox" checked>"#),
