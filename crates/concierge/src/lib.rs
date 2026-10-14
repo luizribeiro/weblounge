@@ -3,6 +3,7 @@ pub mod assets;
 pub mod config;
 pub mod db;
 pub mod invite_code;
+pub mod invite_rules;
 pub mod nick;
 pub mod password;
 mod random;
