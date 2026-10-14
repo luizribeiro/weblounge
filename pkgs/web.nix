@@ -27,6 +27,7 @@ let
   );
 
   release = esbuildCommand { dev = false; };
+  development = esbuildCommand { dev = true; };
 in
 stdenvNoCC.mkDerivation {
   name = "weblounge-web";
@@ -69,8 +70,20 @@ stdenvNoCC.mkDerivation {
         trap 'rm -rf "$served"' EXIT
         ln -s "$PWD/pages/index.html" "$served/index.html"
         ln -s "$PWD/images/favicon.svg" "$served/favicon.svg"
-        ${esbuildCommand { dev = true; } bundles.landing [ "--sourcemap" "--watch=forever" ]} \
+        ${development bundles.landing [ "--sourcemap" "--watch=forever" ]} \
           --outdir="$served/assets" --servedir="$served" --serve=127.0.0.1:"$2"
+      '';
+    };
+
+    # Concierge serves these itself, restarting whenever the manifest changes.
+    watchMembers = writeShellApplication {
+      name = "weblounge-members-watch";
+      runtimeInputs = [ esbuild ];
+      text = ''
+        out=$(realpath -m "$2")
+        cd "$1"
+        exec ${development bundles.members [ "--sourcemap" "--watch=forever" ]} \
+          --outdir="$out" --metafile="$out/manifest.json"
       '';
     };
   };
