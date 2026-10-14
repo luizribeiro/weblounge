@@ -23,6 +23,7 @@ git-hooks.lib.${pkgs.stdenv.hostPlatform.system}.run {
     gofmt.enable = true;
     shellcheck.enable = true;
     yamllint.enable = true;
+    actionlint.enable = true;
     biome = {
       enable = true;
       types_or = [ "ts" "css" "json" ];
