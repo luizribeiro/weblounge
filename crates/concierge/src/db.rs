@@ -346,6 +346,20 @@ impl Db {
         delete_sessions(&self.pool, account).await
     }
 
+    /// Ends every session of `account` but the one whose token hashes to
+    /// `kept`, answering how many it ended. Their OAuth codes and tokens go
+    /// with them.
+    pub async fn end_other_sessions(&self, account: &str, kept: &[u8]) -> sqlx::Result<u64> {
+        let deleted = sqlx::query!(
+            "DELETE FROM sessions WHERE account = ? AND token_hash != ?",
+            account,
+            kept,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(deleted.rows_affected())
+    }
+
     /// Clears everything personal about a member, ends their sessions and
     /// revokes their open invites. Their row stays as their place in the
     /// invite tree, so the people they invited stay attached.
@@ -1047,6 +1061,24 @@ pub(crate) mod tests {
         db.end_session(b"\xa1").await.unwrap();
         assert_eq!(db.session(b"\xa1", 0).await.unwrap(), None);
         assert!(db.session(b"\xa2", 0).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn ending_the_other_sessions_keeps_one_and_leaves_other_members_alone() {
+        let (db, _dir) = with_sessions().await;
+        execute(
+            &db,
+            "INSERT INTO oauth_tokens (token_hash, session_hash, client_id, created_at, expires_at)
+             VALUES (x'f1', x'a1', 'gamja', 0, 100), (x'f2', x'a2', 'gamja', 0, 100)",
+        )
+        .await
+        .unwrap();
+        assert_eq!(db.end_other_sessions("alice", b"\xa2").await.unwrap(), 1);
+        assert_eq!(db.session(b"\xa1", 0).await.unwrap(), None);
+        assert!(db.session(b"\xa2", 0).await.unwrap().is_some());
+        assert!(db.session(b"\xb1", 0).await.unwrap().is_some());
+        assert_eq!(db.access_token(b"\xf1", 0).await.unwrap(), None);
+        assert!(db.access_token(b"\xf2", 0).await.unwrap().is_some());
     }
 
     #[tokio::test]
