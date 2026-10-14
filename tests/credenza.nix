@@ -40,6 +40,12 @@ pkgs.testers.runNixOSTest {
         }
         assert responses == {"200 text/css", "200 text/javascript", "200 image/svg+xml"}, (assets, responses)
 
+    with subtest("the page and its assets are cached briefly and revalidated by ETag"):
+        for path in ["/", *assets]:
+            headers = client.succeed(f"curl -sfkI https://credenza{path}").lower()
+            assert "cache-control: max-age=3600" in headers, (path, headers)
+            assert "etag:" in headers, (path, headers)
+
     with subtest("the release build carries no live-reload code"):
         for path in ["/", *assets]:
             client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")

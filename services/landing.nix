@@ -13,5 +13,7 @@
     enableACME = true;
     forceSSL = true;
     root = "${pkgs.weblounge.web}/landing";
+    # Asset names carry no hash, so browsers must recheck them soon.
+    extraConfig = "expires 1h;";
   };
 }
