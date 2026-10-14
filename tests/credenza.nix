@@ -19,6 +19,8 @@ pkgs.testers.runNixOSTest {
   };
 
   testScript = ''
+    import re
+
     start_all()
 
     with subtest("nginx redirects to HTTPS and serves the parking page"):
@@ -27,7 +29,16 @@ pkgs.testers.runNixOSTest {
         client.wait_for_unit("multi-user.target")
         redirect = client.succeed("curl -s -o /dev/null -w '%{redirect_url}' http://credenza/")
         assert redirect == "https://credenza/", redirect
-        client.succeed("curl -sfk -o page.html https://credenza/ && grep -q '<title>weblounge.org</title>' page.html")
+        page = client.succeed("curl -sfk https://credenza/")
+        assert "<title>weblounge.org</title>" in page, page
+
+    with subtest("the stylesheet, script and favicon the page references are served"):
+        assets = re.findall(r'(?:href|src)="(/[^"]+)"', page)
+        responses = {
+            client.succeed(f"curl -sk -o /dev/null -w '%{{http_code}} %{{content_type}}' https://credenza{asset}")
+            for asset in assets
+        }
+        assert responses == {"200 text/css", "200 text/javascript", "200 image/svg+xml"}, (assets, responses)
 
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")

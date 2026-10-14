@@ -12,7 +12,10 @@ let
     disko.nixosModules.disko
     ../modules
     ../hosts/${name}
-    { networking.hostName = name; }
+    {
+      networking.hostName = name;
+      nixpkgs.overlays = [ overlay ];
+    }
   ];
 
   hosts = lib.genAttrs hostNames

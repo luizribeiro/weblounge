@@ -3,7 +3,7 @@
     ./hardware.nix
     ./disko.nix
     ./networking.nix
-    ./nginx.nix
+    ../../services/landing.nix
   ];
 
   system.stateVersion = "26.05";
