@@ -28,7 +28,7 @@ mod tests {
 
     use super::*;
 
-    const LINK: &str = "https://members.weblounge.org/invite/q7Hx2mZp9vLcT4wRfBa-_w";
+    const LINK: &str = "https://members.weblounge.org/invite#q7Hx2mZp9vLcT4wRfBa-_w";
     /// Pixels per module when rasterizing for the decoder.
     const SCALE: usize = 4;
 

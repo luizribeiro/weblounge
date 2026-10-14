@@ -218,9 +218,9 @@ vmTest ''
   def mint_invite():
       return credenza.succeed("su - luiz -c 'concierge-admin invite create --root'").strip()
 
-  with subtest("nginx logs invite links, and pages that link from one, without the code"):
-      path = mint_invite().removeprefix(f"https://{members}")
-      code = invite_code(path)
+  with subtest("nginx logs links with the code in their path, and pages that link from one, without the code"):
+      code = invite_code(mint_invite())
+      path = f"/invite/{code}"
       https(members, path, "-f", "-o", "/dev/null")
       https(members, "/rules", "-f", "-o", "/dev/null", "-H", f"Referer: https://{members}{path}")
       https(members, f"/signin?next=%2Finvite%2F{code}", "-f", "-o", "/dev/null")

@@ -59,7 +59,7 @@ vmTest {
 
     with subtest("concierge-admin invite create --root prints a link to members.weblounge.org"):
         link = concierge_admin("invite", "create", "--root")
-        assert re.fullmatch(r"https://members\.weblounge\.org/invite/[A-Za-z0-9_-]{22}\n", link), link
+        assert re.fullmatch(r"https://members\.weblounge\.org/invite#[A-Za-z0-9_-]{22}\n", link), link
 
     with subtest("concierge-admin member adopt imports an account made through Ergo's API"):
         credenza.wait_for_open_port(8089)

@@ -196,7 +196,7 @@ impl Config {
 }
 
 pub fn invite_url(public_url: &str, code: &str) -> String {
-    format!("{public_url}/invite/{code}")
+    format!("{public_url}/invite#{code}")
 }
 
 /// Whether an Ergo multiclient setting, such as `always-on`, turns the
@@ -326,7 +326,7 @@ mod tests {
         let config = parse_with(&[]).unwrap();
         assert_eq!(
             config.invite_url("q7Hx2mZp9vLcT4wRfBa-_w"),
-            "https://members.weblounge.org/invite/q7Hx2mZp9vLcT4wRfBa-_w"
+            "https://members.weblounge.org/invite#q7Hx2mZp9vLcT4wRfBa-_w"
         );
     }
 

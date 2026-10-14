@@ -37,7 +37,7 @@ async fn a_new_invite_shows_its_link_and_qr_code_once() {
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let page = body_text(response).await;
     let [link] = invite_links(&page).try_into().unwrap();
-    assert!(link.starts_with(&format!("{PUBLIC_URL}/invite/")), "{link}");
+    assert!(link.starts_with(&format!("{PUBLIC_URL}/invite#")), "{link}");
     assert!(page.contains(&format!(r#"data-copy="{link}""#)), "{page}");
     assert!(page.contains(&concierge::qr::svg(&link)), "{page}");
     assert!(page.contains("works once, for 24 hours"), "{page}");
@@ -45,7 +45,7 @@ async fn a_new_invite_shows_its_link_and_qr_code_once() {
     let tab = invites_tab(&site, &cookie).await;
     assert!(invite_links(&tab).is_empty(), "{tab}");
     assert!(tab.contains("Up to 3 open at a time."), "{tab}");
-    let code = link.rsplit('/').next().unwrap();
+    let code = link.rsplit('#').next().unwrap();
     let invite = site.db.invite(code).await.unwrap().unwrap();
     assert_eq!(invite.created_by.as_deref(), Some("alice"));
 }
