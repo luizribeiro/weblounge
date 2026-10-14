@@ -19,6 +19,11 @@ vmTest ''
       }
       assert responses == {"200 text/css", "200 text/javascript", "200 image/svg+xml"}, (assets, responses)
 
+  with subtest("the wordmark the page draws from a shared file is there under the id it uses"):
+      [(wordmark, fragment)] = re.findall(r'<use href="(/assets/[^"#]+)#([^"]+)"', page)
+      svg = client.succeed(f"curl -sfk https://credenza{wordmark}")
+      assert f'id="{fragment}"' in svg, svg
+
   with subtest("the page and its assets are cached briefly and revalidated by ETag"):
       for path in ["/", *assets]:
           headers = client.succeed(f"curl -sfkI https://credenza{path}").lower()

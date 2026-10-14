@@ -6,7 +6,7 @@ let
   bundles = {
     # Hashed names aren't worth a templating step for one static page.
     landing = {
-      entryPoints = [ "scripts/landing.ts" "styles/landing.css" ];
+      entryPoints = [ "scripts/landing.ts" "styles/landing.css" "images/wordmark.svg" ];
       entryNames = "[name]";
     };
     # Concierge looks the hashed names up in esbuild's metafile.
