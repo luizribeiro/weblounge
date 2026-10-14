@@ -40,6 +40,10 @@ pkgs.testers.runNixOSTest {
         }
         assert responses == {"200 text/css", "200 text/javascript", "200 image/svg+xml"}, (assets, responses)
 
+    with subtest("the release build carries no live-reload code"):
+        for path in ["/", *assets]:
+            client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")
+
     with subtest("sshd only accepts keys"):
         credenza.wait_for_unit("sshd.service")
         config = credenza.succeed("sshd -T").lower()

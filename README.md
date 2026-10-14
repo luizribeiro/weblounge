@@ -18,6 +18,19 @@ Entering the dev shell installs the git hooks: formatting and lint run on
 every commit, and `nix flake check` (host builds plus VM tests) runs before
 every push.
 
+## Working on the website
+
+The landing page's sources live in `web/`: markup in `pages/`, plain CSS in
+`styles/`, TypeScript in `scripts/`. Nix builds them with esbuild into
+`pkgs.weblounge.web`; there is no npm.
+
+```sh
+just web dev       # serve web/ on http://localhost:8000
+```
+
+The page reloads whenever a stylesheet or script changes; edits to the HTML
+show up on the next manual reload.
+
 ## Running a server locally
 
 `just vm start` boots credenza's real configuration in a QEMU VM on your
@@ -62,7 +75,7 @@ just prod push             # deploy to credenza.weblounge.org
 | `services/` | Opt-in configuration, one file per service a host can run   |
 | `pkgs/`     | Our own packages, exposed to hosts as `pkgs.weblounge.*`    |
 | `web/`      | Sources of everything the browser loads                     |
-| `just/`     | `just vm …` and `just prod …` subcommands                   |
+| `just/`     | `just vm …`, `just prod …` and `just web …` subcommands     |
 | `scripts/`  | Helpers the recipes call                                    |
 
 Servers are named after furniture: `credenza` is the first.

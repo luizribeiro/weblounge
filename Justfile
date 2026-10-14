@@ -1,5 +1,6 @@
 mod vm 'just/vm.just'
 mod prod 'just/prod.just'
+mod web 'just/web.just'
 
 default:
   @just --list --list-submodules
