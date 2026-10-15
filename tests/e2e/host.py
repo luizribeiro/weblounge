@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import credenza, subtest
+    from helpers import add_member
 
 # As in host.nix, whose stand-in certificate order fails its first attempt.
 cert = "irc.weblounge.org"
@@ -71,3 +72,13 @@ with subtest("systemd knows every setting in credenza's units, so no sandbox opt
     assert any("Unknown key 'ProtecSystem'" in line for line in unit_file_problems("/tmp/typo.service"))
     units = credenza.succeed("ls /etc/systemd/system/*.service /etc/systemd/system/*.timer").split()
     assert unit_file_problems(*units) == []
+
+
+with subtest("the deploy checks pass on a healthy credenza, and name a unit that failed"):
+    add_member("luiz", "plain-old-vanilla")
+    credenza.succeed("systemctl restart bender-account.service weblounge-bot-bender.service")
+    credenza.succeed("/run/current-system/deploy-checks-host")
+    credenza.succeed("systemd-run --unit=doomed false")
+    status, report = credenza.execute("DEPLOY_CHECKS_TIMEOUT=3 /run/current-system/deploy-checks-host 2>&1")
+    assert status == 1 and "✗ no unit failed or is waiting to retry" in report and "doomed.service" in report, report
+    credenza.succeed("systemctl reset-failed doomed.service")
