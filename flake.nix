@@ -4,6 +4,11 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
     crane.url = "github:ipetkov/crane";
+    # RustSec's advisories, which concierge-audit checks Cargo.lock against.
+    advisory-db = {
+      url = "github:rustsec/advisory-db";
+      flake = false;
+    };
     disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";

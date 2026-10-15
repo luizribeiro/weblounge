@@ -1,4 +1,4 @@
-{ lib, craneLib, ergochat, weblounge }:
+{ lib, craneLib, advisory-db, ergochat, weblounge }:
 
 let
   src = lib.fileset.toSource {
@@ -37,5 +37,11 @@ craneLib.buildPackage (withDependencies {
     });
     test = craneLib.cargoTest (withDependencies ergoContractTestEnv);
     fmt = craneLib.cargoFmt commonArgs;
+    audit = craneLib.cargoAudit {
+      inherit src advisory-db;
+      # sqlx's lock file lists every driver; RUSTSEC-2023-0071 is in rsa,
+      # which only sqlx-mysql uses, and concierge doesn't build it.
+      cargoAuditExtraArgs = "--ignore yanked --ignore RUSTSEC-2023-0071";
+    };
   };
 })
