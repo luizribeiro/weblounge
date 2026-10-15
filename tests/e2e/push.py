@@ -60,4 +60,6 @@ with subtest("a push of a healthy system keeps it, and boots into it"):
     assert status == 0 and "push: kept" in output, output
     for site in ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]:
         assert f"✓ https://{site} answers" in output, (site, output)
+    for check in ["Ergo's API answers its token", "IRC turns away clients that don't log in"]:
+        assert f"✓ {check}" in output, (check, output)
     assert running() == "healthy" and boots_into() == client.succeed("readlink -f /etc/variants/healthy"), output

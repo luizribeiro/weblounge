@@ -165,5 +165,23 @@ in
     networking.hosts."127.0.0.1" = [ serverName ];
 
     networking.firewall.allowedTCPPorts = [ port ];
+
+    # What concierge relies on, asked the way concierge asks. Only reading
+    # the token takes root.
+    weblounge.deployChecks."Ergo's API answers its token".script = ''
+      token=$(${config.security.wrapperDir}/sudo cat ${config.weblounge.secrets.ergo-api-token.path})
+      ${pkgs.curl}/bin/curl --silent --show-error --max-time 10 -H "Authorization: Bearer $token" -d '{}' \
+        http://${cfg.settings.api.listener}/v1/status | ${pkgs.gnugrep}/bin/grep '"success":true'
+    '';
+
+    weblounge.deployChecks."IRC turns away clients that don't log in" = {
+      runs = "outside";
+      script = ''
+        reply=$(printf 'NICK deploy-check\r\nUSER deploy-check 0 * :deploy check\r\n' \
+          | ${pkgs.coreutils}/bin/timeout 10 ${pkgs.openssl}/bin/openssl s_client -quiet -connect ${cfg.address} \
+            -servername ${serverName} ${lib.optionalString (config.weblounge.selfSignedCa == null) "-verify_return_error"} 2>&1)
+        ${pkgs.gnugrep}/bin/grep -q '^ERROR .*SASL' <<<"$reply" || { echo "$reply"; exit 1; }
+      '';
+    };
   };
 }
