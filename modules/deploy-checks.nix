@@ -55,6 +55,15 @@ let
   };
 in
 {
+  options.weblounge.outsideCurl = mkOption {
+    type = types.str;
+    readOnly = true;
+    # Machines with stand-in certificates keep their CA to themselves.
+    default = "${pkgs.curl}/bin/curl --silent --show-error --max-time 10"
+      + lib.optionalString (config.weblounge.selfSignedCa != null) " --insecure";
+    description = "curl as an outside deploy check runs it, verifying certificates wherever a public CA issued them.";
+  };
+
   options.weblounge.deployChecks = mkOption {
     type = types.attrsOf (types.submodule checkOptions);
     default = { };

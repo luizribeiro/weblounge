@@ -58,4 +58,6 @@ with subtest("a push cut off mid-trial is undone by the host itself"):
 with subtest("a push of a healthy system keeps it, and boots into it"):
     status, output = push("healthy")
     assert status == 0 and "push: kept" in output, output
+    for site in ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]:
+        assert f"✓ https://{site} answers" in output, (site, output)
     assert running() == "healthy" and boots_into() == client.succeed("readlink -f /etc/variants/healthy"), output

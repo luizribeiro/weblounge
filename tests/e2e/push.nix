@@ -35,6 +35,9 @@ vmTest {
   # The machine pushing, with each variant at /etc/variants/<name>.
   client = { lib, nodes, ... }: {
     nix.settings.experimental-features = [ "nix-command" ];
+    # Outside checks reach credenza by its public names, as visitors do.
+    networking.hosts.${nodes.credenza.networking.primaryIPAddress} =
+      lib.attrNames nodes.credenza.services.nginx.virtualHosts;
     environment.systemPackages = [ push ];
     environment.etc = lib.mapAttrs'
       (name: _: lib.nameValuePair "variants/${name}" {

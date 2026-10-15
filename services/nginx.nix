@@ -40,6 +40,16 @@ in
   config = {
     networking.firewall.allowedTCPPorts = [ 80 443 ];
 
+    weblounge.deployChecks = lib.mapAttrs'
+      (name: _: lib.nameValuePair "https://${name} answers" {
+        runs = "outside";
+        script = ''
+          status=$(${config.weblounge.outsideCurl} -o /dev/null -w '%{http_code}' ${config.weblounge.origin name}/) || exit 1
+          [ "$status" -lt 500 ] || { echo "it answered $status"; exit 1; }
+        '';
+      })
+      config.services.nginx.virtualHosts;
+
     security.acme.acceptTerms = true;
 
     # An order fails while the CA can't see the challenge yet, as when a new
