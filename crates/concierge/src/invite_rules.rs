@@ -7,8 +7,8 @@ const HOUR: i64 = 60 * 60;
 const DAY: i64 = 24 * HOUR;
 
 /// How many invites a member, admins too, may have open at once. Nothing
-/// lists or revokes open invites, so each holds its place until it's
-/// redeemed or expires.
+/// lists open invites; each holds its place until it's redeemed or
+/// expires, or the member revokes them all, say after losing the links.
 pub const MAX_OPEN: i64 = 3;
 /// How long an invite link stays open.
 pub const LIFETIME: i64 = DAY;
@@ -101,6 +101,12 @@ pub fn may_invite<'a>(
         0 => Err(Refusal::TooManyOpen),
         _ => Ok(()),
     }
+}
+
+/// `n` open invites, in words: "1 open invite", "3 open invites".
+pub fn open_in_words(n: i64) -> String {
+    let plural = if n == 1 { "" } else { "s" };
+    format!("{n} open invite{plural}")
 }
 
 /// A duration of `seconds`, in words: "6 days", "24 hours", "1 hour".

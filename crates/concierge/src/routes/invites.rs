@@ -1,5 +1,6 @@
 //! The Invites tab: members creating invites, the people they brought in,
-//! and the invite tree. A new invite's link is shown once, as it's made.
+//! and the invite tree. A new invite's link is shown once, as it's made;
+//! a member who lost links revokes every invite they have open.
 
 use askama::Template;
 use axum::{
@@ -35,6 +36,13 @@ struct NewInvitePage<'a> {
     url: String,
     svg: String,
     lifetime: String,
+}
+
+#[derive(Template)]
+#[template(path = "revoke-invites.html")]
+struct RevokeInvitesPage<'a> {
+    layout: Layout<'a>,
+    invites: Invites,
 }
 
 pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
@@ -82,6 +90,35 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
         }
         Ok(false) => Redirect::to("/invites").into_response(),
         Err(error) => internal_error("Creating an invite", error),
+    }
+}
+
+/// Asks before revoking, for browsers that can't open the tab's dialog.
+pub async fn confirm_revoke(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+) -> Response {
+    let invites = match Invites::of(&app, &me.member, db::now()).await {
+        Ok(invites) => invites,
+        Err(error) => return internal_error("Listing invites", error),
+    };
+    if invites.open == 0 {
+        return Redirect::to("/invites").into_response();
+    }
+    render(&RevokeInvitesPage {
+        layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Invites),
+        invites,
+    })
+}
+
+pub async fn revoke(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
+    match app
+        .db
+        .revoke_open_invites(&me.member.account, db::now())
+        .await
+    {
+        Ok(_) => Redirect::to("/invites").into_response(),
+        Err(error) => internal_error("Revoking invites", error),
     }
 }
 

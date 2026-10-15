@@ -142,6 +142,77 @@ async fn two_invites_at_once_cannot_both_take_the_last_place() {
 }
 
 #[tokio::test]
+async fn revoking_frees_every_place_and_ends_the_links() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let mut links = Vec::new();
+    for _ in 0..MAX_OPEN {
+        links.push(create_invite(&site, &cookie).await);
+    }
+    let response = site.post("/invites/revoke", &[], Some(&cookie)).await;
+
+    assert_eq!(location(&response), "/invites");
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    for link in &links {
+        let code = link.rsplit('#').next().unwrap();
+        let invite = site.db.invite(code).await.unwrap().unwrap();
+        assert!(invite.revoked_at.is_some(), "{link}");
+    }
+    let page = invites_tab(&site, &cookie).await;
+    assert!(page.contains(r#"action="/invites""#), "{page}");
+    assert!(!page.contains("open invite"), "{page}");
+    create_invite(&site, &cookie).await;
+}
+
+#[tokio::test]
+async fn revoking_asks_first_and_names_how_many() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let response = site.get("/invites/revoke", Some(&cookie)).await;
+    assert_eq!(location(&response), "/invites");
+
+    create_invite(&site, &cookie).await;
+    create_invite(&site, &cookie).await;
+    let response = site.get("/invites/revoke", Some(&cookie)).await;
+
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let page = body_text(response).await;
+    assert!(page.contains("Revoke your 2 open invites?"), "{page}");
+    assert!(
+        page.contains(r#"<form method="post" action="/invites/revoke">"#),
+        "{page}"
+    );
+    assert_eq!(
+        site.query_scalar::<i64>("SELECT COUNT(*) FROM invites WHERE revoked_at IS NULL")
+            .await,
+        2
+    );
+}
+
+#[tokio::test]
+async fn guests_and_other_origins_revoke_nothing() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    create_invite(&site, &cookie).await;
+    let response = site.post("/invites/revoke", &[], None).await;
+    assert_eq!(location(&response), "/signin");
+    let evil = [(header::ORIGIN.as_str(), "https://evil.example")];
+    let response = site
+        .post_with("/invites/revoke", &[], Some(&cookie), &evil)
+        .await;
+    assert_eq!(response.status(), 403);
+    assert_eq!(
+        site.query_scalar::<i64>("SELECT COUNT(*) FROM invites WHERE revoked_at IS NULL")
+            .await,
+        1
+    );
+}
+
+#[tokio::test]
 async fn lists_the_people_a_member_invited() {
     let site = Site::start().await;
     site.add_member("alice").await;
