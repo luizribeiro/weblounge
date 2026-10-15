@@ -89,7 +89,7 @@ in
       description = "Concierge, the members' site";
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" ];
-      serviceConfig = config.weblounge.sandbox // serviceOnly // {
+      serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // serviceOnly // {
         User = "concierge";
         DynamicUser = true;
         StateDirectory = "concierge";
@@ -105,9 +105,6 @@ in
           "CONCIERGE_ALWAYS_ON_DEFAULT=${multiclient.always-on}"
           "CONCIERGE_AUTO_AWAY_DEFAULT=${multiclient.auto-away}"
         ];
-
-        IPAddressAllow = "localhost";
-        IPAddressDeny = "any";
       };
     };
 

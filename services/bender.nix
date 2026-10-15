@@ -9,7 +9,7 @@ let
   secret = config.weblounge.secrets."${nick}-password";
 in
 {
-  imports = [ ./concierge.nix ./ergo.nix ./secrets.nix ../templates/bot/module.nix ];
+  imports = [ ./concierge.nix ./ergo.nix ./sandbox.nix ./secrets.nix ../templates/bot/module.nix ];
 
   services.weblounge-bot.${nick} = {
     enable = true;
@@ -44,9 +44,6 @@ in
   systemd.services."weblounge-bot-${nick}" = {
     requires = [ "${account}.service" ];
     after = [ "${account}.service" ];
-    serviceConfig = {
-      IPAddressAllow = "localhost";
-      IPAddressDeny = "any";
-    };
+    serviceConfig = config.weblounge.loopbackOnly;
   };
 }

@@ -32,4 +32,14 @@
     };
     description = "serviceConfig that confines an unprivileged service to its own files and Internet sockets.";
   };
+
+  options.weblounge.loopbackOnly = lib.mkOption {
+    type = lib.types.attrsOf lib.types.anything;
+    readOnly = true;
+    default = {
+      IPAddressAllow = "localhost";
+      IPAddressDeny = "any";
+    };
+    description = "serviceConfig for a service that only talks to others on this machine.";
+  };
 }
