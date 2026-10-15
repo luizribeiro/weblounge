@@ -1,18 +1,77 @@
 #!/usr/bin/env bash
 # Usage: scripts/push <toplevel-flake-attr> <ssh-host>
+# Runs the new system on trial and keeps it only if a fresh ssh login and
+# its deploy checks (weblounge.deployChecks) pass. Otherwise the host goes
+# back to the system it was running: right away, or by itself after
+# ROLLBACK_AFTER (10min) if this machine loses touch with it, since the host
+# keeps the timer.
 # Extra ssh options (port, host key checks) go in NIX_SSHOPTS.
 set -euo pipefail
 
 attr=$1
 host=$2
+grace=${ROLLBACK_AFTER:-10min}
+rollback=weblounge-rollback
+# Short enough for a unix socket, which a deep TMPDIR may not be.
+lifeline=$(mktemp -u "${XDG_RUNTIME_DIR:-/tmp}/push.XXXXXX")
+
+# NIX_SSHOPTS is a list of words, and commands expand locally on purpose.
+# shellcheck disable=SC2029,SC2086
+remote() { ssh ${NIX_SSHOPTS:-} -o ControlPath="$lifeline" "$host" "$@"; }
+
+# What an admin locked out by the new sshd would see; a few tries ride out
+# a flaky network.
+# shellcheck disable=SC2086
+can_log_in() {
+  for wait in 5 10 0; do
+    ssh ${NIX_SSHOPTS:-} -o ControlPath=none -o BatchMode=yes -o ConnectTimeout=10 "$host" true && return
+    sleep "$wait"
+  done
+  return 1
+}
+
+# switch-to-configuration refuses to run beside another, so a rollback the
+# timer already started is left to finish first.
+revert() {
+  echo "push: $1; going back to $previous" >&2
+  remote "sudo systemctl stop $rollback.timer; while systemctl -q is-active $rollback.service; do sleep 1; done; \
+    sudo $previous/bin/switch-to-configuration test" \
+    || echo "push: couldn't reach $host; it goes back by itself within $grace" >&2
+  exit 1
+}
+
+# Stopping the timer fails once it has fired, and a rollback that ran leaves
+# the old system current; systemd forgets the transient units themselves.
+keep() {
+  remote "sudo systemctl stop $rollback.timer \
+    && ! systemctl -q is-active $rollback.service \
+    && [ \"\$(readlink /run/current-system)\" = $toplevel ] \
+    && sudo nix-env -p /nix/var/nix/profiles/system --set $toplevel \
+    && sudo $toplevel/bin/switch-to-configuration boot"
+}
+
+# Management goes over one connection, which outlives sshd restarts and
+# notices within seconds when the host stops answering.
+# shellcheck disable=SC2086
+ssh ${NIX_SSHOPTS:-} -o ControlMaster=yes -o ControlPath="$lifeline" -o ControlPersist=yes \
+  -o ServerAliveInterval=5 -o ServerAliveCountMax=3 -fN "$host"
+trap 'ssh -o ControlPath="$lifeline" -O exit "$host" 2>/dev/null' EXIT
 
 toplevel=$(nix build --no-link --print-out-paths "$attr")
 # Trusted users may import unsigned paths regardless; this only stops the
 # daemon rejecting ones we just built (seen on the VM, whose store overlays
 # the host's).
 nix copy --no-check-sigs --to "ssh-ng://$host" "$toplevel"
-# $toplevel expands locally on purpose; NIX_SSHOPTS is a list of words.
-# shellcheck disable=SC2029,SC2086
-ssh ${NIX_SSHOPTS:-} "$host" \
-  "sudo nix-env -p /nix/var/nix/profiles/system --set $toplevel && sudo $toplevel/bin/switch-to-configuration switch"
-scripts/check-units "$host"
+previous=$(remote readlink /run/current-system)
+
+# The timer's unit name also keeps a second push from starting a trial.
+remote "sudo systemd-run --quiet --collect --unit=$rollback --on-active=$grace \
+  $previous/bin/switch-to-configuration test" || { echo "push: couldn't arm the rollback; is another push on trial?" >&2; exit 1; }
+echo "push: on trial; $host goes back to $previous by itself in $grace unless kept" >&2
+remote "sudo $toplevel/bin/switch-to-configuration test" || revert "activating failed"
+
+can_log_in || revert "a fresh ssh login failed"
+remote "$toplevel/deploy-checks-host" || revert "a check on the host failed"
+"$toplevel/deploy-checks-outside" || revert "a check from outside failed"
+keep || revert "keeping it failed"
+echo "push: kept $toplevel" >&2

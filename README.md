@@ -147,8 +147,14 @@ just prod push             # deploy to credenza.weblounge.org
 
 `just prod push` refuses to deploy while deSEC's zone differs from the one
 the hosts generate (`just dns push` first), and waits until every
-nameserver answers the names it orders certificates for. After switching,
-it fails if any unit failed or is waiting to retry.
+nameserver answers the names it orders certificates for.
+
+Every push, to production or the VM, runs the new system on trial. It keeps
+it only if a fresh SSH login works and every deploy check passes; otherwise
+it switches back to the system that was running. Deploy checks are declared
+next to what they check, as `weblounge.deployChecks`, and run on the host or
+from your machine. The host keeps a timer of its own, so it also goes back
+by itself, ten minutes on, if the push loses touch with it.
 
 IRC clients connect to `irc.weblounge.org:6697` over TLS.
 
