@@ -2,11 +2,9 @@
 
 let
   overlaid = pkgs.extend weblounge.overlay;
+  refused = pkgs.testers.testBuildFailure (overlaid.weblounge.ergoConfig { server.max-sendq = "lots"; });
 in
 pkgs.runCommand "ergo-config" { } ''
-  # The base config has no listeners, and nixpkgs' Ergo ships no translations.
-  ln -s ${overlaid.ergochat.src}/languages languages
-  ERGO__SERVER__LISTENERS="{\"$PWD/irc.sock\": {}}" \
-    ${overlaid.ergochat}/bin/ergo run --conf ${overlaid.weblounge.ergoConfig { }} --smoke --quiet
+  grep -q "Could not parse maximum SendQ size" ${refused}/testBuildFailure.log
   touch $out
 ''
