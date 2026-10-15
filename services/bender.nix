@@ -43,7 +43,10 @@ in
 
   systemd.services."weblounge-bot-${nick}" = {
     requires = [ "${account}.service" ];
-    after = [ "${account}.service" ];
+    # Its account's order after ergo doesn't hold when a deploy restarts
+    # ergo and bender but not the account.
+    wants = [ "ergochat.service" ];
+    after = [ "${account}.service" "ergochat.service" ];
     serviceConfig = config.weblounge.loopbackOnly;
   };
 }

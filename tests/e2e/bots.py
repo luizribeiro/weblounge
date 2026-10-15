@@ -60,3 +60,9 @@ with subtest("bender reaches credenza's loopback alone, so a bad dependency can'
     credenza.succeed(in_cgroup_of("weblounge-bot-bender.service", nginx.format("127.0.0.1")))
     credenza.fail(in_cgroup_of("weblounge-bot-bender.service", nginx.format(public)))
     credenza.succeed(nginx.format(public))
+
+with subtest("a deploy that restarts ergo and bender together starts bender once ergo is ready"):
+    restarts = credenza.succeed("systemctl show -P NRestarts weblounge-bot-bender").strip()
+    credenza.succeed("systemctl restart ergochat.service weblounge-bot-bender.service")
+    credenza.wait_for_unit("weblounge-bot-bender.service")
+    assert credenza.succeed("systemctl show -P NRestarts weblounge-bot-bender").strip() == restarts
