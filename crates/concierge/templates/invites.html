@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "components.html" as components %}
 
 {% block title %}Invites{% endblock %}
 
@@ -16,8 +17,12 @@
         <div class="open-invites">
           <p class="muted">You have {{ crate::invite_rules::open_in_words(*invites.open) }}.
             {%- if invites.remaining == 0 %} Another frees up when one is used, expires or is revoked.{% endif %}</p>
-          <a class="button button-small" href="/invites/revoke">Revoke all</a>
+          <a class="button button-small" href="/invites/revoke" data-dialog="revoke-invites">Revoke all</a>
         </div>
+        <dialog class="card" id="revoke-invites" aria-labelledby="revoke-invites-title" aria-describedby="revoke-invites-question">
+          <h2 class="eyebrow" id="revoke-invites-title">Revoke your invites</h2>
+          {%- call components::revoke_invites(invites.open) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep them</button>{% endcall %}
+        </dialog>
         {%- endif %}
         {%- if !invites.invitees.is_empty() %}
         <h3 class="eyebrow">You invited</h3>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "components.html" as components %}
 
 {% block title %}Revoke invites{% endblock %}
 
@@ -6,10 +7,6 @@
       <h1>Invites</h1>
       <section class="card tab-card invites" aria-labelledby="revoke-title">
         <h2 class="eyebrow" id="revoke-title">Revoke your invites</h2>
-        <p>Revoke your {{ crate::invite_rules::open_in_words(*invites.open) }}? The links you shared stop working right away, and you can make new ones.</p>
-        <form method="post" action="/invites/revoke">
-          <button class="button button-primary" type="submit">Revoke all</button>
-          <a class="button" href="/invites">Keep them</a>
-        </form>
+        {%- call components::revoke_invites(invites.open) %}<a class="button" href="/invites">Keep them</a>{% endcall %}
       </section>
 {%- endblock %}

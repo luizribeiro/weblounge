@@ -157,7 +157,7 @@ with subtest("revoking a member's open invites ends their links and frees their 
     assert Browser("jo").sign_up(link, "jo", "jo-never-got-in") == "422 "
     assert "open invite" not in browser.get("/invites", "-f")
 
-with subtest("in a browser, at a phone's width and a desktop's, Revoke all asks first, then revokes"):
+with subtest("in a browser, at a phone's width and a desktop's, Revoke all asks in a dialog first, then revokes"):
     result = client.succeed(f"invites-browser dana {shlex.quote(password)} 2>&1")
     assert "revoking fits and works at both widths" in result, result
     client.copy_from_vm("/tmp/screens")

@@ -345,6 +345,15 @@
   & .open-invites p {
     margin: 0;
   }
+
+  & dialog {
+    width: min(32rem, calc(100% - 2rem));
+    color: var(--fg);
+
+    &::backdrop {
+      background: rgb(0 0 0 / 40%);
+    }
+  }
 }
 
 .invitees,

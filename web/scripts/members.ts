@@ -1,4 +1,5 @@
 import { animateChair } from "./chair/animate";
+import "./dialog";
 import "./invite";
 import "./password";
 import "./signup";

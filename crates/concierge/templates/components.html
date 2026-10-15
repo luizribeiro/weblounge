@@ -85,3 +85,11 @@
               {%- endfor %}
             </ul>
 {%- endmacro %}
+
+{% macro revoke_invites(open) %}
+        <p id="revoke-invites-question">Revoke your {{ crate::invite_rules::open_in_words(*open) }}? The links you shared stop working right away, and you can make new ones.</p>
+        <form method="post" action="/invites/revoke">
+          <button class="button button-primary" type="submit">Revoke all</button>
+          {{ caller() }}
+        </form>
+{%- endmacro %}

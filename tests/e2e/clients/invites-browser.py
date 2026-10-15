@@ -1,6 +1,7 @@
 """Check, at a phone's width and a desktop's, that a member with an open
-invite revokes it from the Invites tab after confirming, and that the
-controls fit the page and are big enough to tap. Saves screenshots in
+invite revokes it from the Invites tab after confirming in a dialog, that
+backing out keeps it, and that the controls, and the page that asks
+without JavaScript, fit and are big enough to tap. Saves screenshots in
 /tmp/screens."""
 
 import os
@@ -33,13 +34,26 @@ def main():
             assert fits(page), name
             page.screenshot(path=f"{SCREENS}/invites-{name}.png", full_page=True)
 
+            dialog = page.locator("dialog#revoke-invites")
             revoke.click()
-            confirm = page.get_by_role("button", name="Revoke all")
-            expect(confirm).to_be_visible()
+            expect(dialog).to_be_visible()
+            expect(dialog.get_by_role("button", name="Keep them")).to_be_focused()
+            assert page.url == f"{MEMBERS}/invites", page.url
+            confirm = dialog.get_by_role("button", name="Revoke all")
             assert confirm.bounding_box()["height"] >= 44, name
+            assert fits(page), name
+            page.screenshot(path=f"{SCREENS}/dialog-{name}.png")
+            dialog.get_by_role("button", name="Keep them").click()
+            expect(dialog).to_be_hidden()
+            expect(page.get_by_text("You have 1 open invite.")).to_be_visible()
+
+            page.goto(f"{MEMBERS}/invites/revoke")
+            expect(page.get_by_role("button", name="Revoke all")).to_be_visible()
             assert fits(page), name
             page.screenshot(path=f"{SCREENS}/revoke-{name}.png", full_page=True)
 
+            page.goto(f"{MEMBERS}/invites")
+            revoke.click()
             confirm.click()
             page.wait_for_url(f"{MEMBERS}/invites")
             expect(page.get_by_text("open invite")).to_have_count(0)
