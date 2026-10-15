@@ -393,20 +393,11 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         let sessions_ended = delete_sessions(&mut *transaction, account).await?;
-        let revoked = sqlx::query!(
-            "UPDATE invites SET revoked_at = ?
-             WHERE created_by = ? AND redeemed_at IS NULL AND revoked_at IS NULL
-               AND expires_at > ?",
-            now,
-            account,
-            now,
-        )
-        .execute(&mut *transaction)
-        .await?;
+        let invites_revoked = revoke_open_invites(&mut *transaction, account, now).await?;
         transaction.commit().await?;
         Ok(Removal {
             sessions_ended,
-            invites_revoked: revoked.rows_affected(),
+            invites_revoked,
             off_the_disk: self.empty_write_ahead_log().await,
         })
     }
@@ -420,6 +411,12 @@ impl Db {
                 .fetch_one(&self.pool)
                 .await;
         matches!(checkpoint, Ok((0, _, _)))
+    }
+
+    /// Revokes the invites `account` made that are still open, or being
+    /// redeemed right now; answers how many.
+    pub async fn revoke_open_invites(&self, account: &str, now: i64) -> sqlx::Result<u64> {
+        revoke_open_invites(&self.pool, account, now).await
     }
 
     pub async fn insert_invite(&self, invite: &NewInvite<'_>) -> sqlx::Result<()> {
@@ -843,6 +840,24 @@ async fn hash_carried_over_codes(connection: &mut SqliteConnection) -> sqlx::Res
     Ok(())
 }
 
+async fn revoke_open_invites(
+    executor: impl SqliteExecutor<'_>,
+    account: &str,
+    now: i64,
+) -> sqlx::Result<u64> {
+    let revoked = sqlx::query!(
+        "UPDATE invites SET revoked_at = ?
+             WHERE created_by = ? AND redeemed_at IS NULL AND revoked_at IS NULL
+               AND expires_at > ?",
+        now,
+        account,
+        now,
+    )
+    .execute(executor)
+    .await?;
+    Ok(revoked.rows_affected())
+}
+
 async fn delete_sessions(executor: impl SqliteExecutor<'_>, account: &str) -> sqlx::Result<u64> {
     let deleted = sqlx::query!("DELETE FROM sessions WHERE account = ?", account)
         .execute(executor)
@@ -1135,6 +1150,46 @@ pub(crate) mod tests {
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(bob.invited_by.as_deref(), Some("alice"));
         assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
+    }
+
+    #[tokio::test]
+    async fn revoking_a_members_open_invites_leaves_every_other_invite_alone() {
+        let (db, _dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, joined_at)
+             VALUES ('alice', 0), ('bob', 0), ('carol', 0);",
+        )
+        .await
+        .unwrap();
+        for (code, created_by, expires_at) in [
+            ("open", "alice", 300),
+            ("claimed", "alice", 300),
+            ("redeemed", "alice", 300),
+            ("expired", "alice", 100),
+            ("revoked", "alice", 300),
+            ("bobs", "bob", 300),
+        ] {
+            add_invite(&db, code, Some(created_by), 50, expires_at).await;
+        }
+        update_invite(&db, "claimed", "claimed_at = 190").await;
+        update_invite(&db, "redeemed", "redeemed_by = 'carol', redeemed_at = 60").await;
+        update_invite(&db, "revoked", "revoked_at = 70").await;
+
+        let revoked = db.revoke_open_invites("alice", 200).await.unwrap();
+
+        assert_eq!(revoked, 2);
+        for (code, revoked_at) in [
+            ("open", Some(200)),
+            ("claimed", Some(200)),
+            ("redeemed", None),
+            ("expired", None),
+            ("revoked", Some(70)),
+            ("bobs", None),
+        ] {
+            let invite = db.invite(code).await.unwrap().unwrap();
+            assert_eq!(invite.revoked_at, revoked_at, "{code}");
+        }
     }
 
     #[tokio::test]
