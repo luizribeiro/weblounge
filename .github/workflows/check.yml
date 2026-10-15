@@ -34,7 +34,10 @@ jobs:
 
       - uses: cachix/install-nix-action@v31
         with:
+          # Each VM test boots two or more VMs; four at once outgrow the
+          # runner's 16 GB, and it gets shut down mid-check.
           extra_nix_config: |
             system-features = nixos-test benchmark big-parallel kvm
+            max-jobs = 2
 
       - run: nix develop --command just check
