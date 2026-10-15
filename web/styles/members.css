@@ -333,11 +333,16 @@
 }
 
 .invites {
-  & form {
+  & form,
+  & .open-invites {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
+    margin: 0;
+  }
+
+  & .open-invites p {
     margin: 0;
   }
 }

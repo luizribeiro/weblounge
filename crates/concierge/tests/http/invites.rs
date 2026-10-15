@@ -150,6 +150,9 @@ async fn revoking_frees_every_place_and_ends_the_links() {
     for _ in 0..MAX_OPEN {
         links.push(create_invite(&site, &cookie).await);
     }
+    let page = invites_tab(&site, &cookie).await;
+    assert!(page.contains(r#"href="/invites/revoke""#), "{page}");
+
     let response = site.post("/invites/revoke", &[], Some(&cookie)).await;
 
     assert_eq!(location(&response), "/invites");
@@ -162,6 +165,7 @@ async fn revoking_frees_every_place_and_ends_the_links() {
     let page = invites_tab(&site, &cookie).await;
     assert!(page.contains(r#"action="/invites""#), "{page}");
     assert!(!page.contains("open invite"), "{page}");
+    assert!(!page.contains(r#"href="/invites/revoke""#), "{page}");
     create_invite(&site, &cookie).await;
 }
 

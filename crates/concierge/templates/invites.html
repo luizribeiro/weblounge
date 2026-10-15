@@ -13,8 +13,11 @@
         </form>
         {%- endif %}
         {%- if invites.open > 0 %}
-        <p class="muted">You have {{ invites.open }} open invite{% if invites.open != 1 %}s{% endif %}.
-          {%- if invites.remaining == 0 %} Another frees up when one is used or expires.{% endif %}</p>
+        <div class="open-invites">
+          <p class="muted">You have {{ crate::invite_rules::open_in_words(*invites.open) }}.
+            {%- if invites.remaining == 0 %} Another frees up when one is used, expires or is revoked.{% endif %}</p>
+          <a class="button button-small" href="/invites/revoke">Revoke all</a>
+        </div>
         {%- endif %}
         {%- if !invites.invitees.is_empty() %}
         <h3 class="eyebrow">You invited</h3>

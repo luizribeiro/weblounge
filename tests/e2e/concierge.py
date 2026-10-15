@@ -150,6 +150,13 @@ with subtest("the invite tree lists a new member under whoever invited them"):
     tree = browser.get("/invites", "-f")
     assert re.search(r'aria-current="true">Dana</strong>.*?<ul>\s*<li>\s*<span>ivy</span>', tree, re.S), tree
 
+with subtest("revoking a member's open invites ends their links and frees their places"):
+    _, link = browser.create_invite()
+    assert "You have 1 open invite." in browser.get("/invites", "-f")
+    assert browser.post("/invites/revoke") == "303 https://members.weblounge.org/invites"
+    assert Browser("jo").sign_up(link, "jo", "jo-never-got-in") == "422 "
+    assert "open invite" not in browser.get("/invites", "-f")
+
 with subtest("the client certificate guide's commands attach a certificate that SASL EXTERNAL logs in with"):
     guide = browser.get("/clients", "-f")
     generate, fingerprint = [
