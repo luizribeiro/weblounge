@@ -1,3 +1,5 @@
+{ lib, ... }:
+
 {
   networking.firewall.enable = true;
 
@@ -50,6 +52,11 @@
     "net.ipv4.conf.*.send_redirects" = 0;
   };
   security.protectKernelImage = true;
+
+  # Setuid root binaries nobody here runs are only ways up for an attacker.
+  security.wrappers = lib.genAttrs
+    [ "fusermount" "fusermount3" "mount" "umount" "newgidmap" "newuidmap" "newgrp" "sg" "su" ]
+    (_: { enable = lib.mkForce false; });
 
   time.timeZone = "UTC";
   i18n.defaultLocale = "en_US.UTF-8";
