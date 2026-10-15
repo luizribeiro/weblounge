@@ -76,6 +76,23 @@ async fn open_invites_are_capped_and_the_tab_says_so() {
 }
 
 #[tokio::test]
+async fn the_tab_counts_open_invites_below_the_cap_too() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    assert!(!invites_tab(&site, &cookie).await.contains("open invite"));
+
+    create_invite(&site, &cookie).await;
+    let page = invites_tab(&site, &cookie).await;
+    assert!(page.contains("You have 1 open invite."), "{page}");
+    assert!(page.contains(r#"action="/invites""#), "{page}");
+
+    create_invite(&site, &cookie).await;
+    let page = invites_tab(&site, &cookie).await;
+    assert!(page.contains("You have 2 open invites."), "{page}");
+}
+
+#[tokio::test]
 async fn an_expired_or_redeemed_invite_frees_its_place() {
     let site = Site::start().await;
     let cookie = alice_with_every_invite_open(&site).await;

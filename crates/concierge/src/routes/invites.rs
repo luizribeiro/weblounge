@@ -88,6 +88,8 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
 /// A member's invites, as the Invites tab shows them.
 pub struct Invites {
     pub invitees: Vec<Invitee>,
+    /// How many are open now.
+    pub open: i64,
     /// How many more may be open now.
     pub remaining: i64,
 }
@@ -98,6 +100,7 @@ impl Invites {
         let rules: Vec<_> = invites.iter().map(db::Invite::rules).collect();
         Ok(Self {
             invitees: app.db.invitees(&member.account).await?,
+            open: invite_rules::open(&rules, now),
             remaining: invite_rules::remaining(&inviter(member), &rules, now),
         })
     }

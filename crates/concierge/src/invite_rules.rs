@@ -68,6 +68,14 @@ pub enum Refusal {
     TooManyOpen,
 }
 
+/// How many of `invites` hold a place now: open, or being redeemed.
+pub fn open<'a>(invites: impl IntoIterator<Item = &'a Invite>, now: i64) -> i64 {
+    invites
+        .into_iter()
+        .filter(|invite| matches!(invite.status(now), Status::Open | Status::Claimed))
+        .count() as i64
+}
+
 /// How many more invites `inviter`, who created `invites`, may create now.
 pub fn remaining<'a>(
     inviter: &Inviter,
@@ -77,11 +85,7 @@ pub fn remaining<'a>(
     if inviter.removed {
         return 0;
     }
-    let open = invites
-        .into_iter()
-        .filter(|invite| matches!(invite.status(now), Status::Open | Status::Claimed))
-        .count();
-    (MAX_OPEN - open as i64).max(0)
+    (MAX_OPEN - open(invites, now)).max(0)
 }
 
 /// Whether `inviter`, who created `invites`, may create another one now.
