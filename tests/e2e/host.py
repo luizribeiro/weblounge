@@ -1,3 +1,4 @@
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -54,3 +55,19 @@ with subtest("the kernel keeps io_uring, its addresses, ptrace and kexec from se
 with subtest("credenza neither follows nor sends ICMP redirects, on any interface"):
     settings = credenza.succeed("sysctl -a -r '\\.(accept|send)_redirects$'").strip().splitlines()
     assert len(settings) > 6 and all(line.endswith(" = 0") for line in settings), settings
+
+
+def unit_file_problems(*paths: str) -> list[str]:
+    """What systemd-analyze objects to in these unit files, beyond upstream units that are masked or name
+    programs left out of this system."""
+    _, output = credenza.execute(f"systemd-analyze verify --man=no --recursive-errors=no {' '.join(paths)} 2>&1")
+    return [line for line in output.splitlines() if not re.search(r"is masked|is not executable", line)]
+
+
+with subtest("systemd knows every setting in credenza's units, so no sandbox option is silently dropped"):
+    credenza.succeed(
+        "printf '[Service]\\nExecStart=/run/current-system/sw/bin/true\\nProtecSystem=strict\\n' > /tmp/typo.service"
+    )
+    assert any("Unknown key 'ProtecSystem'" in line for line in unit_file_problems("/tmp/typo.service"))
+    units = credenza.succeed("ls /etc/systemd/system/*.service /etc/systemd/system/*.timer").split()
+    assert unit_file_problems(*units) == []
