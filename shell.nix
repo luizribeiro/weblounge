@@ -2,6 +2,9 @@
 
 pkgs.mkShell ({
   shellHook = gitHooks.shellHook + ''
+    # git-hooks.nix points core.hooksPath at .git/hooks relative to the working
+    # tree, which a worktree, whose .git is a file, doesn't have.
+    git config --local core.hooksPath "$(git rev-parse --path-format=absolute --git-common-dir)/hooks"
     ln -sfn ${import ./tests/e2e/lib/python.nix { inherit pkgs; }} "$(git rev-parse --show-toplevel)/.python"
   '';
   packages = gitHooks.enabledPackages ++ (with pkgs; [
