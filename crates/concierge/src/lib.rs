@@ -11,6 +11,7 @@ pub mod invite_code;
 pub mod invite_rules;
 pub mod nick;
 pub mod oauth;
+pub mod outbox;
 pub mod password;
 pub mod password_rules;
 pub mod platform;
