@@ -777,8 +777,9 @@ impl Db {
         .await
     }
 
-    /// Leaves `message` for the mailer to send as soon as it can.
-    pub async fn queue_message(&self, message: &outbox::Message, now: i64) -> sqlx::Result<()> {
+    /// Leaves `message` for the mailer to send as soon as it can, and
+    /// answers its id, which the mailer logs it by.
+    pub async fn queue_message(&self, message: &outbox::Message, now: i64) -> sqlx::Result<i64> {
         let (recipient, subject) = (message.to.as_str(), message.subject.as_str());
         sqlx::query!(
             "INSERT INTO outbox (recipient, subject, body, created_at, next_attempt_at)
@@ -791,7 +792,7 @@ impl Db {
         )
         .execute(&self.pool)
         .await
-        .map(drop)
+        .map(|inserted| inserted.last_insert_rowid())
     }
 
     /// The messages due to be tried at `now` that the mailer hasn't given

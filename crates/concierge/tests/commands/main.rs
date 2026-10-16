@@ -3,6 +3,7 @@
 
 mod bot;
 mod invite;
+mod mail;
 mod mailer;
 mod member;
 mod status;

@@ -3,6 +3,7 @@
 
 mod bot;
 mod invite;
+mod mail;
 mod member;
 
 use anyhow::Context;
@@ -39,6 +40,9 @@ pub enum AdminCommand {
     /// Manage members' bots.
     #[command(subcommand)]
     Bot(bot::BotCommand),
+    /// Check that mail goes out.
+    #[command(subcommand)]
+    Mail(mail::MailCommand),
 }
 
 /// Runs `command` and answers with what it prints.
@@ -48,6 +52,7 @@ pub async fn run(command: AdminCommand, config: &Config) -> anyhow::Result<Strin
         AdminCommand::Invite(command) => invite::run(command, &Admin::connect(config).await?).await,
         AdminCommand::Member(command) => member::run(command, &Admin::connect(config).await?).await,
         AdminCommand::Bot(command) => bot::run(command, &Admin::connect(config).await?).await,
+        AdminCommand::Mail(command) => mail::run(command, &Admin::connect(config).await?).await,
     }
 }
 
