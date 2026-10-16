@@ -9,6 +9,7 @@ pub mod db;
 pub mod email;
 pub mod invite_code;
 pub mod invite_rules;
+pub mod mailer;
 pub mod nick;
 pub mod oauth;
 pub mod outbox;
