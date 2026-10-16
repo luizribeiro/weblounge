@@ -13,6 +13,7 @@ clap = { version = "4.6.7", features = ["derive"] }
 ergo-api = { path = "../ergo-api" }
 form_urlencoded = "1.2.2"
 hmac = "0.12.1"
+lettre = { version = "0.11.23", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1-rustls", "rustls-native-certs", "ring"] }
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 rand = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }

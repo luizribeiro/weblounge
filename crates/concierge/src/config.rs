@@ -1,15 +1,23 @@
-use std::{fmt, net::SocketAddr, path::PathBuf};
+use std::{
+    fmt,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Context;
 use axum::http::Uri;
 use ergo_api::{Client, Url};
+use lettre::message::Mailbox;
 
 pub use crate::routes::presence::Presence;
 
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
 pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
 pub const INTROSPECTION_SECRET_CREDENTIAL: &str = "oauth-introspection-secret";
+pub const SMTP_PASSWORD_CREDENTIAL: &str = "smtp-password";
 const DEFAULT_ERGO_API: &str = "http://127.0.0.1:8089";
+/// SMTP submission over implicit TLS.
+const DEFAULT_SMTP_PORT: u16 = 465;
 const DATABASE: &str = "concierge.db";
 const MIN_SESSION_KEY_BYTES: usize = 32;
 
@@ -29,6 +37,18 @@ pub struct Config {
     /// Ergo's multiclient always-on and auto-away, as what members get
     /// until they choose.
     pub presence_defaults: Presence,
+}
+
+/// What concierge-mailer needs: the database it sends the outbox of, and
+/// the SMTP server it logs in to, over implicit TLS.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MailerConfig {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub from: Mailbox,
+    pub state_dir: PathBuf,
+    pub credentials_dir: PathBuf,
 }
 
 /// The address members' IRC clients connect to, over TLS.
@@ -82,12 +102,7 @@ impl Config {
     /// `STATE_DIRECTORY` and `CREDENTIALS_DIRECTORY` are the variables
     /// systemd sets for `StateDirectory=` and `LoadCredential=`.
     pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
-        let require = |name: &'static str| var(name).ok_or(ConfigError::Missing(name));
-        let invalid = |name, value: String, reason| ConfigError::Invalid {
-            name,
-            value,
-            reason,
-        };
+        let require = |name| required(&var, name);
 
         let listen = require("CONCIERGE_LISTEN")?;
         let public_url = require("CONCIERGE_PUBLIC_URL")?;
@@ -169,7 +184,7 @@ impl Config {
     }
 
     pub fn database_path(&self) -> PathBuf {
-        self.state_dir.join(DATABASE)
+        database_in(&self.state_dir)
     }
 
     pub fn read_session_key(&self) -> anyhow::Result<Vec<u8>> {
@@ -204,11 +219,87 @@ impl Config {
     }
 
     fn read_credential(&self, name: &str) -> anyhow::Result<String> {
-        let path = self.credentials_dir.join(name);
-        let value = std::fs::read_to_string(&path)
-            .with_context(|| format!("can't read {}", path.display()))?;
-        Ok(value.trim().to_owned())
+        read_credential(&self.credentials_dir, name)
     }
+}
+
+impl MailerConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let require = |name| required(&var, name);
+        let smtp_host = require("CONCIERGE_SMTP_HOST")?;
+        let smtp_port = var("CONCIERGE_SMTP_PORT").map_or(Ok(DEFAULT_SMTP_PORT), |port| {
+            port.parse()
+                .ok()
+                .filter(|&port| port != 0)
+                .ok_or_else(|| invalid("CONCIERGE_SMTP_PORT", port, "expected a port"))
+        })?;
+        let from = require("CONCIERGE_MAIL_FROM")?;
+        if smtp_host.is_empty() || smtp_host.contains([':', '/']) {
+            return Err(invalid(
+                "CONCIERGE_SMTP_HOST",
+                smtp_host,
+                "expected a host name, without a scheme or port",
+            ));
+        }
+        Ok(Self {
+            smtp_host,
+            smtp_port,
+            smtp_username: require("CONCIERGE_SMTP_USERNAME")?,
+            from: from.parse().map_err(|_| {
+                invalid(
+                    "CONCIERGE_MAIL_FROM",
+                    from.clone(),
+                    "expected an address, or a name and an <address>",
+                )
+            })?,
+            state_dir: require("STATE_DIRECTORY")?.into(),
+            credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
+        })
+    }
+
+    pub fn database_path(&self) -> PathBuf {
+        database_in(&self.state_dir)
+    }
+
+    /// The password of the SMTP server's account.
+    pub fn read_smtp_password(&self) -> anyhow::Result<String> {
+        let password = read_credential(&self.credentials_dir, SMTP_PASSWORD_CREDENTIAL)?;
+        anyhow::ensure!(
+            !password.is_empty(),
+            "the {SMTP_PASSWORD_CREDENTIAL} credential is empty"
+        );
+        Ok(password)
+    }
+}
+
+fn required(
+    var: impl Fn(&str) -> Option<String>,
+    name: &'static str,
+) -> Result<String, ConfigError> {
+    var(name).ok_or(ConfigError::Missing(name))
+}
+
+fn invalid(name: &'static str, value: String, reason: &'static str) -> ConfigError {
+    ConfigError::Invalid {
+        name,
+        value,
+        reason,
+    }
+}
+
+fn database_in(state_dir: &Path) -> PathBuf {
+    state_dir.join(DATABASE)
+}
+
+fn read_credential(credentials_dir: &Path, name: &str) -> anyhow::Result<String> {
+    let path = credentials_dir.join(name);
+    let value =
+        std::fs::read_to_string(&path).with_context(|| format!("can't read {}", path.display()))?;
+    Ok(value.trim().to_owned())
 }
 
 pub fn invite_url(invite_links: &str, code: &str) -> String {
@@ -517,5 +608,100 @@ mod tests {
         std::fs::write(dir.path().join(ERGO_API_TOKEN_CREDENTIAL), "5e5a1c\n").unwrap();
         let client = config.ergo_client().unwrap();
         assert!(format!("{client:?}").contains("http://127.0.0.1:8089/"));
+    }
+
+    const MAILER: [(&str, &str); 5] = [
+        ("CONCIERGE_SMTP_HOST", "shadow.mxrouting.net"),
+        ("CONCIERGE_SMTP_USERNAME", "noreply@weblounge.org"),
+        ("CONCIERGE_MAIL_FROM", "weblounge <noreply@weblounge.org>"),
+        ("STATE_DIRECTORY", "/var/lib/concierge"),
+        (
+            "CREDENTIALS_DIRECTORY",
+            "/run/credentials/concierge-mailer.service",
+        ),
+    ];
+
+    fn mailer_with(overrides: &[(&str, Option<&str>)]) -> Result<MailerConfig, ConfigError> {
+        let mut vars: HashMap<&str, Option<&str>> =
+            MAILER.iter().map(|&(k, v)| (k, Some(v))).collect();
+        vars.extend(overrides.iter().copied());
+        MailerConfig::from_vars(|name| vars.get(name).copied().flatten().map(str::to_owned))
+    }
+
+    #[test]
+    fn the_mailer_needs_only_smtp_settings_and_systemds_directories() {
+        let config = mailer_with(&[]).unwrap();
+        assert_eq!(
+            config,
+            MailerConfig {
+                smtp_host: "shadow.mxrouting.net".into(),
+                smtp_port: 465,
+                smtp_username: "noreply@weblounge.org".into(),
+                from: "weblounge <noreply@weblounge.org>".parse().unwrap(),
+                state_dir: "/var/lib/concierge".into(),
+                credentials_dir: "/run/credentials/concierge-mailer.service".into(),
+            }
+        );
+        assert_eq!(
+            config.database_path(),
+            PathBuf::from("/var/lib/concierge/concierge.db")
+        );
+        assert_eq!(config.from.email.to_string(), "noreply@weblounge.org");
+        assert_eq!(
+            mailer_with(&[("CONCIERGE_SMTP_USERNAME", None)]),
+            Err(ConfigError::Missing("CONCIERGE_SMTP_USERNAME"))
+        );
+    }
+
+    #[test]
+    fn the_mailer_reaches_a_test_server_on_another_port() {
+        let config = mailer_with(&[
+            ("CONCIERGE_SMTP_HOST", Some("mail.weblounge.localhost")),
+            ("CONCIERGE_SMTP_PORT", Some("1465")),
+        ]);
+        let config = config.unwrap();
+        assert_eq!(
+            (config.smtp_host.as_str(), config.smtp_port),
+            ("mail.weblounge.localhost", 1465)
+        );
+    }
+
+    #[test]
+    fn rejects_smtp_hosts_ports_and_senders_it_cant_use() {
+        for (name, value) in [
+            ("CONCIERGE_SMTP_HOST", ""),
+            ("CONCIERGE_SMTP_HOST", "smtps://shadow.mxrouting.net"),
+            ("CONCIERGE_SMTP_HOST", "shadow.mxrouting.net:465"),
+            ("CONCIERGE_SMTP_PORT", "0"),
+            ("CONCIERGE_SMTP_PORT", "smtps"),
+            ("CONCIERGE_SMTP_PORT", "65536"),
+            ("CONCIERGE_MAIL_FROM", "weblounge"),
+            ("CONCIERGE_MAIL_FROM", "weblounge <noreply@weblounge.org"),
+        ] {
+            let error = mailer_with(&[(name, Some(value))]).unwrap_err();
+            assert!(
+                matches!(error, ConfigError::Invalid { name: invalid, .. } if invalid == name),
+                "{name}={value}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn reads_the_smtp_password_and_refuses_an_empty_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = MailerConfig {
+            credentials_dir: dir.path().into(),
+            ..mailer_with(&[]).unwrap()
+        };
+        assert!(config.read_smtp_password().is_err());
+        let path = dir.path().join(SMTP_PASSWORD_CREDENTIAL);
+        std::fs::write(&path, "\n").unwrap();
+        let error = config.read_smtp_password().unwrap_err().to_string();
+        assert!(error.contains("is empty"), "{error}");
+        std::fs::write(&path, "correct horse battery staple\n").unwrap();
+        assert_eq!(
+            config.read_smtp_password().unwrap(),
+            "correct horse battery staple"
+        );
     }
 }
