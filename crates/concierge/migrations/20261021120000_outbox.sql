@@ -3,6 +3,9 @@
 
 CREATE TABLE outbox (
     id INTEGER PRIMARY KEY,
+    -- The member it's for, whose removal takes it too; NULL for mail that's
+    -- for no member, like an admin's test message.
+    account TEXT REFERENCES members (account),
     recipient TEXT NOT NULL,
     subject TEXT NOT NULL,
     body TEXT NOT NULL,

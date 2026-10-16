@@ -65,6 +65,8 @@ impl Subject {
 /// A plain-text message to queue.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message {
+    /// The member it's for, if any, whose removal deletes it.
+    pub account: Option<String>,
     pub to: Email,
     pub subject: Subject,
     pub body: String,

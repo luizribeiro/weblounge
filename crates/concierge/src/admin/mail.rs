@@ -26,6 +26,7 @@ pub(super) async fn run(command: MailCommand, admin: &Admin) -> anyhow::Result<S
 
 async fn test(admin: &Admin, address: &str) -> anyhow::Result<String> {
     let message = Message {
+        account: None,
         to: Email::parse(address)?,
         subject: Subject::parse(TEST_SUBJECT)?,
         body: TEST_BODY.into(),

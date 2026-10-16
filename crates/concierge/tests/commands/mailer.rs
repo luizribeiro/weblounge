@@ -71,6 +71,7 @@ fn log_until(mailer: &mut Child, until: impl Fn(&str) -> bool) -> Vec<String> {
 async fn retries_mail_it_cannot_send_and_logs_no_address() {
     let fixture = Fixture::start().await;
     let message = Message {
+        account: None,
         to: Email::parse("alice@example.org").unwrap(),
         subject: Subject::parse("Verify your email for weblounge").unwrap(),
         body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa\n".into(),

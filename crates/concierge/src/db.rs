@@ -404,13 +404,9 @@ impl Db {
     /// invited stay attached.
     pub async fn remove_member(&self, account: &str, now: i64) -> sqlx::Result<Removal> {
         let mut transaction = self.pool.begin().await?;
-        sqlx::query!(
-            "DELETE FROM outbox
-             WHERE recipient = (SELECT email FROM members WHERE account = ?)",
-            account,
-        )
-        .execute(&mut *transaction)
-        .await?;
+        sqlx::query!("DELETE FROM outbox WHERE account = ?", account)
+            .execute(&mut *transaction)
+            .await?;
         sqlx::query!(
             "UPDATE members
              SET email = NULL, email_verified_at = NULL, news_opt_in = FALSE,
@@ -782,8 +778,9 @@ impl Db {
     pub async fn queue_message(&self, message: &outbox::Message, now: i64) -> sqlx::Result<i64> {
         let (recipient, subject) = (message.to.as_str(), message.subject.as_str());
         sqlx::query!(
-            "INSERT INTO outbox (recipient, subject, body, created_at, next_attempt_at)
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO outbox (account, recipient, subject, body, created_at, next_attempt_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
+            message.account,
             recipient,
             subject,
             message.body,
@@ -1305,14 +1302,6 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(secure_delete, 1);
-        execute(
-            &db,
-            "INSERT INTO members (account, email, joined_at)
-             VALUES ('alice', 'alice@example.org', 10),
-                    ('bob', 'bob@example.org', 20);",
-        )
-        .await
-        .unwrap();
 
         let removal = db.remove_member("alice", 200).await.unwrap();
 
@@ -1321,6 +1310,30 @@ pub(crate) mod tests {
         assert!(files_contain(&dir, b"bob@example.org"));
         let due = db.due_messages(QUEUED + 60).await.unwrap();
         assert_eq!(recipients(&due), ["bob@example.org"]);
+    }
+
+    #[tokio::test]
+    async fn a_removed_members_mail_goes_but_not_others_mail_to_the_same_address() {
+        let (db, _dir) = with_outbox().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('carol', 'alice@example.org', 30);",
+        )
+        .await
+        .unwrap();
+        for account in [Some("carol"), None] {
+            let message = message(account, "alice@example.org", VERIFY_SUBJECT);
+            db.queue_message(&message, QUEUED + 120).await.unwrap();
+        }
+
+        db.remove_member("alice", 200).await.unwrap();
+
+        let due = db.due_messages(QUEUED + 120).await.unwrap();
+        assert_eq!(
+            recipients(&due),
+            ["bob@example.org", "alice@example.org", "alice@example.org"]
+        );
     }
 
     /// Whether any of the database's files in `dir` holds `text`.
@@ -1913,25 +1926,35 @@ pub(crate) mod tests {
     pub(crate) const QUEUED: i64 = 1_760_000_000;
     pub(crate) const VERIFY_SUBJECT: &str = "Verify your email for weblounge";
 
-    fn message(to: &str, subject: &str) -> outbox::Message {
+    fn message(account: Option<&str>, to: &str, subject: &str) -> outbox::Message {
         outbox::Message {
+            account: account.map(Into::into),
             to: crate::email::Email::parse(to).unwrap(),
             subject: outbox::Subject::parse(subject).unwrap(),
-            body: "Hi,\n\n\
-                Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
-                the address you gave weblounge.org. Zoë says hello.\n"
-                .into(),
+            body: format!(
+                "Hi {},\n\n\
+                 Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
+                 the address you gave weblounge.org. Zoë says hello.\n",
+                account.unwrap_or("there"),
+            ),
         }
     }
 
-    /// alice's verification email, then bob's a minute later.
+    /// Members alice and bob, and alice's verification email, then bob's a
+    /// minute later.
     pub(crate) async fn with_outbox() -> (Db, tempfile::TempDir) {
         let (db, dir) = temp_db().await;
-        for (to, queued_at) in [
-            ("alice@example.org", QUEUED),
-            ("bob@example.org", QUEUED + 60),
-        ] {
-            let message = message(to, VERIFY_SUBJECT);
+        execute(
+            &db,
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('alice', 'alice@example.org', 10),
+                    ('bob', 'bob@example.org', 20);",
+        )
+        .await
+        .unwrap();
+        for (account, queued_at) in [("alice", QUEUED), ("bob", QUEUED + 60)] {
+            let to = format!("{account}@example.org");
+            let message = message(Some(account), &to, VERIFY_SUBJECT);
             db.queue_message(&message, queued_at).await.unwrap();
         }
         (db, dir)
@@ -1955,7 +1978,7 @@ pub(crate) mod tests {
                 id: due[0].id,
                 recipient: "alice@example.org".into(),
                 subject: "Verify your email for weblounge".into(),
-                body: message("alice@example.org", "-").body,
+                body: message(Some("alice"), "alice@example.org", "-").body,
                 created_at: QUEUED,
                 attempts: 0,
             }
@@ -2035,8 +2058,8 @@ pub(crate) mod tests {
                 off_the_disk: true,
             }
         );
-        assert!(!files_contain(&dir, b"alice@example.org"));
-        assert!(files_contain(&dir, b"bob@example.org"));
+        assert!(!files_contain(&dir, b"Hi alice,"));
+        assert!(files_contain(&dir, b"Hi bob,"));
         assert_eq!(db.delete_message(alice.id).await.unwrap().messages, 0);
     }
 }
