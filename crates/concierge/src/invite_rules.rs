@@ -68,12 +68,25 @@ pub enum Refusal {
     TooManyOpen,
 }
 
+fn holds_a_place(invite: &Invite, now: i64) -> bool {
+    matches!(invite.status(now), Status::Open | Status::Claimed)
+}
+
 /// How many of `invites` hold a place now: open, or being redeemed.
 pub fn open<'a>(invites: impl IntoIterator<Item = &'a Invite>, now: i64) -> i64 {
     invites
         .into_iter()
-        .filter(|invite| matches!(invite.status(now), Status::Open | Status::Claimed))
+        .filter(|invite| holds_a_place(invite, now))
         .count() as i64
+}
+
+/// Seconds until the first of `invites` still unused expires, if any is.
+pub fn first_expiry_in<'a>(invites: impl IntoIterator<Item = &'a Invite>, now: i64) -> Option<i64> {
+    invites
+        .into_iter()
+        .filter(|invite| holds_a_place(invite, now))
+        .map(|invite| invite.expires_at - now)
+        .min()
 }
 
 /// How many more invites `inviter`, who created `invites`, may create now.
@@ -107,6 +120,12 @@ pub fn may_invite<'a>(
 pub fn open_in_words(n: i64) -> String {
     let plural = if n == 1 { "" } else { "s" };
     format!("{n} open invite{plural}")
+}
+
+/// A wait of `seconds` in words, rounded up to the hour so it never
+/// promises less than the wait.
+pub fn wait_in_words(seconds: i64) -> String {
+    in_words((seconds + HOUR - 1) / HOUR * HOUR)
 }
 
 /// A duration of `seconds`, in words: "6 days", "24 hours", "1 hour".
@@ -223,6 +242,28 @@ mod tests {
         assert_eq!(in_words(DAY + HOUR), "25 hours");
         assert_eq!(in_words(5 * HOUR + 59), "5 hours");
         assert_eq!(in_words(60), "1 hour");
+    }
+
+    #[test]
+    fn the_first_expiry_is_the_earliest_among_unused_invites() {
+        let now = JOINED + 10 * HOUR;
+        let invites = [
+            redeemed(JOINED),
+            revoked(JOINED),
+            open(JOINED - LIFETIME),
+            claimed(JOINED + 2 * HOUR),
+            open(JOINED + 4 * HOUR),
+        ];
+        assert_eq!(first_expiry_in(&invites, now), Some(16 * HOUR));
+        assert_eq!(first_expiry_in(&invites[..3], now), None);
+    }
+
+    #[test]
+    fn says_waits_rounded_up_to_the_hour() {
+        assert_eq!(wait_in_words(5 * HOUR + 59), "6 hours");
+        assert_eq!(wait_in_words(6 * HOUR), "6 hours");
+        assert_eq!(wait_in_words(60), "1 hour");
+        assert_eq!(wait_in_words(LIFETIME), "24 hours");
     }
 
     #[test]
