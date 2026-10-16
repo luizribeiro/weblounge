@@ -11,7 +11,8 @@ TIMEOUT_MS = 30_000
 
 
 @contextmanager
-def browsing():
+def browsing(expected_errors=()):
+    """expected_errors: substrings of console errors the caller provokes."""
     errors = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(args=["--host-resolver-rules=MAP *.weblounge.org credenza"])
@@ -21,13 +22,14 @@ def browsing():
         page.on("console", lambda message: message.type == "error" and errors.append(message.text))
         yield page
         browser.close()
+    errors = [error for error in errors if not any(expected in error for expected in expected_errors)]
     if errors:
         raise SystemExit("console errors:\n" + "\n".join(errors))
 
 
 @contextmanager
-def signed_in(nick, password):
-    with browsing() as page:
+def signed_in(nick, password, expected_errors=()):
+    with browsing(expected_errors) as page:
         page.goto(f"{MEMBERS}/signin")
         page.fill("#nick", nick)
         page.fill("#password", password)

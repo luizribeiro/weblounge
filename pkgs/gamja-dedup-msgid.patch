@@ -1,0 +1,15 @@
+diff --git a/state.js b/state.js
+index 52ed1df..67ffefa 100644
+--- a/state.js
++++ b/state.js
+@@ -215,6 +215,10 @@ function updateMembership(membership, letter, add, client) {
+ 
+ /* Insert a message in an immutable list of sorted messages. */
+ function insertMessage(list, msg) {
++	// A message arriving live while the backlog is fetched comes twice
++	if (msg.tags.msgid && list.some((other) => other.tags.msgid === msg.tags.msgid)) {
++		return list;
++	}
+ 	if (list.length === 0) {
+ 		return [msg];
+ 	} else if (!irc.findBatchByType(msg, "chathistory") || list[list.length - 1].tags.time <= msg.tags.time) {

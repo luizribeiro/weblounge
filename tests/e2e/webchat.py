@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 webchat = "https://irc.weblounge.org"
 grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
+ada: Account = {"account": "ada", "password": "the-analytical-engine"}
 graces_browser = Browser("grace")
 
 
@@ -175,6 +176,12 @@ with subtest("a token for a member without an Ergo account creates none"):
 with subtest("in a browser, a signed-in member opens irc.weblounge.org and lands in #lounge"):
     page = client.succeed(f"webchat-browser {grace['account']} {shlex.quote(grace['password'])} 2>&1")
     assert "#lounge" in page, page
+
+with subtest("gamja shows each line once when one arrives while it catches up after a reconnect"):
+    add_member(**ada)
+    browser = ["webchat-reconnect-browser", grace["account"], grace["password"], ada["account"], ada["password"]]
+    shown = json.loads(client.succeed(shlex.join(browser)))
+    assert set(shown.values()) == {1}, shown
 
 with subtest("tokens and codes never reach the journal"):
     credenza.succeed("journalctl --sync")
