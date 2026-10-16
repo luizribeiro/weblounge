@@ -123,6 +123,11 @@ pub fn unused_in_words(n: i64) -> String {
     format!("{n} unused invite{plural}")
 }
 
+/// How long an invite stays open, in words.
+pub fn lifetime_in_words() -> String {
+    in_words(LIFETIME)
+}
+
 /// A wait of `seconds` in words, rounded up to the hour so it never
 /// promises less than the wait.
 pub fn wait_in_words(seconds: i64) -> String {
@@ -252,7 +257,10 @@ mod tests {
             redeemed(JOINED),
             revoked(JOINED),
             open(JOINED - LIFETIME),
-            claimed(JOINED + 2 * HOUR),
+            Invite {
+                claimed_at: Some(now),
+                ..open(JOINED + 2 * HOUR)
+            },
             open(JOINED + 4 * HOUR),
         ];
         assert_eq!(first_expiry_in(&invites, now), Some(16 * HOUR));

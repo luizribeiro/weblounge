@@ -7,25 +7,26 @@
       <h1>Invites</h1>
       <section class="card tab-card invites" aria-labelledby="invites-title">
         <h2 class="eyebrow" id="invites-title">Your invites</h2>
-        {%- if invites.remaining > 0 %}
-        <form method="post" action="/invites">
-          <button class="button" type="submit">Invite someone</button>
-          <span class="muted">Up to {{ crate::invite_rules::MAX_OPEN }} open at a time.</span>
-        </form>
-        {%- endif %}
-        {%- if invites.open > 0 %}
-        <div class="open-invites">
-          <p class="muted">You have {{ crate::invite_rules::unused_in_words(*invites.open) }}.
-            {%- if invites.remaining == 0 %} Another frees up when one is used, expires or is revoked.{% endif %}</p>
-          <a class="button button-small" href="/invites/revoke" data-dialog="revoke-invites">Revoke all</a>
+        <p class="invite-count"><span class="invite-count-number">{{ invites.remaining }} of {{ crate::invite_rules::MAX_OPEN }}</span> invites available</p>
+        <div class="invite-meter" aria-hidden="true">
+          {%- for slot in 0..crate::invite_rules::MAX_OPEN %}<span{% if slot < invites.remaining %} class="available"{% endif %}></span>{% endfor -%}
         </div>
-        <dialog class="card" id="revoke-invites" aria-labelledby="revoke-invites-title" aria-describedby="revoke-invites-question">
-          <h2 class="eyebrow" id="revoke-invites-title">Revoke your invites</h2>
-          {%- call components::revoke_invites(invites.open) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep them</button>{% endcall %}
-        </dialog>
-        {%- endif %}
+        <p class="hint">Each invite works once and expires after {{ lifetime }}.
+          {%- if let Some(wait) = invites.first_expires_in %} Your oldest unused invite expires in {{ wait }}.{% endif %}</p>
+        <div class="invite-actions">
+          <form method="post" action="/invites">
+            <button class="button button-primary" type="submit"{% if invites.remaining == 0 %} disabled{% endif %}>Invite someone</button>
+          </form>
+          {%- if invites.open > 0 %}
+          <a class="revoke-link" href="/invites/revoke" data-dialog="revoke-invites">Revoke unused invites</a>
+          <dialog class="card" id="revoke-invites" aria-labelledby="revoke-invites-title" aria-describedby="revoke-invites-question">
+            <h2 class="eyebrow" id="revoke-invites-title">Revoke your invites</h2>
+            {%- call components::revoke_invites(invites.open) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep them</button>{% endcall %}
+          </dialog>
+          {%- endif %}
+        </div>
         {%- if !invites.invitees.is_empty() %}
-        <h3 class="eyebrow">You invited</h3>
+        <h3 class="eyebrow invitees-title">You invited</h3>
         <ul class="invitees">
           {%- for invitee in invites.invitees %}
           <li>{{ invitee.account }}{% if invitee.removed %} <span class="muted">(left)</span>{% endif %}</li>

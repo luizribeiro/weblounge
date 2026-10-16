@@ -28,7 +28,7 @@ def main():
             page.goto(f"{MEMBERS}/invites")
             page.get_by_role("button", name="Invite someone").click()
             page.goto(f"{MEMBERS}/invites")
-            revoke = page.get_by_role("link", name="Revoke all")
+            revoke = page.get_by_role("link", name="Revoke unused invites")
             expect(revoke).to_be_visible()
             assert revoke.bounding_box()["height"] >= 44, name
             assert fits(page), name
@@ -45,7 +45,7 @@ def main():
             page.screenshot(path=f"{SCREENS}/dialog-{name}.png")
             dialog.get_by_role("button", name="Keep them").click()
             expect(dialog).to_be_hidden()
-            expect(page.get_by_text("You have 1 unused invite.")).to_be_visible()
+            expect(page.get_by_text("Your oldest unused invite expires in 24 hours.")).to_be_visible()
 
             page.goto(f"{MEMBERS}/invites/revoke")
             expect(page.get_by_role("button", name="Revoke all")).to_be_visible()
@@ -56,7 +56,7 @@ def main():
             revoke.click()
             confirm.click()
             page.wait_for_url(f"{MEMBERS}/invites")
-            expect(page.get_by_text("unused invite")).to_have_count(0)
+            expect(page.get_by_text("oldest unused")).to_have_count(0)
         print("revoking fits and works at both widths")
 
 

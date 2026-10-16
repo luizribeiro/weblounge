@@ -152,10 +152,10 @@ with subtest("the invite tree lists a new member under whoever invited them"):
 
 with subtest("revoking a member's open invites ends their links and frees their places"):
     _, link = browser.create_invite()
-    assert "You have 1 unused invite." in browser.get("/invites", "-f")
+    assert "Your oldest unused invite expires in 24 hours." in browser.get("/invites", "-f")
     assert browser.post("/invites/revoke") == "303 https://members.weblounge.org/invites"
     assert Browser("jo").sign_up(link, "jo", "jo-never-got-in") == "422 "
-    assert "unused invite" not in browser.get("/invites", "-f")
+    assert "oldest unused" not in browser.get("/invites", "-f")
 
 with subtest("in a browser, at a phone's width and a desktop's, Revoke all asks in a dialog first, then revokes"):
     result = client.succeed(f"invites-browser dana {shlex.quote(password)} 2>&1")

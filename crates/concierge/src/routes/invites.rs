@@ -26,6 +26,7 @@ struct InvitesPage<'a> {
     layout: Layout<'a>,
     nick: &'a str,
     invites: Invites,
+    lifetime: String,
     lines: Vec<Line>,
 }
 
@@ -59,6 +60,7 @@ pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember)
         layout: Layout::new(&app, Some(&member.account)).on(Tab::Invites),
         nick: &member.account,
         invites,
+        lifetime: invite_rules::lifetime_in_words(),
         lines: tree::lines(branches),
     })
 }
@@ -85,7 +87,7 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
                 layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Invites),
                 svg: qr::svg(&url),
                 url,
-                lifetime: invite_rules::in_words(invite_rules::LIFETIME),
+                lifetime: invite_rules::lifetime_in_words(),
             })
         }
         Ok(false) => Redirect::to("/invites").into_response(),
@@ -129,6 +131,8 @@ pub struct Invites {
     pub open: i64,
     /// How many more may be open now.
     pub remaining: i64,
+    /// How long until the first unused one expires, in words.
+    pub first_expires_in: Option<String>,
 }
 
 impl Invites {
@@ -139,6 +143,8 @@ impl Invites {
             invitees: app.db.invitees(&member.account).await?,
             open: invite_rules::open(&rules, now),
             remaining: invite_rules::remaining(&inviter(member), &rules, now),
+            first_expires_in: invite_rules::first_expiry_in(&rules, now)
+                .map(invite_rules::wait_in_words),
         })
     }
 }

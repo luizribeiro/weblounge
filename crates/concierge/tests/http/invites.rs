@@ -44,11 +44,19 @@ async fn a_new_invite_shows_its_link_and_qr_code_once() {
 
     let tab = invites_tab(&site, &cookie).await;
     assert!(invite_links(&tab).is_empty(), "{tab}");
-    assert!(tab.contains("Up to 3 open at a time."), "{tab}");
+    assert!(tab.contains(&available(2)), "{tab}");
     let code = link.rsplit('#').next().unwrap();
     let invite = site.db.invite(code).await.unwrap().unwrap();
     assert_eq!(invite.created_by.as_deref(), Some("alice"));
 }
+
+/// How the Invites tab says `n` more invites may be made.
+fn available(n: i64) -> String {
+    format!(r#"<span class="invite-count-number">{n} of {MAX_OPEN}</span> invites available"#)
+}
+
+const INVITE_BUTTON: &str =
+    r#"<button class="button button-primary" type="submit">Invite someone</button>"#;
 
 /// alice, signed in with the answered cookie, with as many open invites
 /// as anyone may have.
@@ -71,25 +79,35 @@ async fn open_invites_are_capped_and_the_tab_says_so() {
     assert_eq!(location(&response), "/invites");
     assert_eq!(invite_count(&site).await, MAX_OPEN);
     let page = invites_tab(&site, &cookie).await;
-    assert!(page.contains("You have 3 unused invites."), "{page}");
-    assert!(!page.contains(r#"action="/invites""#), "{page}");
+    assert!(page.contains(&available(0)), "{page}");
+    assert!(
+        page.contains(r#"type="submit" disabled>Invite someone</button>"#),
+        "{page}"
+    );
 }
 
 #[tokio::test]
-async fn the_tab_counts_open_invites_below_the_cap_too() {
+async fn the_tab_counts_the_invites_left_and_says_when_the_oldest_expires() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    assert!(!invites_tab(&site, &cookie).await.contains("unused invite"));
+    let page = invites_tab(&site, &cookie).await;
+    assert!(page.contains(&available(3)), "{page}");
+    assert!(page.contains(INVITE_BUTTON), "{page}");
+    assert!(page.contains("expires after 24 hours."), "{page}");
+    assert!(!page.contains("oldest unused"), "{page}");
 
     create_invite(&site, &cookie).await;
-    let page = invites_tab(&site, &cookie).await;
-    assert!(page.contains("You have 1 unused invite."), "{page}");
-    assert!(page.contains(r#"action="/invites""#), "{page}");
-
+    site.execute("UPDATE invites SET expires_at = unixepoch() + 5 * 3600 + 60")
+        .await;
     create_invite(&site, &cookie).await;
     let page = invites_tab(&site, &cookie).await;
-    assert!(page.contains("You have 2 unused invites."), "{page}");
+    assert!(page.contains(&available(1)), "{page}");
+    assert!(page.contains(INVITE_BUTTON), "{page}");
+    assert!(
+        page.contains("Your oldest unused invite expires in 6 hours."),
+        "{page}"
+    );
 }
 
 #[tokio::test]
@@ -163,8 +181,7 @@ async fn revoking_frees_every_place_and_ends_the_links() {
         assert!(invite.revoked_at.is_some(), "{link}");
     }
     let page = invites_tab(&site, &cookie).await;
-    assert!(page.contains(r#"action="/invites""#), "{page}");
-    assert!(!page.contains("unused invite"), "{page}");
+    assert!(page.contains(&available(MAX_OPEN)), "{page}");
     assert!(!page.contains(r#"href="/invites/revoke""#), "{page}");
     create_invite(&site, &cookie).await;
 }
