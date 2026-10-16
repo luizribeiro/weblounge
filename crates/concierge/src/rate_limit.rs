@@ -85,6 +85,16 @@ impl<K: Eq + Hash> Recent<K> {
             .is_none_or(|times| self.prune(times, now).len() < limit)
     }
 
+    /// Records `key` if it was seen fewer than `limit` times in the
+    /// window; answers whether it did.
+    fn take(&self, key: K, limit: usize, now: Instant) -> bool {
+        let allowed = self.under(&key, limit, now);
+        if allowed {
+            self.record(key, now);
+        }
+        allowed
+    }
+
     fn record(&self, key: K, now: Instant) {
         let mut times = self.lock();
         if times.len() > PRUNE_ABOVE {
@@ -180,14 +190,27 @@ impl AddressLimiter {
 
     /// Whether another request from `address` may go ahead, counting it if so.
     pub fn allows(&self, address: Option<IpAddr>, now: Instant) -> bool {
-        let Some(address) = address else {
-            return true;
-        };
-        let allowed = self.requests.under(&address, self.limit, now);
-        if allowed {
-            self.requests.record(address, now);
+        address.is_none_or(|address| self.requests.take(address, self.limit, now))
+    }
+}
+
+/// Uses of something shared in the last `window`, up to a limit.
+pub struct Quota {
+    uses: Recent<()>,
+    limit: usize,
+}
+
+impl Quota {
+    pub fn new(limit: usize, window: Duration) -> Self {
+        Self {
+            uses: Recent::new(window),
+            limit,
         }
-        allowed
+    }
+
+    /// Whether another use may go ahead, counting it if so.
+    pub fn take(&self, now: Instant) -> bool {
+        self.uses.take((), self.limit, now)
     }
 }
 
@@ -292,6 +315,20 @@ mod tests {
         assert!(lookups.allows(CAFE, start));
         assert!(lookups.allows(None, start));
         assert!(lookups.allows(HOME, start + WINDOW));
+    }
+
+    #[test]
+    fn a_quota_refills_as_uses_leave_the_window() {
+        let (start, hour) = (Instant::now(), Duration::from_secs(3600));
+        let quota = Quota::new(3, hour);
+        let minute = |minutes: u64| start + Duration::from_secs(60 * minutes);
+        for minutes in [0, 10, 20] {
+            assert!(quota.take(minute(minutes)));
+        }
+        assert!(!quota.take(minute(59)));
+        assert!(quota.take(minute(60)));
+        assert!(!quota.take(minute(69)));
+        assert!(quota.take(minute(70)));
     }
 
     #[test]
