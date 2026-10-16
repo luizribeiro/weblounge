@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM outbox\n             WHERE recipient = (SELECT email FROM members WHERE account = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4cab7dcb0530d9dd2e318a6dc111320196c672051ed32d9f960b9069e9048520"
+}

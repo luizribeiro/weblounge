@@ -398,11 +398,19 @@ impl Db {
         Ok(deleted.rows_affected())
     }
 
-    /// Clears everything personal about a member, ends their sessions and
-    /// revokes their open invites. Their row stays as their place in the
-    /// invite tree, so the people they invited stay attached.
+    /// Clears everything personal about a member, mail waiting for them
+    /// included, ends their sessions and revokes their open invites. Their
+    /// row stays as their place in the invite tree, so the people they
+    /// invited stay attached.
     pub async fn remove_member(&self, account: &str, now: i64) -> sqlx::Result<Removal> {
         let mut transaction = self.pool.begin().await?;
+        sqlx::query!(
+            "DELETE FROM outbox
+             WHERE recipient = (SELECT email FROM members WHERE account = ?)",
+            account,
+        )
+        .execute(&mut *transaction)
+        .await?;
         sqlx::query!(
             "UPDATE members
              SET email = NULL, email_verified_at = NULL, news_opt_in = FALSE,
@@ -1289,8 +1297,8 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn a_removed_members_email_leaves_the_database_files() {
-        let (db, dir) = temp_db().await;
+    async fn a_removed_members_email_and_mail_leave_the_database_files() {
+        let (db, dir) = with_outbox().await;
         let secure_delete: i64 = sqlx::query_scalar("PRAGMA secure_delete")
             .fetch_one(&db.pool)
             .await
@@ -1310,6 +1318,8 @@ pub(crate) mod tests {
         assert!(removal.off_the_disk);
         assert!(!files_contain(&dir, b"alice@example.org"));
         assert!(files_contain(&dir, b"bob@example.org"));
+        let due = db.due_messages(QUEUED + 60).await.unwrap();
+        assert_eq!(recipients(&due), ["bob@example.org"]);
     }
 
     /// Whether any of the database's files in `dir` holds `text`.
