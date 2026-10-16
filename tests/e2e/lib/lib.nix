@@ -42,7 +42,7 @@ pkgs.testers.runNixOSTest {
 
   nodes = {
     credenza = {
-      imports = weblounge.hostModules "credenza" ++ [ ../../../modules/offline-acme.nix (test.credenza or { }) ];
+      imports = weblounge.hostModules "credenza" ++ [ ../../../modules/offline-acme.nix ../../../modules/vm-secrets.nix (test.credenza or { }) ];
       environment.systemPackages = [ pkgs.curl ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [

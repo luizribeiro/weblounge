@@ -1,8 +1,15 @@
 ---
 keys:
   - &luiz 97A0AE5E03F3499B7D7A65C676A4143237EF5817
+  # Its private half is committed, in vm-age.key: VMs can't have
+  # credenza's host key, and vm.yaml only holds stand-ins.
+  - &vm age1vmfqe3jwnvkse5df0vkztjcsgwvpusl4354hnq9x7rckfeg4v5aqjwpjf9
 creation_rules:
   - path_regex: secrets/dns\.yaml$
     key_groups:
       - pgp:
           - *luiz
+  - path_regex: secrets/vm\.yaml$
+    key_groups:
+      - age:
+          - *vm

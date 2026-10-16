@@ -12,7 +12,7 @@ let
 in
 {
   virtualisation.vmVariant = {
-    imports = [ ./offline-acme.nix ];
+    imports = [ ./offline-acme.nix ./vm-secrets.nix ];
 
     # Browsers resolve *.localhost to loopback, where the ports are forwarded.
     weblounge.domain = "weblounge.localhost";
