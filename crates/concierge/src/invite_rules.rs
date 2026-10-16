@@ -116,10 +116,11 @@ pub fn may_invite<'a>(
     }
 }
 
-/// `n` open invites, in words: "1 open invite", "3 open invites".
-pub fn open_in_words(n: i64) -> String {
+/// `n` open invites as members see them: "1 unused invite", "3 unused
+/// invites". Open could read as opened by its invitee.
+pub fn unused_in_words(n: i64) -> String {
     let plural = if n == 1 { "" } else { "s" };
-    format!("{n} open invite{plural}")
+    format!("{n} unused invite{plural}")
 }
 
 /// A wait of `seconds` in words, rounded up to the hour so it never

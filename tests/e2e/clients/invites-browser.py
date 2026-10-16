@@ -45,7 +45,7 @@ def main():
             page.screenshot(path=f"{SCREENS}/dialog-{name}.png")
             dialog.get_by_role("button", name="Keep them").click()
             expect(dialog).to_be_hidden()
-            expect(page.get_by_text("You have 1 open invite.")).to_be_visible()
+            expect(page.get_by_text("You have 1 unused invite.")).to_be_visible()
 
             page.goto(f"{MEMBERS}/invites/revoke")
             expect(page.get_by_role("button", name="Revoke all")).to_be_visible()
@@ -56,7 +56,7 @@ def main():
             revoke.click()
             confirm.click()
             page.wait_for_url(f"{MEMBERS}/invites")
-            expect(page.get_by_text("open invite")).to_have_count(0)
+            expect(page.get_by_text("unused invite")).to_have_count(0)
         print("revoking fits and works at both widths")
 
 

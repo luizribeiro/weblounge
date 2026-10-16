@@ -15,7 +15,7 @@
         {%- endif %}
         {%- if invites.open > 0 %}
         <div class="open-invites">
-          <p class="muted">You have {{ crate::invite_rules::open_in_words(*invites.open) }}.
+          <p class="muted">You have {{ crate::invite_rules::unused_in_words(*invites.open) }}.
             {%- if invites.remaining == 0 %} Another frees up when one is used, expires or is revoked.{% endif %}</p>
           <a class="button button-small" href="/invites/revoke" data-dialog="revoke-invites">Revoke all</a>
         </div>

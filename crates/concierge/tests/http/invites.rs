@@ -71,7 +71,7 @@ async fn open_invites_are_capped_and_the_tab_says_so() {
     assert_eq!(location(&response), "/invites");
     assert_eq!(invite_count(&site).await, MAX_OPEN);
     let page = invites_tab(&site, &cookie).await;
-    assert!(page.contains("You have 3 open invites."), "{page}");
+    assert!(page.contains("You have 3 unused invites."), "{page}");
     assert!(!page.contains(r#"action="/invites""#), "{page}");
 }
 
@@ -80,16 +80,16 @@ async fn the_tab_counts_open_invites_below_the_cap_too() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    assert!(!invites_tab(&site, &cookie).await.contains("open invite"));
+    assert!(!invites_tab(&site, &cookie).await.contains("unused invite"));
 
     create_invite(&site, &cookie).await;
     let page = invites_tab(&site, &cookie).await;
-    assert!(page.contains("You have 1 open invite."), "{page}");
+    assert!(page.contains("You have 1 unused invite."), "{page}");
     assert!(page.contains(r#"action="/invites""#), "{page}");
 
     create_invite(&site, &cookie).await;
     let page = invites_tab(&site, &cookie).await;
-    assert!(page.contains("You have 2 open invites."), "{page}");
+    assert!(page.contains("You have 2 unused invites."), "{page}");
 }
 
 #[tokio::test]
@@ -164,7 +164,7 @@ async fn revoking_frees_every_place_and_ends_the_links() {
     }
     let page = invites_tab(&site, &cookie).await;
     assert!(page.contains(r#"action="/invites""#), "{page}");
-    assert!(!page.contains("open invite"), "{page}");
+    assert!(!page.contains("unused invite"), "{page}");
     assert!(!page.contains(r#"href="/invites/revoke""#), "{page}");
     create_invite(&site, &cookie).await;
 }
@@ -184,7 +184,7 @@ async fn revoking_asks_first_and_names_how_many() {
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let page = body_text(response).await;
-    assert!(page.contains("Revoke your 2 open invites?"), "{page}");
+    assert!(page.contains("Revoke your 2 unused invites?"), "{page}");
     assert!(
         page.contains(r#"<form method="post" action="/invites/revoke">"#),
         "{page}"
