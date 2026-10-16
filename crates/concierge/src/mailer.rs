@@ -231,15 +231,9 @@ mod tests {
     use super::*;
     use crate::{
         config::SMTP_PASSWORD_CREDENTIAL,
-        db::tests::{execute, temp_db},
+        db::tests::{QUEUED, VERIFY_SUBJECT, execute, with_outbox},
         outbox::{self, GIVE_UP_AFTER},
     };
-
-    const QUEUED: i64 = 1_760_000_000;
-    const SUBJECT: &str = "Verify your email for weblounge";
-    const BODY: &str = "Hi alice,\n\n\
-        Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
-        the address you gave weblounge.org. Zoë says hello.\n";
 
     /// An SMTP server that takes everything but what it's told to refuse.
     #[derive(Default)]
@@ -299,18 +293,7 @@ mod tests {
     /// A mailer with verification emails queued for alice and bob, a
     /// minute apart.
     async fn mailer(server: FakeServer) -> (Mailer<FakeServer>, tempfile::TempDir) {
-        let (db, dir) = temp_db().await;
-        for (to, queued_at) in [
-            ("alice@example.org", QUEUED),
-            ("bob@example.org", QUEUED + 60),
-        ] {
-            let message = outbox::Message {
-                to: Email::parse(to).unwrap(),
-                subject: Subject::parse(SUBJECT).unwrap(),
-                body: BODY.into(),
-            };
-            db.queue_message(&message, queued_at).await.unwrap();
-        }
+        let (db, dir) = with_outbox().await;
         let from = "weblounge <noreply@weblounge.org>".parse().unwrap();
         (Mailer::new(db, server, from), dir)
     }
@@ -371,7 +354,7 @@ mod tests {
         };
         assert_eq!(header("From"), "weblounge <noreply@weblounge.org>");
         assert_eq!(header("To"), "alice@example.org");
-        assert_eq!(header("Subject"), SUBJECT);
+        assert_eq!(header("Subject"), VERIFY_SUBJECT);
         assert_eq!(header("Content-Type"), "text/plain; charset=utf-8");
         assert!(header("Date").ends_with(" +0000"), "{headers}");
         let message_id = regex::Regex::new(r"^<[A-Za-z0-9_-]{22}@weblounge\.org>$").unwrap();

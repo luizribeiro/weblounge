@@ -1910,25 +1910,28 @@ pub(crate) mod tests {
         assert_eq!(db.session(b"\xa2", 0).await.unwrap(), None);
     }
 
-    const QUEUED: i64 = 1_760_000_000;
+    pub(crate) const QUEUED: i64 = 1_760_000_000;
+    pub(crate) const VERIFY_SUBJECT: &str = "Verify your email for weblounge";
 
     fn message(to: &str, subject: &str) -> outbox::Message {
         outbox::Message {
             to: crate::email::Email::parse(to).unwrap(),
             subject: outbox::Subject::parse(subject).unwrap(),
-            body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify.\n"
+            body: "Hi,\n\n\
+                Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
+                the address you gave weblounge.org. Zoë says hello.\n"
                 .into(),
         }
     }
 
     /// alice's verification email, then bob's a minute later.
-    async fn with_outbox() -> (Db, tempfile::TempDir) {
+    pub(crate) async fn with_outbox() -> (Db, tempfile::TempDir) {
         let (db, dir) = temp_db().await;
         for (to, queued_at) in [
             ("alice@example.org", QUEUED),
             ("bob@example.org", QUEUED + 60),
         ] {
-            let message = message(to, "Verify your email for weblounge");
+            let message = message(to, VERIFY_SUBJECT);
             db.queue_message(&message, queued_at).await.unwrap();
         }
         (db, dir)
