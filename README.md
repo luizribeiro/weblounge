@@ -195,6 +195,15 @@ Both run dnscontrol with the deSEC API token from `secrets/dns.yaml`,
 which sops decrypts with luiz's GPG key; `sops secrets/dns.yaml` edits
 it. `push` also deletes records the repository doesn't have.
 
+## Secrets
+
+Most secrets are random, generated on the machine by
+`weblounge-secrets.service`. Those that come from outside, like the
+SMTP password, live in `secrets/<host>.yaml`, encrypted to luiz's GPG
+key and the host's SSH host key; sops-nix decrypts them on the host.
+`sops secrets/credenza.yaml` edits them. VMs decrypt stand-ins in
+`secrets/vm.yaml` with `secrets/vm-age.key`, committed on purpose.
+
 ## Layout
 
 | Path         | What lives there                                                  |

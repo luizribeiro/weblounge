@@ -1,6 +1,8 @@
 ---
 keys:
   - &luiz 97A0AE5E03F3499B7D7A65C676A4143237EF5817
+  # credenza's SSH host key, through ssh-to-age.
+  - &credenza age1cujggkhy2u52zvf0824uxqvl92ay3qw7vejfyfux4y8qlmc4rf8qyugfg5
   # Its private half is committed, in vm-age.key: VMs can't have
   # credenza's host key, and vm.yaml only holds stand-ins.
   - &vm age1vmfqe3jwnvkse5df0vkztjcsgwvpusl4354hnq9x7rckfeg4v5aqjwpjf9
@@ -9,6 +11,12 @@ creation_rules:
     key_groups:
       - pgp:
           - *luiz
+  - path_regex: secrets/credenza\.yaml$
+    key_groups:
+      - pgp:
+          - *luiz
+        age:
+          - *credenza
   - path_regex: secrets/vm\.yaml$
     key_groups:
       - age:

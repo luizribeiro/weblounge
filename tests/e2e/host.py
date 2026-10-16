@@ -82,3 +82,8 @@ with subtest("the deploy checks pass on a healthy credenza, and name a unit that
     status, report = credenza.execute("DEPLOY_CHECKS_TIMEOUT=3 /run/current-system/deploy-checks-host 2>&1")
     assert status == 1 and "✗ no unit failed or is waiting to retry" in report and "doomed.service" in report, report
     credenza.succeed("systemctl reset-failed doomed.service")
+
+
+with subtest("secrets from sops are decrypted for root alone"):
+    assert credenza.succeed("cat /run/secrets/smtp-password") == "vm-smtp-password"
+    assert credenza.succeed("stat -L -c '%U %a' /run/secrets/smtp-password").strip() == "root 400"

@@ -1,16 +1,27 @@
 { config, lib, pkgs, ... }:
 
 let
+  outerConfig = config;
   unit = "weblounge-secrets";
   directory = "/var/lib/${unit}";
   inherit (config.weblounge) secrets;
+  generated = lib.filterAttrs (_: secret: !secret.fromSops) secrets;
+  fromSops = lib.filterAttrs (_: secret: secret.fromSops) secrets;
 
-  secretOptions = { name, ... }: {
+  secretOptions = { name, config, ... }: {
     options = {
+      fromSops = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Whether the secret comes from outside, encrypted in secrets/<host>.yaml
+          under its name, rather than generated on the machine.
+        '';
+      };
       path = lib.mkOption {
         type = lib.types.str;
         readOnly = true;
-        default = "${directory}/${name}";
+        default = if config.fromSops then outerConfig.sops.secrets.${name}.path else "${directory}/${name}";
       };
       loadedBy = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -29,9 +40,11 @@ let
 
   loadInto = name: secret: map
     (service: {
-      ${service} = {
-        requires = [ "${unit}.service" ];
-        after = [ "${unit}.service" ];
+      ${service} = lib.optionalAttrs (!secret.fromSops)
+        {
+          requires = [ "${unit}.service" ];
+          after = [ "${unit}.service" ];
+        } // {
         serviceConfig.LoadCredential = [ "${name}:${secret.path}" ];
       };
     })
@@ -41,21 +54,28 @@ in
   options.weblounge.secrets = lib.mkOption {
     type = lib.types.attrsOf (lib.types.submodule secretOptions);
     default = { };
-    description = "Random secrets generated on the machine itself, so they never enter the Nix store.";
+    description = "Secrets that never enter the Nix store: random ones generated on the machine, or ones from sops.";
   };
 
-  config.systemd.services = lib.mkMerge ([{
-    ${unit} = {
-      description = "Generate this machine's secrets";
-      path = [ pkgs.openssl ];
-      script = lib.concatMapStrings generate (lib.attrValues secrets);
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        StateDirectory = unit;
-        StateDirectoryMode = "0700";
-        UMask = "0077";
-      };
+  config = {
+    sops = lib.mkIf (fromSops != { }) {
+      defaultSopsFile = lib.mkDefault ../secrets/${config.networking.hostName}.yaml;
+      secrets = lib.mapAttrs (_: _: { }) fromSops;
     };
-  }] ++ lib.concatLists (lib.mapAttrsToList loadInto secrets));
+
+    systemd.services = lib.mkMerge ([{
+      ${unit} = {
+        description = "Generate this machine's secrets";
+        path = [ pkgs.openssl ];
+        script = lib.concatMapStrings generate (lib.attrValues generated);
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          StateDirectory = unit;
+          StateDirectoryMode = "0700";
+          UMask = "0077";
+        };
+      };
+    }] ++ lib.concatLists (lib.mapAttrsToList loadInto secrets));
+  };
 }

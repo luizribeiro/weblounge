@@ -8,6 +8,7 @@
     ../../services/concierge.nix
     ../../services/webchat.nix
     ../../services/bender.nix
+    ../../services/mail.nix
   ];
 
   system.stateVersion = "26.05";
