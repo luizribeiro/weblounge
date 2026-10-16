@@ -20,6 +20,8 @@ use crate::{
 pub enum Command {
     /// Serve the site on CONCIERGE_LISTEN.
     Serve,
+    /// Send the mail concierge queues, through CONCIERGE_SMTP_HOST.
+    Mailer,
     #[command(flatten)]
     Admin(AdminCommand),
 }

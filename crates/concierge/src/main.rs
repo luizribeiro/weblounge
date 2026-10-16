@@ -5,8 +5,9 @@ use concierge::{
     admin::{self, Command},
     app::{self, App},
     assets::Assets,
-    config::Config,
+    config::{Config, MailerConfig},
     db::{self, Db},
+    mailer::{self, Mailer},
     oauth::Webchat,
     rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS},
     session,
@@ -15,14 +16,23 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let command = Command::parse();
-    let config = Config::from_env()?;
-    match command {
-        Command::Serve => serve(config).await,
-        Command::Admin(command) => admin::run(command, &config)
+    match Command::parse() {
+        Command::Serve => serve(Config::from_env()?).await,
+        Command::Mailer => send_mail(MailerConfig::from_env()?).await,
+        Command::Admin(command) => admin::run(command, &Config::from_env()?)
             .await
             .map(|output| print!("{output}")),
     }
+}
+
+async fn send_mail(config: MailerConfig) -> anyhow::Result<()> {
+    let db = Db::open(&config.database_path()).await?;
+    let mailer = Mailer::new(db, mailer::smtp(&config)?, config.from.clone());
+    eprintln!(
+        "Sending mail through {}:{}",
+        config.smtp_host, config.smtp_port
+    );
+    mailer.run().await
 }
 
 async fn serve(config: Config) -> anyhow::Result<()> {
