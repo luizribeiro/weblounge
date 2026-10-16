@@ -979,7 +979,7 @@ pub(crate) mod tests {
         (db, dir)
     }
 
-    async fn execute(db: &Db, sql: &str) -> sqlx::Result<()> {
+    pub(crate) async fn execute(db: &Db, sql: &str) -> sqlx::Result<()> {
         sqlx::query(sql).execute(&db.pool).await.map(drop)
     }
 

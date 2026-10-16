@@ -1,11 +1,17 @@
-//! concierge-mailer: sends what concierge leaves in the outbox. It logs
-//! message ids, counts and SMTP reply codes only, never an address, a
-//! subject or a body.
+//! concierge-mailer: sends what concierge leaves in the outbox, deleting
+//! each message once it's sent or can never be. It logs message ids,
+//! counts and SMTP reply codes only, never an address, a subject or a
+//! body.
 
-use std::{fmt, future::Future};
+use std::{
+    fmt,
+    future::Future,
+    time::{Duration, Instant},
+};
 
 use lettre::{
-    AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
+    Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
+    message::{Mailbox, header::ContentType},
     transport::smtp::{
         self,
         authentication::Credentials,
@@ -13,7 +19,24 @@ use lettre::{
     },
 };
 
-use crate::config::MailerConfig;
+use crate::{
+    config::MailerConfig,
+    db::{self, Db, QueuedMessage},
+    email::Email,
+    outbox::Subject,
+    random,
+    rate_limit::Quota,
+};
+
+/// How long the outbox sits unchecked. Concierge can't wake the mailer, and
+/// a member waiting for a verification email notices more than a few
+/// seconds.
+pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
+/// MXroute takes 400 messages an hour per account; staying well under
+/// leaves room for mail sent from the mailbox by hand.
+pub const SENDS_PER_HOUR: usize = 300;
+pub const HOUR: Duration = Duration::from_secs(60 * 60);
+const MESSAGE_ID_LENGTH: usize = 22;
 
 /// Why a message wasn't sent.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,12 +104,177 @@ pub fn smtp(config: &MailerConfig) -> anyhow::Result<AsyncSmtpTransport<Tokio1Ex
     )
 }
 
+/// What a round did.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Round {
+    pub sent: usize,
+    /// Put off to try again.
+    pub failed: usize,
+    /// Refused by the server for good, and deleted.
+    pub rejected: usize,
+    /// Rows that no longer make a message, deleted.
+    pub unreadable: usize,
+    pub given_up: u64,
+    /// Due, but over the hourly quota.
+    pub waiting: usize,
+}
+
+pub struct Mailer<T> {
+    pub db: Db,
+    pub transport: T,
+    pub from: Mailbox,
+    pub quota: Quota,
+}
+
+impl<T: Transport> Mailer<T> {
+    pub fn new(db: Db, transport: T, from: Mailbox) -> Self {
+        Self {
+            db,
+            transport,
+            from,
+            quota: Quota::new(SENDS_PER_HOUR, HOUR),
+        }
+    }
+
+    /// Sends the outbox, round after round, until the database fails.
+    pub async fn run(&self) -> anyhow::Result<()> {
+        loop {
+            self.round(db::now(), Instant::now()).await?;
+            tokio::time::sleep(POLL_INTERVAL).await;
+        }
+    }
+
+    /// Deletes the messages given up on, then tries each one due at `now`
+    /// while the quota lasts.
+    pub async fn round(&self, now: i64, instant: Instant) -> anyhow::Result<Round> {
+        let mut round = Round {
+            given_up: self.db.delete_given_up_messages(now).await?.messages,
+            ..Round::default()
+        };
+        if round.given_up > 0 {
+            eprintln!("Gave up on {} messages and deleted them", round.given_up);
+        }
+        let due = self.db.due_messages(now).await?;
+        for (index, queued) in due.iter().enumerate() {
+            let id = queued.id;
+            let Some(message) = self.message(queued) else {
+                eprintln!("Message {id} doesn't make a message any more; deleting it");
+                self.db.delete_message(id).await?;
+                round.unreadable += 1;
+                continue;
+            };
+            if !self.quota.take(instant) {
+                round.waiting = due.len() - index;
+                eprintln!(
+                    "Sent {SENDS_PER_HOUR} messages in the last hour; {} wait",
+                    round.waiting
+                );
+                break;
+            }
+            match self.transport.send(message).await {
+                Ok(()) => {
+                    self.db.delete_message(id).await?;
+                    round.sent += 1;
+                    eprintln!("Sent message {id}");
+                }
+                Err(failure) if failure.is_permanent() => {
+                    self.db.delete_message(id).await?;
+                    round.rejected += 1;
+                    eprintln!("The server refused message {id} ({failure}); deleting it");
+                }
+                Err(failure) => {
+                    self.db.record_failed_attempt(queued, now).await?;
+                    round.failed += 1;
+                    eprintln!(
+                        "Sending message {id} failed ({failure}) on attempt {}",
+                        queued.attempts + 1
+                    );
+                }
+            }
+        }
+        Ok(round)
+    }
+
+    /// The message `queued` makes, if its recipient and subject still
+    /// parse.
+    fn message(&self, queued: &QueuedMessage) -> Option<lettre::Message> {
+        let to: Address = Email::parse(&queued.recipient)
+            .ok()?
+            .as_str()
+            .parse()
+            .ok()?;
+        let subject = Subject::parse(&queued.subject).ok()?;
+        lettre::Message::builder()
+            .message_id(Some(self.message_id()))
+            .from(self.from.clone())
+            .to(Mailbox::new(None, to))
+            .subject(subject.as_str())
+            .header(ContentType::TEXT_PLAIN)
+            .body(queued.body.clone())
+            .ok()
+    }
+
+    /// A Message-ID in the sender's domain; lettre's default would name
+    /// this host, which isn't a domain anyone can look up.
+    fn message_id(&self) -> String {
+        let unique = random::string(random::URL_SAFE, MESSAGE_ID_LENGTH);
+        format!("<{unique}@{}>", self.from.email.domain())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, sync::Mutex};
+
     use lettre::transport::smtp::response::Detail;
 
     use super::*;
-    use crate::config::SMTP_PASSWORD_CREDENTIAL;
+    use crate::{
+        config::SMTP_PASSWORD_CREDENTIAL,
+        db::tests::{execute, temp_db},
+        outbox::{self, GIVE_UP_AFTER},
+    };
+
+    const QUEUED: i64 = 1_760_000_000;
+    const SUBJECT: &str = "Verify your email for weblounge";
+    const BODY: &str = "Hi alice,\n\n\
+        Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
+        the address you gave weblounge.org. Zoë says hello.\n";
+
+    /// An SMTP server that takes everything but what it's told to refuse.
+    #[derive(Default)]
+    struct FakeServer {
+        refusals: HashMap<&'static str, Failure>,
+        delivered: Mutex<Vec<lettre::Message>>,
+    }
+
+    impl FakeServer {
+        fn refusing(recipient: &'static str, failure: Failure) -> Self {
+            Self {
+                refusals: HashMap::from([(recipient, failure)]),
+                ..Self::default()
+            }
+        }
+
+        fn recipients(&self) -> Vec<String> {
+            let delivered = self.delivered.lock().unwrap();
+            delivered.iter().map(recipient).collect()
+        }
+    }
+
+    fn recipient(message: &lettre::Message) -> String {
+        message.envelope().to()[0].to_string()
+    }
+
+    impl Transport for FakeServer {
+        async fn send(&self, message: lettre::Message) -> Result<(), Failure> {
+            if let Some(failure) = self.refusals.get(recipient(&message).as_str()) {
+                return Err(failure.clone());
+            }
+            self.delivered.lock().unwrap().push(message);
+            Ok(())
+        }
+    }
 
     /// A negative reply such as `reply(5, 5, 0)` for 550.
     fn reply(severity: u8, category: u8, detail: u8) -> Failure {
@@ -106,6 +294,178 @@ mod tests {
             _ => Detail::Five,
         };
         Failure::Reply(Code::new(severity, category, detail))
+    }
+
+    /// A mailer with verification emails queued for alice and bob, a
+    /// minute apart.
+    async fn mailer(server: FakeServer) -> (Mailer<FakeServer>, tempfile::TempDir) {
+        let (db, dir) = temp_db().await;
+        for (to, queued_at) in [
+            ("alice@example.org", QUEUED),
+            ("bob@example.org", QUEUED + 60),
+        ] {
+            let message = outbox::Message {
+                to: Email::parse(to).unwrap(),
+                subject: Subject::parse(SUBJECT).unwrap(),
+                body: BODY.into(),
+            };
+            db.queue_message(&message, queued_at).await.unwrap();
+        }
+        let from = "weblounge <noreply@weblounge.org>".parse().unwrap();
+        (Mailer::new(db, server, from), dir)
+    }
+
+    /// The recipient and failed attempts of each message due at `now`.
+    async fn due(mailer: &Mailer<FakeServer>, now: i64) -> Vec<(String, i64)> {
+        let due = mailer.db.due_messages(now).await.unwrap();
+        due.into_iter()
+            .map(|message| (message.recipient, message.attempts))
+            .collect()
+    }
+
+    fn bobs(attempts: i64) -> (String, i64) {
+        ("bob@example.org".into(), attempts)
+    }
+
+    fn alices(attempts: i64) -> (String, i64) {
+        ("alice@example.org".into(), attempts)
+    }
+
+    #[tokio::test]
+    async fn sends_each_due_message_and_deletes_it() {
+        let (mailer, _dir) = mailer(FakeServer::default()).await;
+
+        let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
+
+        assert_eq!(
+            round,
+            Round {
+                sent: 2,
+                ..Round::default()
+            }
+        );
+        assert_eq!(
+            mailer.transport.recipients(),
+            ["alice@example.org", "bob@example.org"]
+        );
+        assert!(due(&mailer, QUEUED + 60).await.is_empty());
+        let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
+        assert_eq!(round, Round::default());
+    }
+
+    #[tokio::test]
+    async fn builds_a_plain_text_utf8_message_from_the_sender() {
+        let (mailer, _dir) = mailer(FakeServer::default()).await;
+        mailer.round(QUEUED, Instant::now()).await.unwrap();
+
+        let delivered = mailer.transport.delivered.lock().unwrap();
+        let formatted = String::from_utf8(delivered[0].formatted()).unwrap();
+        let (headers, body) = formatted.split_once("\r\n\r\n").unwrap();
+        let header = |name: &str| {
+            let prefix = format!("{name}: ");
+            headers
+                .lines()
+                .find_map(|line| line.strip_prefix(&prefix))
+                .unwrap_or_else(|| panic!("no {name} in {headers}"))
+                .to_owned()
+        };
+        assert_eq!(header("From"), "weblounge <noreply@weblounge.org>");
+        assert_eq!(header("To"), "alice@example.org");
+        assert_eq!(header("Subject"), SUBJECT);
+        assert_eq!(header("Content-Type"), "text/plain; charset=utf-8");
+        assert!(header("Date").ends_with(" +0000"), "{headers}");
+        let message_id = regex::Regex::new(r"^<[A-Za-z0-9_-]{22}@weblounge\.org>$").unwrap();
+        assert!(message_id.is_match(&header("Message-ID")), "{headers}");
+        assert!(body.contains("verify#q7Hx2mZp9vLcT4wRfBa"), "{body}");
+        assert!(body.contains("Zo=C3=AB says hello"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn puts_a_message_off_when_sending_it_fails_for_now() {
+        let server = FakeServer::refusing("alice@example.org", reply(4, 2, 1));
+        let (mailer, _dir) = mailer(server).await;
+
+        let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
+
+        assert_eq!((round.sent, round.failed), (1, 1));
+        assert_eq!(mailer.transport.recipients(), ["bob@example.org"]);
+        let retry_at = outbox::next_attempt_at(1, QUEUED + 60);
+        assert!(due(&mailer, retry_at - 1).await.is_empty());
+        assert_eq!(due(&mailer, retry_at).await, [alices(1)]);
+    }
+
+    #[tokio::test]
+    async fn deletes_a_message_the_server_refuses_for_good() {
+        let server = FakeServer::refusing("alice@example.org", reply(5, 5, 0));
+        let (mailer, _dir) = mailer(server).await;
+
+        let round = mailer.round(QUEUED, Instant::now()).await.unwrap();
+
+        assert_eq!((round.rejected, round.failed), (1, 0));
+        assert_eq!(due(&mailer, QUEUED + 60).await, [bobs(0)]);
+    }
+
+    #[tokio::test]
+    async fn tries_again_after_the_server_refuses_the_login() {
+        let server = FakeServer::refusing("alice@example.org", reply(5, 3, 5));
+        let (mailer, _dir) = mailer(server).await;
+
+        let round = mailer.round(QUEUED, Instant::now()).await.unwrap();
+
+        assert_eq!((round.rejected, round.failed), (0, 1));
+        let retry_at = outbox::next_attempt_at(1, QUEUED);
+        assert_eq!(due(&mailer, retry_at).await, [alices(1), bobs(0)]);
+    }
+
+    #[tokio::test]
+    async fn deletes_what_it_gave_up_on_without_sending_it() {
+        let (mailer, _dir) = mailer(FakeServer::default()).await;
+        let alices_end = QUEUED + GIVE_UP_AFTER + 1;
+
+        let round = mailer.round(alices_end, Instant::now()).await.unwrap();
+
+        assert_eq!((round.given_up, round.sent), (1, 1));
+        assert_eq!(mailer.transport.recipients(), ["bob@example.org"]);
+        assert!(due(&mailer, QUEUED).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn messages_over_the_hourly_quota_wait_for_it() {
+        let (mut mailer, _dir) = mailer(FakeServer::default()).await;
+        mailer.quota = Quota::new(1, HOUR);
+        let start = Instant::now();
+        let second = Duration::from_secs(1);
+
+        let round = mailer.round(QUEUED + 60, start).await.unwrap();
+        assert_eq!((round.sent, round.waiting), (1, 1));
+        let round = mailer.round(QUEUED + 3599, start + HOUR - second);
+        assert_eq!(round.await.unwrap().waiting, 1);
+        let round = mailer.round(QUEUED + 3600, start + HOUR).await.unwrap();
+        assert_eq!((round.sent, round.waiting), (1, 0));
+
+        assert_eq!(
+            mailer.transport.recipients(),
+            ["alice@example.org", "bob@example.org"]
+        );
+    }
+
+    #[tokio::test]
+    async fn deletes_rows_that_no_longer_make_a_message() {
+        let (mailer, _dir) = mailer(FakeServer::default()).await;
+        execute(
+            &mailer.db,
+            "INSERT INTO outbox (recipient, subject, body, created_at, next_attempt_at)
+             VALUES ('carol', 'Verify', 'Hi', 1760000000, 1760000000),
+                    ('dave@example.org', 'Verify' || char(10) || 'Bcc: x', 'Hi',
+                     1760000000, 1760000000);",
+        )
+        .await
+        .unwrap();
+
+        let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
+
+        assert_eq!((round.unreadable, round.sent), (2, 2));
+        assert!(due(&mailer, QUEUED + 60).await.is_empty());
     }
 
     #[test]
