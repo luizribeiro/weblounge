@@ -115,7 +115,8 @@ async fn an_expired_or_redeemed_invite_frees_its_place() {
     let site = Site::start().await;
     let cookie = alice_with_every_invite_open(&site).await;
     site.execute(
-        "INSERT INTO members (account, invited_by, joined_at) VALUES ('bob', 'alice', 1);
+        "INSERT INTO members (account, email, invited_by, joined_at)
+         VALUES ('bob', 'bob@example.org', 'alice', 1);
          UPDATE invites SET redeemed_by = 'bob', redeemed_at = 1
          WHERE rowid = (SELECT MIN(rowid) FROM invites);
          UPDATE invites SET created_at = 0, expires_at = 1
@@ -238,7 +239,8 @@ async fn lists_the_people_a_member_invited() {
     let site = Site::start().await;
     site.add_member("alice").await;
     site.execute(
-        "INSERT INTO members (account, invited_by, joined_at) VALUES ('bob', 'alice', 1);
+        "INSERT INTO members (account, email, invited_by, joined_at)
+         VALUES ('bob', 'bob@example.org', 'alice', 1);
          INSERT INTO members (account, invited_by, joined_at, removed_at) VALUES ('carol', 'alice', 2, 3);",
     )
     .await;

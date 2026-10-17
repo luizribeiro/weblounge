@@ -8,8 +8,9 @@ async fn site_with_a_tree() -> Site {
     site.execute(
         "UPDATE members SET invited_by = 'alice', joined_at = 1760100000 WHERE account = 'bob';
          INSERT INTO members (account, invited_by, joined_at, removed_at)
-         VALUES ('carol', 'alice', 1760200000, 1760300000),
-                ('dave', 'bob', 1760400000, NULL);",
+         VALUES ('carol', 'alice', 1760200000, 1760300000);
+         INSERT INTO members (account, email, invited_by, joined_at)
+         VALUES ('dave', 'dave@example.org', 'bob', 1760400000);",
     )
     .await;
     site

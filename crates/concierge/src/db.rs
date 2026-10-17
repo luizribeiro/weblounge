@@ -981,7 +981,7 @@ pub(crate) mod tests {
         written_by_version(
             &path,
             20261018120000,
-            "INSERT INTO members (account, joined_at) VALUES ('alice', 0);
+            "INSERT INTO members (account, email, joined_at) VALUES ('alice', 'alice@example.org', 0);
              INSERT INTO invites (code, created_by, created_at, expires_at)
              VALUES ('q7Hx2mZp9vLcT4wRfBa-_w', 'alice', 1, 2), ('v0Ri8dEa2kWnL5yTcHq-_x', NULL, 3, 4);",
         )
@@ -1072,8 +1072,11 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn account_names_are_unique_whatever_their_case() {
         let (db, _dir) = temp_db().await;
-        let insert =
-            |name: &str| format!("INSERT INTO members (account, joined_at) VALUES ('{name}', 0)");
+        let insert = |name: &str| {
+            format!(
+                "INSERT INTO members (account, email, joined_at) VALUES ('{name}', 'a@example.org', 0)"
+            )
+        };
         execute(&db, &insert("Alice")).await.unwrap();
         let error = execute(&db, &insert("aLICE")).await.unwrap_err();
         assert!(error.to_string().contains("UNIQUE"), "{error}");
@@ -1104,7 +1107,7 @@ pub(crate) mod tests {
         execute(
             &db,
             "INSERT INTO members (account, email, invited_by, joined_at)
-             VALUES ('root', NULL, NULL, 0),
+             VALUES ('root', 'root@example.org', NULL, 0),
                     ('alice', 'alice@example.org', 'root', 10),
                     ('bob', 'bob@example.org', 'alice', 20);
              UPDATE members SET email_verified_at = 11, news_opt_in = TRUE, is_admin = TRUE
@@ -1160,8 +1163,9 @@ pub(crate) mod tests {
         let (db, _dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, joined_at)
-             VALUES ('alice', 0), ('bob', 0), ('carol', 0);",
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('alice', 'alice@example.org', 0), ('bob', 'bob@example.org', 0),
+                    ('carol', 'carol@example.org', 0);",
         )
         .await
         .unwrap();
@@ -1282,7 +1286,7 @@ pub(crate) mod tests {
         let (db, dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, joined_at) VALUES ('alice', 0)",
+            "INSERT INTO members (account, email, joined_at) VALUES ('alice', 'alice@example.org', 0)",
         )
         .await
         .unwrap();
@@ -1434,7 +1438,8 @@ pub(crate) mod tests {
         let (db, dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, joined_at) VALUES ('alice', 0), ('bob', 0);
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('alice', 'alice@example.org', 0), ('bob', 'bob@example.org', 0);
              INSERT INTO sessions (token_hash, account, created_at, expires_at)
              VALUES (x'a1', 'alice', 0, 100), (x'a2', 'alice', 0, 200), (x'b1', 'bob', 0, 100);",
         )
@@ -1653,7 +1658,7 @@ pub(crate) mod tests {
             .unwrap();
         execute(
             &db,
-            "UPDATE members SET removed_at = 1 WHERE account = 'alice'",
+            "UPDATE members SET email = NULL, removed_at = 1 WHERE account = 'alice'",
         )
         .await
         .unwrap();
@@ -1665,8 +1670,8 @@ pub(crate) mod tests {
         let (db, dir) = temp_db().await;
         execute(
             &db,
-            "INSERT INTO members (account, joined_at)
-             VALUES ('luiz', 0), ('alice', 0)",
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('luiz', 'luiz@example.org', 0), ('alice', 'alice@example.org', 0)",
         )
         .await
         .unwrap();
@@ -1723,7 +1728,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_bots().await;
         execute(
             &db,
-            "UPDATE members SET removed_at = 300 WHERE account = 'alice'",
+            "UPDATE members SET email = NULL, removed_at = 300 WHERE account = 'alice'",
         )
         .await
         .unwrap();
@@ -1790,7 +1795,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_sessions().await;
         execute(
             &db,
-            "UPDATE members SET removed_at = 1 WHERE account = 'alice'",
+            "UPDATE members SET email = NULL, removed_at = 1 WHERE account = 'alice'",
         )
         .await
         .unwrap();

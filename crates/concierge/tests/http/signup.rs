@@ -266,8 +266,10 @@ async fn an_invite_revoked_while_ergo_works_adds_no_member_and_says_so() {
 
 #[tokio::test]
 async fn failing_to_record_the_member_after_ergo_said_yes_says_so() {
-    let site =
-        with_ergo_that_runs("INSERT INTO members (account, joined_at) VALUES ('bob', 0)").await;
+    let site = with_ergo_that_runs(
+        "INSERT INTO members (account, email, joined_at) VALUES ('bob', 'bob@example.org', 0)",
+    )
+    .await;
 
     let response = site.post(INVITE, &bob(), None).await;
 

@@ -80,8 +80,10 @@ async fn every_unusable_code_gets_the_same_answer() {
     for code in ["used", "revoked", "expired", "claimed"] {
         site.add_invite(code, Some("alice")).await;
     }
-    site.execute("INSERT INTO members (account, joined_at) VALUES ('carol', 0)")
-        .await;
+    site.execute(
+        "INSERT INTO members (account, email, joined_at) VALUES ('carol', 'carol@example.org', 0)",
+    )
+    .await;
     site.update_invite("used", "redeemed_by = 'carol', redeemed_at = 1")
         .await;
     site.update_invite("revoked", "revoked_at = 1").await;

@@ -172,7 +172,7 @@ with subtest("a token for a member without an Ergo account creates none"):
     session = secrets.token_urlsafe(32)[:43]
     session_hash = hmac.new(key.encode(), session.encode(), hashlib.sha256).hexdigest()
     concierge_sql(
-        "INSERT INTO members (account, joined_at) VALUES ('ghost', 0);"
+        "INSERT INTO members (account, email, joined_at) VALUES ('ghost', 'ghost@example.org', 0);"
         f"INSERT INTO sessions VALUES (x'{session_hash}', 'ghost', 0, 4000000000);",
         write=True,
     )
