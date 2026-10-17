@@ -6,7 +6,19 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest, tools
-    from helpers import Account, Browser, add_member, concierge_sql, ergo_api, https, invite_code, irc, members, outcome
+    from helpers import (
+        Account,
+        Browser,
+        add_member,
+        concierge_sql,
+        ergo_api,
+        https,
+        invite_code,
+        irc,
+        members,
+        outcome,
+        patterns,
+    )
 
 mallory: Account = {"account": "mallory", "password": "an-insider-gone-bad"}
 tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
@@ -15,6 +27,13 @@ pages_and_directives_they_need = {
     "weblounge.org": ("/", {"script-src", "style-src", "img-src"}),
     members: ("/signin", {"script-src", "style-src", "img-src"}),
     "irc.weblounge.org": ("/", {"script-src", "style-src", "img-src", "manifest-src"}),
+}
+
+in_ram, on_disk = "/run/weblounge-secrets", "/var/lib/weblounge-secrets"
+generated = {
+    "ergo-api-token": f"{in_ram}/ergo-api-token",
+    "session-key": f"{on_disk}/session-key",
+    "oauth-introspection-secret": f"{in_ram}/oauth-introspection-secret",
 }
 
 
@@ -101,7 +120,7 @@ with subtest("ergo's API and WebSocket listener and concierge listen on credenza
 
 with subtest("concierge's introspection answers Ergo's secret alone"):
     introspect = "curl -s -o /dev/null -w '%{{http_code}}' -d token=x -u {} http://127.0.0.1:8080/oauth/introspect"
-    secret = credenza.succeed("cat /var/lib/weblounge-secrets/oauth-introspection-secret").strip()
+    secret = credenza.succeed(f"cat {generated['oauth-introspection-secret']}").strip()
     for credentials in ["ergo:wrong", "ergo:4TA0I7mJ3fUUcW05KJiODg", f"gamja:{secret}"]:
         assert credenza.succeed(introspect.format(shlex.quote(credentials))) == "401", credentials
     assert credenza.succeed(introspect.format(shlex.quote(f"ergo:{secret}"))) == "200"
@@ -121,10 +140,8 @@ with subtest("ergo's API refuses any token but the generated one"):
         assert status == "401", (token, status)
 
 with subtest("the generated secrets stay out of the Nix store, readable by root alone"):
-    secrets = "/var/lib/weblounge-secrets"
-    names = ["ergo-api-token", "session-key", "oauth-introspection-secret"]
-    modes = credenza.succeed(f"cd {secrets} && stat -c '%a %U' . {' '.join(names)}")
-    assert modes == "700 root\n" + "600 root\n" * len(names), modes
+    modes = credenza.succeed(f"stat -c '%a %U' {in_ram} {on_disk} {' '.join(generated.values())}")
+    assert modes == "700 root\n" * 2 + "600 root\n" * len(generated), modes
     ergo_config = (
         "systemctl cat ergochat; cat /etc/ergo.yaml "
         "$(systemctl show -P ExecStart ergochat | grep -o '/nix/store/[^ ;]*')"
@@ -135,7 +152,15 @@ with subtest("the generated secrets stay out of the Nix store, readable by root 
         ("session-key", concierge_config),
         ("oauth-introspection-secret", f"{ergo_config}; {concierge_config}"),
     ]:
-        credenza.fail(f"{{ {config}; }} | grep -qF $(cat {secrets}/{secret})")
+        credenza.fail(f"{{ {config}; }} | grep -qF $(cat {generated[secret]})")
+
+with subtest("the secrets services read only as they start live in RAM, and nowhere on disk"):
+    assert credenza.succeed(f"stat -f -c %T {in_ram}").strip() == "tmpfs"
+    values = [credenza.succeed(f"cat {path}").strip() for path in generated.values()]
+    credenza.succeed("sync")
+    on_root_fs = "find / -xdev -path /nix -prune -o -type f -print0"
+    found = credenza.succeed(f"{on_root_fs} | xargs -0 grep -laF {patterns(values)}").split()
+    assert found == [generated["session-key"]], found
 
 with subtest("admins alone can talk to the nix daemon, not services"):
     nix = "/run/current-system/sw/bin/nix store info"

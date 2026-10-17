@@ -103,7 +103,10 @@ in
 
     weblounge.secrets.session-key.loadedBy = [ "concierge" ];
     weblounge.secrets.ergo-api-token.loadedBy = [ "concierge" ];
-    weblounge.secrets.oauth-introspection-secret.loadedBy = [ "concierge" ];
+    weblounge.secrets.oauth-introspection-secret = {
+      ephemeral = true;
+      loadedBy = [ "concierge" ];
+    };
 
     # Ergo logs the web client in with SASL OAUTHBEARER, asking concierge
     # whose token it is. The secret comes from the environment; the empty

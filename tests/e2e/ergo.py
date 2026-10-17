@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Account, ergo_api, ergo_api_token, irc, irc_command, register
+    from helpers import Account, concierge_admin, ergo_api, irc, irc_command, register
 
 alice: Account = {"account": "alice", "password": "correct-horse"}
 bob: Account = {"account": "bob", "password": "battery-staple"}
@@ -32,12 +32,14 @@ with subtest("ergo's API answers the generated token"):
     body, status = ergo_api("status")
     assert status == "200" and '"success":true' in body, (status, body)
 
-with subtest("the token survives a restart of the secrets service and ergo"):
-    token = ergo_api_token()
-    credenza.succeed("systemctl restart weblounge-secrets ergochat")
+with subtest("the secrets in RAM outlive the secrets service stopping, as a deploy may, and concierge reaches ergo"):
+    in_ram = "cat /run/weblounge-secrets/ergo-api-token /run/weblounge-secrets/oauth-introspection-secret"
+    before = credenza.succeed(in_ram)
+    credenza.succeed("systemctl stop weblounge-secrets")
+    credenza.succeed("systemctl start ergochat concierge")
+    assert credenza.succeed(in_ram) == before
     credenza.wait_for_open_port(8089)
-    _, status = ergo_api("status", token=token)
-    assert status == "200", status
+    assert "ergo: http://127.0.0.1:8089/ answers" in concierge_admin("status")
 
 with subtest("an account created through the API logs in over TLS with SASL"):
     body = register(**alice)

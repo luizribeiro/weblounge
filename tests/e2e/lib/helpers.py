@@ -18,7 +18,7 @@ class Account(TypedDict):
 
 
 def ergo_api_token() -> str:
-    return credenza.succeed("cat /var/lib/weblounge-secrets/ergo-api-token").strip()
+    return credenza.succeed("cat /run/weblounge-secrets/ergo-api-token").strip()
 
 
 def ergo_api(endpoint: str, token: str | None = None, **fields: object) -> tuple[str, str]:

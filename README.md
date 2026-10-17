@@ -121,7 +121,7 @@ your machine without any `/etc/hosts` edits.
 
 IRC requires SASL, and there's no NickServ registration: accounts come
 from Ergo's API on the server's loopback, authenticated with the token
-in `/var/lib/weblounge-secrets/ergo-api-token`.
+in `/run/weblounge-secrets/ergo-api-token`.
 
 The VM's console is attached to your terminal (Ctrl-A X quits QEMU). From
 another terminal:
@@ -200,11 +200,15 @@ it. `push` also deletes records the repository doesn't have.
 ## Secrets
 
 Most secrets are random, generated on the machine by
-`weblounge-secrets.service`. Those that come from outside, like the
-SMTP password, live in `secrets/<host>.yaml`, encrypted to luiz's GPG
-key and the host's SSH host key; sops-nix decrypts them on the host.
-`sops secrets/credenza.yaml` edits them. VMs decrypt stand-ins in
-`secrets/vm.yaml` with `secrets/vm-age.key`, committed on purpose.
+`weblounge-secrets.service`. The ones services only read as they start,
+like Ergo's API token, live in RAM, in `/run/weblounge-secrets`, and
+every boot makes new ones, so a copy of the disk holds nothing that
+works; the rest, like the session key that keeps members signed in,
+stay in `/var/lib/weblounge-secrets`. Those that come from outside,
+like the SMTP password, live in `secrets/<host>.yaml`, encrypted to
+luiz's GPG key and the host's SSH host key; sops-nix decrypts them on
+the host. `sops secrets/credenza.yaml` edits them. VMs decrypt stand-ins
+in `secrets/vm.yaml` with `secrets/vm-age.key`, committed on purpose.
 
 ## Layout
 

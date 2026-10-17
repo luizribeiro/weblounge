@@ -119,7 +119,12 @@ in
       configFile = pkgs.weblounge.ergoConfig cfg.settings;
     };
 
-    weblounge.secrets.ergo-api-token.loadedBy = [ "ergochat" ];
+    # Ergo and concierge both read the token as they start, so a fresh one
+    # each boot costs nothing.
+    weblounge.secrets.ergo-api-token = {
+      ephemeral = true;
+      loadedBy = [ "ergochat" ];
+    };
     weblounge.secrets.oauth-introspection-secret.loadedBy = lib.mkIf oauth2 [ "ergochat" ];
 
     systemd.services.ergochat = {
