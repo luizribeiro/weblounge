@@ -32,10 +32,15 @@ let
     [ "TXT" "@" "v=spf1 -all" ]
     [ "TXT" "_dmarc" "v=DMARC1; p=reject" ]
   ];
+
+  # MXroute, which will send our mail, adds the domain only once it's there.
+  mxrouteOwnership = [
+    [ "TXT" "_da-verify-bbbfa40b313de02f113fc58ed97fecf1" "domain-verified" ]
+  ];
 in
 {
   inherit domain;
   # deSEC refuses anything shorter.
   ttl = 3600;
-  records = lib.concatMap hostRecords configs ++ noMail;
+  records = lib.concatMap hostRecords configs ++ noMail ++ mxrouteOwnership;
 }

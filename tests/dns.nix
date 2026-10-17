@@ -28,6 +28,7 @@ in
         [ "MX" "@" 0 "." ]
         [ "TXT" "@" "v=spf1 -all" ]
         [ "TXT" "_dmarc" "v=DMARC1; p=reject" ]
+        [ "TXT" "_da-verify-bbbfa40b313de02f113fc58ed97fecf1" "domain-verified" ]
       ];
     };
   };
