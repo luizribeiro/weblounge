@@ -74,14 +74,21 @@ with subtest("concierge-admin runs concierge as the service does, with its state
     ), (service_uid, status)
     credenza.fail(concierge_admin_command("no-such-command"))
 
-with subtest("concierge-migrate brings the database up to date before concierge opens it"):
+with subtest("concierge-migrate brings the database up to date before concierge or its mailer open it"):
     migrated = credenza.succeed("journalctl -o cat -u concierge-migrate")
     assert "/var/lib/concierge/concierge.db is at migration 20261021120000" in migrated, migrated
     credenza.succeed("systemctl stop concierge-migrate")
-    credenza.fail("systemctl is-active concierge")
-    credenza.succeed("systemctl start concierge")
+    stopped = credenza.succeed("systemctl is-active concierge concierge-mailer || true").split()
+    assert stopped == ["inactive", "inactive"], stopped
+    credenza.succeed("systemctl start concierge concierge-mailer")
     credenza.succeed("systemctl is-active concierge-migrate")
     credenza.wait_for_open_port(8080)
+
+with subtest("concierge-mailer runs as concierge, on the same state directory"):
+    credenza.wait_for_unit("concierge-mailer.service")
+    mailer_uid = credenza.succeed("ps -o uid= -p $(systemctl show -P MainPID concierge-mailer)").strip()
+    assert mailer_uid == service_uid, (mailer_uid, service_uid)
+    assert credenza.succeed("systemctl show -P StateDirectory concierge-mailer").strip() == "concierge"
 
 with subtest("concierge's database lives in its state directory, private to the service"):
     modes = credenza.succeed(

@@ -149,11 +149,12 @@ with subtest("sudo and PAM's password checker are the only setuid binaries"):
 with subtest("default.yaml's example oper and WebIRC gateway, with published credentials, are left out"):
     credenza.fail("grep -qE '^opers:|webirc' /etc/ergo.yaml")
 
-with subtest("ergo, concierge and its migration, nginx, bender and the vacuum jobs run sandboxed"):
+with subtest("ergo, concierge with its migration and mailer, nginx, bender and the vacuum jobs run sandboxed"):
     for unit in [
         "ergochat",
         "concierge",
         "concierge-migrate",
+        "concierge-mailer",
         "nginx",
         "weblounge-bot-bender",
         "concierge-vacuum",

@@ -67,6 +67,13 @@ in
     description = "concierge-admin, which runs an admin command as the service.";
   };
 
+  options.weblounge.concierge.databaseUnit = lib.mkOption {
+    type = lib.types.attrsOf lib.types.anything;
+    readOnly = true;
+    default = databaseUnit;
+    description = "Settings for a unit that opens concierge's database: its identity and state, once migrated.";
+  };
+
   options.weblounge.concierge.listen = lib.mkOption {
     type = lib.types.str;
     default = "127.0.0.1:8080";
