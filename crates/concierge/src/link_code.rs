@@ -14,6 +14,13 @@ pub fn generate(length: usize) -> String {
     random::string(ALPHABET, length)
 }
 
+/// The code in what someone typed into a code field: the code itself, or
+/// the whole link pasted in.
+pub fn from_input(input: &str) -> &str {
+    let input = input.trim();
+    input.rsplit(['#', '/']).next().unwrap_or(input)
+}
+
 /// What the database keeps of `code`. A plain hash is enough: codes are
 /// random and long, so nobody can search for one that hashes the same.
 pub fn hash(code: &str) -> Vec<u8> {
@@ -33,6 +40,21 @@ mod tests {
                 .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'),
             "{code}"
         );
+    }
+
+    #[test]
+    fn takes_the_code_alone_or_out_of_a_pasted_link() {
+        let code = "q7Hx2mZp9vLcT4wRfBa-_w";
+        for input in [
+            code,
+            " q7Hx2mZp9vLcT4wRfBa-_w\n",
+            "https://join.weblounge.org/#q7Hx2mZp9vLcT4wRfBa-_w",
+            "https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa-_w",
+            "https://members.weblounge.org/invite/q7Hx2mZp9vLcT4wRfBa-_w",
+        ] {
+            assert_eq!(from_input(input), code, "{input:?}");
+        }
+        assert_eq!(from_input(""), "");
     }
 
     #[test]
