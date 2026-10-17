@@ -1,14 +1,24 @@
 Hi {{ nick }},
 
+{% if reminder -%}
+You haven't confirmed your email for weblounge.org yet, so here's a
+new link; the ones we sent before don't work any more. Open it and
+press "Confirm my email".
+{%- else -%}
 Please confirm that this is your email address for weblounge.org:
 open this link and press "Confirm my email".
+{%- endif %}
 
 {{ link }}
 
 The link works for {{ lifetime }}. If it stops working, sign in and send
 yourself a new one from the Account tab.
 
+{% if reminder -%}
+Your chat works as before, but inviting others needs a confirmed email.
+{%- else -%}
 You can chat right away; inviting others will need a confirmed email.
+{%- endif %}
 Every member has {{ grace_period }} to confirm theirs; yours {% if overdue %}ended{% else %}ends{% endif %} on {{ due }}.
 
 If you didn't sign up for weblounge.org, you can ignore this email;

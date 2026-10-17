@@ -118,7 +118,14 @@ pub async fn mail_link(app: &App, account: &str, recipient: Recipient) -> Mailed
     if let Err(refusal) = app.mailed_links.check(account, recipient, Instant::now()) {
         return Mailed::Refused(refusal);
     }
-    let sent = verification_mail::send(&app.db, &app.outbox, &app.public_url, account, db::now());
+    let sent = verification_mail::send(
+        &app.db,
+        &app.outbox,
+        &app.public_url,
+        account,
+        verification_mail::Kind::Link,
+        db::now(),
+    );
     match sent.await {
         Ok(true) => {
             app.mailed_links.record(account, Instant::now());
