@@ -53,5 +53,4 @@ prepare:
   sqlx database create
   sqlx migrate run --source crates/concierge/migrations
   sqlx migrate run --ignore-missing --source crates/concierge/outbox-migrations
-  cd crates/concierge
-  cargo sqlx prepare -- --all-targets
+  cargo sqlx prepare --workspace -- --all-targets

@@ -61,7 +61,7 @@ start over. `cargo test` runs the tests; `just check` adds clippy and
 rustfmt.
 
 Concierge keeps its data in SQLite through sqlx, which checks every query
-at compile time against the metadata in `crates/concierge/.sqlx`. After
+at compile time against the metadata in `.sqlx`. After
 changing a query or adding a migration to `crates/concierge/migrations`,
 run `just concierge prepare` and commit what it writes. On the server,
 `concierge-migrate.service` applies new migrations before anything else
