@@ -162,26 +162,51 @@ pub async fn update(
             return page(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms).await;
         }
     };
-    match app.db.update_settings(account, email.as_str(), news).await {
-        Ok(()) => Redirect::to("/account?saved#email-and-news").into_response(),
-        Err(error) => internal_error("Saving settings", error),
+    if let Err(error) = app.db.update_settings(account, email.as_str(), news).await {
+        return internal_error("Saving settings", error);
+    }
+    if me.member.email.as_deref() == Some(email.as_str()) {
+        return Redirect::to("/account?saved#email-and-news").into_response();
+    }
+    let mailed = verify::mail_link(&app, account).await;
+    match app.db.member(account).await {
+        Ok(Some(saved)) => answer_link(&app, &saved, mailed, true).await,
+        Ok(None) => internal_error("Reading back saved settings", "no member"),
+        Err(error) => internal_error("Reading back saved settings", error),
     }
 }
 
 /// Mails the member a new link to confirm their email.
 pub async fn send_link(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
     let mailed = verify::mail_link(&app, &me.member.account).await;
+    answer_link(&app, &me.member, mailed, false).await
+}
+
+/// The Account tab once a link was asked for, after saving the settings
+/// if `saved`.
+async fn answer_link(app: &App, member: &Member, mailed: Mailed, saved: bool) -> Response {
     let (status, error) = match mailed {
-        Mailed::Sent => return Redirect::to("/account?sent#email-and-news").into_response(),
-        Mailed::NothingToVerify => return Redirect::to("/account#email-and-news").into_response(),
+        Mailed::Sent | Mailed::NothingToVerify => {
+            let query = match (saved, mailed == Mailed::Sent) {
+                (true, true) => "?saved&sent",
+                (true, false) => "?saved",
+                (false, true) => "?sent",
+                (false, false) => "",
+            };
+            return Redirect::to(&format!("/account{query}#email-and-news")).into_response();
+        }
         Mailed::Refused(refusal) => (StatusCode::TOO_MANY_REQUESTS, refusal.to_string()),
         Mailed::Failed => (StatusCode::SERVICE_UNAVAILABLE, UNSENT.to_owned()),
     };
     let forms = Forms {
+        flash: Flash {
+            saved: saved.then(String::new),
+            ..Flash::default()
+        },
         link_error: Some(error),
         ..Forms::default()
     };
-    page(&app, &me.member, status, forms).await
+    page(app, member, status, forms).await
 }
 
 const UNSENT: &str = "Couldn't send a link just now. Try again in a minute.";

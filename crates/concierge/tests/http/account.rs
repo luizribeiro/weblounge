@@ -104,7 +104,7 @@ async fn saves_the_settings_and_says_so() {
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(response.status(), 303);
-    assert_eq!(location(&response), "/account?saved#email-and-news");
+    assert_eq!(location(&response), "/account?saved&sent#email-and-news");
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("alice@example.net"));
     assert!(member.news_opt_in);
@@ -118,13 +118,16 @@ async fn saves_the_settings_and_says_so() {
         "{page}"
     );
 
-    site.post(
-        "/settings",
-        &[("email", "alice@example.net")],
-        Some(&cookie),
-    )
-    .await;
+    let response = site
+        .post(
+            "/settings",
+            &[("email", "alice@example.net")],
+            Some(&cookie),
+        )
+        .await;
+    assert_eq!(location(&response), "/account?saved#email-and-news");
     assert!(!site.db.member("alice").await.unwrap().unwrap().news_opt_in);
+    assert_eq!(site.mail().await.len(), 1);
 }
 
 #[tokio::test]
@@ -333,4 +336,52 @@ async fn guests_and_other_sites_cannot_ask_for_links() {
     let response = site.post_with(RESEND, &[], Some(&cookie), &headers).await;
     assert_eq!(response.status(), 403);
     assert!(site.mail().await.is_empty());
+}
+
+#[tokio::test]
+async fn a_new_address_gets_a_link_and_the_old_ones_stops_working() {
+    let (site, cookie, old) = with_a_code_mailed().await;
+
+    let form = [("email", "alice@example.net")];
+    let response = site.post("/settings", &form, Some(&cookie)).await;
+
+    assert_eq!(location(&response), "/account?saved&sent#email-and-news");
+    let [message] = &site.mail().await[..] else {
+        panic!("one message");
+    };
+    assert_eq!(message.recipient, "alice@example.net");
+    let page = body_text(site.get("/account?saved&sent", Some(&cookie)).await).await;
+    assert!(
+        page.contains("Saved.") && page.contains("A link is on its way."),
+        "{page}"
+    );
+    assert_eq!(confirm(&site, &old).await.0, 422);
+    assert_eq!(confirm(&site, verification_link(message).1).await.0, 200);
+    let member = site.db.member("alice").await.unwrap().unwrap();
+    assert!(member.email_verified_at.is_some());
+}
+
+#[tokio::test]
+async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    site.post(RESEND, &[], Some(&cookie)).await;
+
+    let form = [("email", "alice@example.net")];
+    let response = site.post("/settings", &form, Some(&cookie)).await;
+
+    assert_eq!(response.status(), 429);
+    let page = body_text(response).await;
+    assert!(
+        page.contains(r#"<p class="notice" role="status">Saved.</p>"#),
+        "{page}"
+    );
+    assert!(
+        page.contains("A link went out a few minutes ago."),
+        "{page}"
+    );
+    assert!(page.contains(r#"value="alice@example.net""#), "{page}");
+    assert!(page.contains(">Send a new link</button>"), "{page}");
+    let member = site.db.member("alice").await.unwrap().unwrap();
+    assert_eq!(member.email.as_deref(), Some("alice@example.net"));
+    assert_eq!(site.mail().await.len(), 1);
 }
