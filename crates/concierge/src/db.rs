@@ -307,13 +307,14 @@ impl Db {
     }
 
     /// Sets a member's email and news consent. A changed address is no
-    /// longer verified.
+    /// longer verified, and codes sent to the old one verify nothing.
     pub async fn update_settings(
         &self,
         account: &str,
         email: &str,
         news_opt_in: bool,
     ) -> sqlx::Result<()> {
+        let mut transaction = self.pool.begin().await?;
         sqlx::query!(
             "UPDATE members
              SET email_verified_at = CASE WHEN email IS ? THEN email_verified_at END,
@@ -324,9 +325,16 @@ impl Db {
             news_opt_in,
             account,
         )
-        .execute(&self.pool)
-        .await
-        .map(drop)
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query!(
+            "DELETE FROM verification_codes WHERE account = ? AND email IS NOT ?",
+            account,
+            email,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await
     }
 
     /// Issues a code that verifies `account`'s current email, to be mailed
@@ -2002,6 +2010,25 @@ pub(crate) mod tests {
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(bob.email_verified_at, None);
         assert!(db.verification_code(&issued.code).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn changing_the_email_drops_the_codes_sent_to_the_old_one() {
+        let (db, _dir) = with_unverified_members().await;
+        let kept = issue(&db, "Alice", MAILED).await;
+        let bobs = issue(&db, "bob", MAILED).await;
+        db.update_settings("Alice", "alice@example.org", true)
+            .await
+            .unwrap();
+        assert!(db.verification_code(&kept.code).await.unwrap().is_some());
+
+        db.update_settings("Alice", "alice@example.net", true)
+            .await
+            .unwrap();
+
+        let verification = db.verify_email(&kept.code, MAILED).await.unwrap();
+        assert_eq!(verification, Verification::Unknown);
+        assert!(db.verification_code(&bobs.code).await.unwrap().is_some());
     }
 
     fn code<'a>(

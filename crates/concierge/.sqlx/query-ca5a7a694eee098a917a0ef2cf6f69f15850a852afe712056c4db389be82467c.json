@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM verification_codes WHERE account = ? AND email IS NOT ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "ca5a7a694eee098a917a0ef2cf6f69f15850a852afe712056c4db389be82467c"
+}
