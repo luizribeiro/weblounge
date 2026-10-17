@@ -3,11 +3,8 @@
 //! website attempts never lock anyone out of IRC.
 
 use std::{
-    collections::{HashMap, VecDeque},
     fmt,
-    hash::Hash,
     net::{IpAddr, SocketAddr},
-    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -15,6 +12,7 @@ use axum::{
     extract::{ConnectInfo, FromRequestParts},
     http::{HeaderMap, request::Parts},
 };
+use common::recent::{Quota, Recent};
 
 /// How long a failed attempt counts against its account and address.
 pub const WINDOW: Duration = Duration::from_secs(15 * 60);
@@ -22,8 +20,6 @@ pub const WINDOW: Duration = Duration::from_secs(15 * 60);
 pub const PER_ACCOUNT: usize = 5;
 /// Enough for a household or an office behind one address.
 pub const PER_ADDRESS: usize = 20;
-/// Past this many tracked keys, keys without recent failures are dropped.
-const PRUNE_ABOVE: usize = 10_000;
 
 /// The header nginx puts the client's address in, replacing whatever the
 /// client sent. Concierge listens on loopback only, so nothing but nginx
@@ -61,74 +57,6 @@ enum Key {
     /// Lowercased, as Ergo's casemapping folds names.
     Account(String),
     Address(IpAddr),
-}
-
-/// When each key was last seen, over a sliding window, for keys seen
-/// recently.
-struct Recent<K> {
-    window: Duration,
-    times: Mutex<HashMap<K, VecDeque<Instant>>>,
-}
-
-impl<K: Eq + Hash> Recent<K> {
-    fn new(window: Duration) -> Self {
-        Self {
-            window,
-            times: Mutex::default(),
-        }
-    }
-
-    /// Whether `key` was seen fewer than `limit` times in the window.
-    fn under(&self, key: &K, limit: usize, now: Instant) -> bool {
-        let mut times = self.lock();
-        times
-            .get_mut(key)
-            .is_none_or(|times| self.prune(times, now).len() < limit)
-    }
-
-    /// Records `key` if it was seen fewer than `limit` times in the
-    /// window; answers whether it did.
-    fn take(&self, key: K, limit: usize, now: Instant) -> bool {
-        let allowed = self.under(&key, limit, now);
-        if allowed {
-            self.record(key, now);
-        }
-        allowed
-    }
-
-    fn record(&self, key: K, now: Instant) {
-        let mut times = self.lock();
-        if times.len() > PRUNE_ABOVE {
-            times.retain(|_, times| !self.prune(times, now).is_empty());
-        }
-        times.entry(key).or_default().push_back(now);
-    }
-
-    fn forget(&self, key: &K) {
-        self.lock().remove(key);
-    }
-
-    #[cfg(test)]
-    fn len(&self) -> usize {
-        self.lock().len()
-    }
-
-    /// Drops the times that left the window and returns the rest.
-    fn prune<'a>(&self, times: &'a mut VecDeque<Instant>, now: Instant) -> &'a VecDeque<Instant> {
-        while times
-            .front()
-            .is_some_and(|&time| now.duration_since(time) >= self.window)
-        {
-            times.pop_front();
-        }
-        times
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<K, VecDeque<Instant>>> {
-        self.times
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 }
 
 /// Failed sign-in attempts in the last [`WINDOW`], by account and by client
@@ -197,26 +125,6 @@ impl AddressLimiter {
     /// Whether another request from `address` may go ahead, counting it if so.
     pub fn allows(&self, address: Option<IpAddr>, now: Instant) -> bool {
         address.is_none_or(|address| self.requests.take(address, self.limit, now))
-    }
-}
-
-/// Uses of something shared in the last `window`, up to a limit.
-pub struct Quota {
-    uses: Recent<()>,
-    limit: usize,
-}
-
-impl Quota {
-    pub fn new(limit: usize, window: Duration) -> Self {
-        Self {
-            uses: Recent::new(window),
-            limit,
-        }
-    }
-
-    /// Whether another use may go ahead, counting it if so.
-    pub fn take(&self, now: Instant) -> bool {
-        self.uses.take((), self.limit, now)
     }
 }
 
@@ -293,7 +201,7 @@ impl MailLimiter {
             Err(MailRefusal::TooSoon)
         } else if !self.today.under(&key, LINKS_PER_DAY, now) {
             Err(MailRefusal::TooManyToday)
-        } else if !self.overall.uses.under(&(), self.overall.limit, now) {
+        } else if !self.overall.has_room(now) {
             Err(MailRefusal::Busy)
         } else {
             Ok(())
@@ -306,7 +214,7 @@ impl MailLimiter {
         let key = account_key(account);
         self.recent.record(key.clone(), now);
         self.today.record(key, now);
-        self.overall.uses.record((), now);
+        self.overall.record(now);
     }
 }
 
@@ -413,20 +321,6 @@ mod tests {
         assert!(lookups.allows(HOME, start + WINDOW));
     }
 
-    #[test]
-    fn a_quota_refills_as_uses_leave_the_window() {
-        let (start, hour) = (Instant::now(), Duration::from_secs(3600));
-        let quota = Quota::new(3, hour);
-        let minute = |minutes: u64| start + Duration::from_secs(60 * minutes);
-        for minutes in [0, 10, 20] {
-            assert!(quota.take(minute(minutes)));
-        }
-        assert!(!quota.take(minute(59)));
-        assert!(quota.take(minute(60)));
-        assert!(!quota.take(minute(69)));
-        assert!(quota.take(minute(70)));
-    }
-
     fn mail(links: &MailLimiter, account: &str, now: Instant) -> Result<(), MailRefusal> {
         links.check(account, Recipient::SameAddress, now)?;
         links.record(account, now);
@@ -492,15 +386,5 @@ mod tests {
         assert_eq!(mail(&links, "alice", next), Err(MailRefusal::Busy));
         assert_eq!(mail(&links, "alice", start + HOUR), Ok(()));
         assert_eq!(mail(&links, "member0", start + HOUR), Ok(()));
-    }
-
-    #[test]
-    fn forgets_keys_without_recent_failures_once_it_tracks_many() {
-        let (limiter, start) = (Limiter::default(), Instant::now());
-        for n in 0..=PRUNE_ABOVE {
-            fail(&limiter, &format!("guess{n}"), None, 1, start);
-        }
-        fail(&limiter, "alice", HOME, 1, start + WINDOW);
-        assert_eq!(limiter.failures.len(), 2);
     }
 }

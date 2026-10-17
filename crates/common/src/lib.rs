@@ -2,4 +2,5 @@
 
 pub mod email;
 pub mod random;
+pub mod recent;
 pub mod sqlite;

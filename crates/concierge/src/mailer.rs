@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use common::random;
+use common::{random, recent::Quota};
 use lettre::{
     Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
     message::{Mailbox, SinglePart},
@@ -25,7 +25,6 @@ use crate::{
     db,
     email::Email,
     outbox::{Outbox, QueuedMessage, Subject},
-    rate_limit::Quota,
 };
 
 /// How long the outbox sits unchecked. Concierge can't wake the mailer, and
