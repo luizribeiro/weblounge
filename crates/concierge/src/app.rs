@@ -18,7 +18,7 @@ use crate::{
     db::Db,
     oauth::Webchat,
     outbox::Outbox,
-    rate_limit::{AddressLimiter, Limiter},
+    rate_limit::{AddressLimiter, Limiter, MailLimiter},
     routes, session,
 };
 
@@ -34,6 +34,7 @@ pub struct App {
     pub lookups: AddressLimiter,
     pub oauth_requests: AddressLimiter,
     pub verifications: AddressLimiter,
+    pub mailed_links: MailLimiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
     /// What invite links start with; the code follows.

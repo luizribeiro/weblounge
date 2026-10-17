@@ -4,6 +4,7 @@
 
 use std::{
     collections::{HashMap, VecDeque},
+    fmt,
     hash::Hash,
     net::{IpAddr, SocketAddr},
     sync::Mutex,
@@ -219,6 +220,81 @@ impl Quota {
     }
 }
 
+/// One verification link at a time: enough to find the first in a slow
+/// inbox or the spam folder before asking again.
+pub const LINK_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// Enough for a few typos in an address, too few to flood a stranger who
+/// was given as one.
+pub const LINKS_PER_DAY: usize = 5;
+/// Links mailed per hour, all members together: well under the mailer's
+/// own cap, which reminders and other mail share.
+pub const LINKS_PER_HOUR: usize = 60;
+const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+const HOUR: Duration = Duration::from_secs(60 * 60);
+
+/// Why a verification link wasn't mailed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MailRefusal {
+    TooSoon,
+    TooManyToday,
+    Busy,
+}
+
+impl fmt::Display for MailRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::TooSoon => {
+                "A link went out a few minutes ago. Give it time to arrive, and check your \
+                 spam folder, before asking for another."
+            }
+            Self::TooManyToday => "That's all the links for today. Try again tomorrow.",
+            Self::Busy => "A lot of mail is going out right now. Try again in an hour.",
+        })
+    }
+}
+
+/// Verification links mailed lately, by member and overall.
+pub struct MailLimiter {
+    recent: Recent<Key>,
+    today: Recent<Key>,
+    overall: Quota,
+}
+
+impl Default for MailLimiter {
+    fn default() -> Self {
+        Self {
+            recent: Recent::new(LINK_INTERVAL),
+            today: Recent::new(DAY),
+            overall: Quota::new(LINKS_PER_HOUR, HOUR),
+        }
+    }
+}
+
+impl MailLimiter {
+    /// Whether `account` may have a link mailed now.
+    pub fn check(&self, account: &str, now: Instant) -> Result<(), MailRefusal> {
+        let key = account_key(account);
+        if !self.recent.under(&key, 1, now) {
+            Err(MailRefusal::TooSoon)
+        } else if !self.today.under(&key, LINKS_PER_DAY, now) {
+            Err(MailRefusal::TooManyToday)
+        } else if !self.overall.uses.under(&(), self.overall.limit, now) {
+            Err(MailRefusal::Busy)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Counts a link just mailed to `account`. Only links that went out
+    /// count, so a failure to queue one never makes the member wait.
+    pub fn record(&self, account: &str, now: Instant) {
+        let key = account_key(account);
+        self.recent.record(key.clone(), now);
+        self.today.record(key, now);
+        self.overall.uses.record((), now);
+    }
+}
+
 fn account_key(account: &str) -> Key {
     Key::Account(account.to_ascii_lowercase())
 }
@@ -334,6 +410,57 @@ mod tests {
         assert!(quota.take(minute(60)));
         assert!(!quota.take(minute(69)));
         assert!(quota.take(minute(70)));
+    }
+
+    fn mail(links: &MailLimiter, account: &str, now: Instant) -> Result<(), MailRefusal> {
+        links.check(account, now)?;
+        links.record(account, now);
+        Ok(())
+    }
+
+    #[test]
+    fn checking_alone_counts_nothing() {
+        let (links, now) = (MailLimiter::default(), Instant::now());
+        for _ in 0..=LINKS_PER_DAY {
+            assert_eq!(links.check("alice", now), Ok(()));
+        }
+        assert_eq!(mail(&links, "alice", now), Ok(()));
+        assert_eq!(links.check("alice", now), Err(MailRefusal::TooSoon));
+    }
+
+    #[test]
+    fn a_member_gets_one_link_every_few_minutes() {
+        let (links, start) = (MailLimiter::default(), Instant::now());
+        assert_eq!(mail(&links, "alice", start), Ok(()));
+        let soon = start + LINK_INTERVAL - Duration::from_secs(1);
+        assert_eq!(mail(&links, "Alice", soon), Err(MailRefusal::TooSoon));
+        assert_eq!(mail(&links, "bob", soon), Ok(()));
+        assert_eq!(mail(&links, "alice", start + LINK_INTERVAL), Ok(()));
+    }
+
+    #[test]
+    fn a_member_gets_a_handful_of_links_a_day() {
+        let (links, start) = (MailLimiter::default(), Instant::now());
+        let every = |n: u32| start + LINK_INTERVAL * n;
+        for n in 0..LINKS_PER_DAY as u32 {
+            assert_eq!(mail(&links, "alice", every(n)), Ok(()));
+        }
+        let last = every(LINKS_PER_DAY as u32);
+        assert_eq!(mail(&links, "alice", last), Err(MailRefusal::TooManyToday));
+        assert_eq!(mail(&links, "alice", start + DAY), Ok(()));
+    }
+
+    #[test]
+    fn all_members_together_get_a_quota_an_hour() {
+        let (links, start) = (MailLimiter::default(), Instant::now());
+        for n in 0..LINKS_PER_HOUR {
+            assert_eq!(mail(&links, &format!("member{n}"), start), Ok(()));
+        }
+        assert_eq!(mail(&links, "alice", start), Err(MailRefusal::Busy));
+        let next = start + Duration::from_secs(1);
+        assert_eq!(mail(&links, "alice", next), Err(MailRefusal::Busy));
+        assert_eq!(mail(&links, "alice", start + HOUR), Ok(()));
+        assert_eq!(mail(&links, "member0", start + HOUR), Ok(()));
     }
 
     #[test]

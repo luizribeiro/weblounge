@@ -11,7 +11,7 @@ use concierge::{
     oauth::Webchat,
     outbox::Outbox,
     rate_limit::{
-        AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS,
+        AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
         VERIFICATIONS_PER_ADDRESS,
     },
     session,
@@ -72,6 +72,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
         oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
         verifications: AddressLimiter::new(VERIFICATIONS_PER_ADDRESS),
+        mailed_links: MailLimiter::default(),
         public_url: config.public_url.clone(),
         invite_links: config.invite_links.clone(),
         webchat: Webchat {

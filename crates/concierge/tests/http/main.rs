@@ -36,7 +36,7 @@ use concierge::{
     oauth::Webchat,
     outbox::Outbox,
     rate_limit::{
-        AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS,
+        AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
         VERIFICATIONS_PER_ADDRESS,
     },
     session::{self, Token},
@@ -87,6 +87,7 @@ impl Site {
             lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
             oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
             verifications: AddressLimiter::new(VERIFICATIONS_PER_ADDRESS),
+            mailed_links: MailLimiter::default(),
             public_url: PUBLIC_URL.into(),
             invite_links: format!("{JOIN_URL}/#"),
             webchat: Webchat {
