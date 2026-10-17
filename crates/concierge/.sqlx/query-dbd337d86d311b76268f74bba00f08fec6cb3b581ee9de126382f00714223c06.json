@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members SET email_verified_at = ?\n             WHERE account = ? AND email = ? AND removed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "dbd337d86d311b76268f74bba00f08fec6cb3b581ee9de126382f00714223c06"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM verification_codes WHERE account = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "2962982180be1875e048f6ed14197679ec6528b87fed6abcdc41a2222ee05bc5"
+}

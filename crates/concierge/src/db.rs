@@ -238,6 +238,24 @@ impl VerificationCode {
     }
 }
 
+/// What came of [`Db::verify_email`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verification {
+    /// The member's email is verified now.
+    Verified {
+        account: String,
+    },
+    /// No code is on file by that: mistyped, used already, or long expired.
+    Unknown,
+    Expired,
+    /// A newer email went out, whose link is the one that works.
+    Replaced,
+    /// The member changed their address since, or was removed.
+    AddressChanged,
+    /// Another member verified the same address first.
+    AddressTaken,
+}
+
 /// Concierge's SQLite database, migrated to the schema this build knows.
 #[derive(Clone)]
 pub struct Db {
@@ -365,6 +383,45 @@ impl Db {
             email: member.email,
             expires_at,
         }))
+    }
+
+    /// Verifies the email that `code` was sent to, if it's still its
+    /// member's, and uses up the member's codes; all or nothing, so racing
+    /// requests can't both use one code.
+    pub async fn verify_email(&self, code: &str, now: i64) -> sqlx::Result<Verification> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let code_hash = link_code::hash(code);
+        let Some(record) = verification_code(&mut *transaction, &code_hash).await? else {
+            return Ok(Verification::Unknown);
+        };
+        match record.status(now) {
+            verification_rules::Status::Live => {}
+            verification_rules::Status::Expired => return Ok(Verification::Expired),
+            verification_rules::Status::Replaced => return Ok(Verification::Replaced),
+        }
+        let verified = sqlx::query!(
+            "UPDATE members SET email_verified_at = ?
+             WHERE account = ? AND email = ? AND removed_at IS NULL",
+            now,
+            record.account,
+            record.email,
+        )
+        .execute(&mut *transaction)
+        .await;
+        let verified = match verified {
+            Err(sqlx::Error::Database(error)) if error.is_unique_violation() => {
+                return Ok(Verification::AddressTaken);
+            }
+            verified => verified?,
+        };
+        if verified.rows_affected() == 0 {
+            return Ok(Verification::AddressChanged);
+        }
+        delete_verification_codes(&mut *transaction, &record.account).await?;
+        transaction.commit().await?;
+        Ok(Verification::Verified {
+            account: record.account,
+        })
     }
 
     /// The verification code `code`, while it's on file.
@@ -855,6 +912,16 @@ async fn verification_code(
     )
     .fetch_optional(executor)
     .await
+}
+
+async fn delete_verification_codes(
+    executor: impl SqliteExecutor<'_>,
+    account: &str,
+) -> sqlx::Result<()> {
+    sqlx::query!("DELETE FROM verification_codes WHERE account = ?", account)
+        .execute(executor)
+        .await
+        .map(drop)
 }
 
 async fn insert_invite(
@@ -1843,6 +1910,98 @@ pub(crate) mod tests {
         }
         let carol = db.member("carol").await.unwrap().unwrap();
         assert_eq!(carol.verification_first_sent_at, None);
+    }
+
+    #[tokio::test]
+    async fn a_live_code_verifies_its_address_once() {
+        let (db, _dir) = with_unverified_members().await;
+        let replaced = issue(&db, "alice", MAILED).await;
+        let issued = issue(&db, "alice", MAILED + 60).await;
+        let bobs = issue(&db, "bob", MAILED).await;
+        let now = issued.expires_at - 1;
+
+        let verification = db.verify_email(&issued.code, now).await.unwrap();
+
+        assert_eq!(
+            verification,
+            Verification::Verified {
+                account: "Alice".into()
+            }
+        );
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert_eq!(alice.email_verified_at, Some(now));
+        for used_up in [&issued.code, &replaced.code] {
+            assert_eq!(db.verification_code(used_up).await.unwrap(), None);
+            let again = db.verify_email(used_up, now).await.unwrap();
+            assert_eq!(again, Verification::Unknown);
+        }
+        assert!(db.verification_code(&bobs.code).await.unwrap().is_some());
+        assert_eq!(
+            db.member("bob").await.unwrap().unwrap().email_verified_at,
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn replaced_expired_and_unknown_codes_verify_nothing() {
+        let (db, _dir) = with_unverified_members().await;
+        let replaced = issue(&db, "alice", MAILED).await;
+        let live = issue(&db, "alice", MAILED + 60).await;
+        let expiring = issue(&db, "bob", MAILED).await;
+
+        for (code, at, outcome) in [
+            (replaced.code.as_str(), MAILED + 60, Verification::Replaced),
+            (
+                expiring.code.as_str(),
+                expiring.expires_at,
+                Verification::Expired,
+            ),
+            (&live.code[1..], MAILED + 60, Verification::Unknown),
+        ] {
+            assert_eq!(db.verify_email(code, at).await.unwrap(), outcome);
+        }
+        for account in ["alice", "bob"] {
+            let member = db.member(account).await.unwrap().unwrap();
+            assert_eq!(member.email_verified_at, None, "{account}");
+        }
+        assert!(db.verification_code(&live.code).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn a_code_verifies_nothing_once_its_member_has_another_address() {
+        let (db, _dir) = with_unverified_members().await;
+        let issued = issue(&db, "alice", MAILED).await;
+        execute(
+            &db,
+            "UPDATE members SET email = 'alice@example.net' WHERE account = 'alice'",
+        )
+        .await
+        .unwrap();
+
+        let verification = db.verify_email(&issued.code, MAILED).await.unwrap();
+
+        assert_eq!(verification, Verification::AddressChanged);
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert_eq!(alice.email_verified_at, None);
+    }
+
+    #[tokio::test]
+    async fn an_address_another_member_verified_first_stays_theirs() {
+        let (db, _dir) = with_unverified_members().await;
+        execute(
+            &db,
+            "UPDATE members SET email = 'Carol@Example.org' WHERE account = 'bob'",
+        )
+        .await
+        .unwrap();
+        let issued = issue(&db, "bob", MAILED).await;
+
+        let verification = db.verify_email(&issued.code, MAILED).await.unwrap();
+
+        assert_eq!(verification, Verification::AddressTaken);
+        let bob = db.member("bob").await.unwrap().unwrap();
+        assert_eq!(bob.email_verified_at, None);
+        assert!(db.verification_code(&issued.code).await.unwrap().is_some());
     }
 
     fn code<'a>(
