@@ -3,8 +3,8 @@ checks the page offers a Confirm button that fits and is big enough to
 tap, with the code field showing only without JavaScript or for a link
 cut short; `confirm` presses it. `resend` signs in and asks the Account
 tab for a new link. `unconfirmed` signs in before confirming and checks
-the reminder on Home and the Invites tab's reason fit and lead to the
-Account tab. Saves screenshots in /tmp/screens."""
+the reminder on Home fits and offers a new link, and the Invites tab's
+reason leads to the Account tab. Saves screenshots in /tmp/screens."""
 
 import os
 import sys
@@ -16,6 +16,14 @@ from browser import MEMBERS, SCREENS, WIDTHS, browsing, fits, signed_in
 
 def confirm_button(page):
     return page.get_by_role("button", name="Confirm my email")
+
+
+def tappable(control, name):
+    assert control.bounding_box()["height"] >= 44, name
+
+
+def asks_for_a_link(button):
+    return button.evaluate("button => button.form.action") == f"{MEMBERS}/verification-link"
 
 
 def visit(page, url):
@@ -30,7 +38,7 @@ def look(page, link):
         page.set_viewport_size({"width": width, "height": 800})
         visit(page, link)
         expect(page.locator("#code")).to_be_hidden()
-        assert confirm_button(page).bounding_box()["height"] >= 44, name
+        tappable(confirm_button(page), name)
         assert fits(page), name
         page.screenshot(path=f"{SCREENS}/verify-{name}.png", full_page=True)
 
@@ -45,7 +53,7 @@ def look(page, link):
         code = without_js.locator("#code")
         expect(code).to_be_visible()
         assert code.evaluate("input => parseFloat(getComputedStyle(input).fontSize)") >= 16, name
-        assert code.bounding_box()["height"] >= 44, name
+        tappable(code, name)
         assert fits(without_js), name
         without_js.screenshot(path=f"{SCREENS}/verify-no-js-{name}.png", full_page=True)
     print("the page fits at both widths and verifies nothing by loading")
@@ -58,7 +66,7 @@ def confirm(page, link):
     expect(page.locator("h1")).to_have_text("Your email is confirmed.")
     for name, width in WIDTHS.items():
         page.set_viewport_size({"width": width, "height": 800})
-        assert page.get_by_role("link", name="Go to your account").bounding_box()["height"] >= 44, name
+        tappable(page.get_by_role("link", name="Go to your account"), name)
         assert fits(page), name
         page.screenshot(path=f"{SCREENS}/verified-{name}.png", full_page=True)
     print("confirmed from the link")
@@ -72,7 +80,7 @@ def resend(page):
         visit(page, f"{MEMBERS}/account#email-and-news")
         expect(page.locator(".email-status")).to_contain_text("Please confirm by")
         expect(button).to_be_in_viewport()
-        assert button.bounding_box()["height"] >= 44, name
+        tappable(button, name)
         assert fits(page), name
         page.screenshot(path=f"{SCREENS}/account-{name}.png", full_page=True)
     button.click()
@@ -88,7 +96,9 @@ def unconfirmed(page):
         page.set_viewport_size({"width": width, "height": 800})
         page.goto(f"{MEMBERS}/")
         expect(reminder).to_contain_text("Please confirm your email by")
-        assert reminder.get_by_role("link", name="Send a new link").bounding_box()["height"] >= 44, name
+        send_link = reminder.get_by_role("button", name="Send a new link")
+        tappable(send_link, name)
+        assert asks_for_a_link(send_link), name
         assert fits(page), name
         page.screenshot(path=f"{SCREENS}/banner-{name}.png", full_page=True)
 
@@ -96,13 +106,13 @@ def unconfirmed(page):
         expect(page.get_by_text("You can't invite others until you confirm your email.")).to_be_visible()
         expect(reminder).to_have_count(0)
         confirm_link = page.get_by_role("link", name="Confirm your email")
-        assert confirm_link.bounding_box()["height"] >= 44, name
+        tappable(confirm_link, name)
         assert fits(page), name
         page.screenshot(path=f"{SCREENS}/invites-unverified-{name}.png", full_page=True)
     confirm_link.click()
     page.wait_for_url(f"{MEMBERS}/account#email-and-news")
     expect(reminder).to_have_count(0)
-    print("the reminder and the Invites tab lead to the Account tab")
+    print("the reminder offers a new link, and the Invites tab leads to the Account tab")
 
 
 def main():

@@ -44,11 +44,11 @@
     {%- endif %}
     <main class="page">
       {%- if let Some(unconfirmed) = layout.unconfirmed %}
-      <div class="notice email-status email-reminder">
+      <div class="notice email-reminder">
         <p>Please confirm your email
           {%- if let Some(due) = unconfirmed.upcoming() %} {% call components::by_deadline(due) %}{% endcall %}{% endif -%}
-          . You won't be able to invite others until you do.</p>
-        <a class="button button-small" href="{{ crate::routes::verify::ACCOUNT_EMAIL }}">Send {% if unconfirmed.sent() %}a new{% else %}a{% endif %} link</a>
+          . You won't be able to invite others until you do. {% call components::send_link(unconfirmed, true) %}{% endcall %}.</p>
+        {%- call components::send_link_form() %}{% endcall %}
       </div>
       {%- endif %}
       {%- block content %}{% endblock %}

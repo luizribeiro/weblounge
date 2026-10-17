@@ -78,9 +78,9 @@ with subtest("until the new member confirms her email, she's refused an invite, 
     assert "You can't invite others until you confirm your email." in tab, tab
     assert concierge_sql("SELECT count(*) FROM invites WHERE created_by = 'erin'").strip() == "0"
 
-with subtest("in a browser, the pages remind her to confirm by her date, and the Invites tab leads to the Account tab"):
+with subtest("in a browser, the pages remind her to confirm by her date, and offer a new link"):
     reminded = client.succeed(f"verify-browser unconfirmed erin {shlex.quote(erin['password'])} 2>&1")
-    assert "lead to the Account tab" in reminded, reminded
+    assert "the Invites tab leads to the Account tab" in reminded, reminded
 
 with subtest("signing up mails a link to confirm the email, in short plain lines, under a subject without the nick"):
     message = wait_for_mail(erins_email, verification_subject)

@@ -335,3 +335,14 @@ async fn body_text(response: Response) -> String {
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     String::from_utf8(bytes.to_vec()).unwrap()
 }
+
+/// The form behind every "Send a new link", which asks for one by POST.
+const SEND_LINK_FORM: &str =
+    r#"<form id="send-link" method="post" action="/verification-link"></form>"#;
+
+/// A "Send a new link" in running text, submitting [`SEND_LINK_FORM`].
+fn send_link(label: &str) -> String {
+    format!(
+        r#"<button class="link-button inline-action" type="submit" form="send-link">{label}</button>"#
+    )
+}

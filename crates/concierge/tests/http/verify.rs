@@ -1,7 +1,7 @@
 use axum::http::header;
 use concierge::{db, rate_limit::VERIFICATIONS_PER_ADDRESS, verification_rules};
 
-use crate::{PUBLIC_URL, Site, body_text, confirm};
+use crate::{PUBLIC_URL, SEND_LINK_FORM, Site, body_text, confirm, send_link};
 
 /// alice, whose email isn't verified, holding a code to verify it.
 async fn with_a_code() -> (Site, String) {
@@ -208,7 +208,7 @@ async fn an_address_gets_twenty_tries_then_waits() {
     assert_eq!(response.status(), 200);
 }
 
-const REMINDER: &str = r#"<div class="notice email-status email-reminder">"#;
+const REMINDER: &str = r#"<div class="notice email-reminder">"#;
 
 /// The pages alice sees once signed in, by path.
 async fn pages_of_alice(site: &Site, paths: &[&str]) -> Vec<String> {
@@ -241,14 +241,12 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
         assert!(page.contains(REMINDER), "{page}");
         assert!(
             page.contains(&format!(
-                r#"Please confirm your email by <time class="deadline" datetime="{date}">{day}</time>. You won't be able to invite others until you do.</p>"#
+                r#"Please confirm your email by <time class="deadline" datetime="{date}">{day}</time>. You won't be able to invite others until you do. {}.</p>"#,
+                send_link("Send a new link")
             )),
             "{page}"
         );
-        assert!(
-            page.contains(r##"<a class="button button-small" href="/account#email-and-news">Send a new link</a>"##),
-            "{page}"
-        );
+        assert!(page.contains(SEND_LINK_FORM), "{page}");
     }
     for page in pages_of_alice(&site, &["/account", "/invites"]).await {
         assert!(!page.contains(REMINDER), "{page}");
@@ -263,13 +261,10 @@ async fn a_member_never_mailed_a_link_is_asked_to_send_one() {
     let [page] = pages_of_alice(&site, &["/"]).await.try_into().unwrap();
 
     assert!(
-        page.contains(
-            "<p>Please confirm your email. You won't be able to invite others until you do.</p>"
-        ),
-        "{page}"
-    );
-    assert!(
-        page.contains(r##"href="/account#email-and-news">Send a link</a>"##),
+        page.contains(&format!(
+            "<p>Please confirm your email. You won't be able to invite others until you do. {}.</p>",
+            send_link("Send a link")
+        )),
         "{page}"
     );
 }
@@ -284,12 +279,12 @@ async fn a_member_past_the_date_is_reminded_without_it() {
     let [page] = pages_of_alice(&site, &["/"]).await.try_into().unwrap();
 
     assert!(
-        page.contains(
-            "<p>Please confirm your email. You won't be able to invite others until you do.</p>"
-        ),
+        page.contains(&format!(
+            "<p>Please confirm your email. You won't be able to invite others until you do. {}.</p>",
+            send_link("Send a new link")
+        )),
         "{page}"
     );
-    assert!(page.contains(">Send a new link</a>"), "{page}");
 }
 
 #[tokio::test]
@@ -302,5 +297,6 @@ async fn confirmed_members_and_guests_get_no_reminder() {
 
     for page in pages.iter().chain([&guest]) {
         assert!(!page.contains(REMINDER), "{page}");
+        assert!(!page.contains(SEND_LINK_FORM), "{page}");
     }
 }

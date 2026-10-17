@@ -1,8 +1,9 @@
 use crate::{Site, body_text};
 
+/// The Home tab of Alice, whose confirmed email puts no reminder over it.
 async fn home_of_alice() -> String {
     let site = Site::start().await;
-    site.add_member("Alice").await;
+    site.add_verified_member("Alice").await;
     let cookie = site.sign_in("alice").await;
     body_text(site.get("/", Some(&cookie)).await).await
 }

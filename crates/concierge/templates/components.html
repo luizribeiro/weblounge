@@ -104,3 +104,12 @@
 {% macro by_deadline(due) -%}
 by <time class="deadline" datetime="{{ due.date }}">{{ due.day }}</time>
 {%- endmacro %}
+
+{% macro send_link_form() %}
+        <form id="send-link" method="post" action="/verification-link"></form>
+{%- endmacro %}
+
+{# Paragraphs and other forms can't hold a form, so the button names one. #}
+{% macro send_link(unconfirmed, capitalized) -%}
+<button class="link-button inline-action" type="submit" form="send-link">{% if capitalized %}S{% else %}s{% endif %}end {% if unconfirmed.sent() %}a new{% else %}a{% endif %} link</button>
+{%- endmacro %}

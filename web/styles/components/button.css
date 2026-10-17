@@ -54,3 +54,10 @@
     text-decoration: underline;
   }
 }
+
+/* A link-button inside running text: tall enough to tap, without
+   spreading the lines around it. */
+.inline-action {
+  margin-block: calc((1lh - 44px) / 2);
+  text-decoration: underline;
+}
