@@ -7,6 +7,7 @@ mod mail;
 mod mailer;
 mod member;
 mod migrate;
+mod remind;
 mod status;
 
 use std::{fs, path::Path};

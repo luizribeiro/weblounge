@@ -5,7 +5,7 @@ use concierge::{
     admin::{self, Command},
     app::{self, App},
     assets::Assets,
-    config::{Config, Databases, MailerConfig},
+    config::{Config, Databases, MailerConfig, RemindConfig},
     db::{self, Db},
     mailer::{self, Mailer},
     oauth::Webchat,
@@ -14,7 +14,7 @@ use concierge::{
         AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
         VERIFICATIONS_PER_ADDRESS,
     },
-    session,
+    session, verification_mail,
 };
 use tokio::net::TcpListener;
 
@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
     match Command::parse() {
         Command::Migrate => migrate(&Databases::from_env()?).await,
         Command::Serve => serve(Config::from_env()?).await,
+        Command::Remind => remind(&RemindConfig::from_env()?).await,
         Command::Mailer { check: true } => mailer::check(&MailerConfig::from_env()?)
             .await
             .map(|output| print!("{output}")),
@@ -47,6 +48,18 @@ fn report_migration(path: &Path, version: Option<i64>) {
         path.display(),
         version.unwrap_or_default()
     );
+}
+
+async fn remind(config: &RemindConfig) -> anyhow::Result<()> {
+    let db = Db::open(&config.databases.concierge).await?;
+    let outbox = Outbox::open(&config.databases.outbox).await?;
+    let batch = verification_mail::remind(&db, &outbox, &config.public_url, db::now()).await?;
+    let plural = if batch.sent.len() == 1 { "" } else { "s" };
+    eprintln!("Queued {} reminder{plural}", batch.sent.len());
+    if batch.left > 0 {
+        eprintln!("{} more are due; the next run mails them", batch.left);
+    }
+    Ok(())
 }
 
 async fn send_mail(config: MailerConfig) -> anyhow::Result<()> {
