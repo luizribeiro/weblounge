@@ -35,7 +35,7 @@ def main():
         page.locator('input[name="news"]').click()
         email_save.click()
         page.wait_for_url(f"{MEMBERS}/account?saved#email-and-news")
-        expect(page.locator(".notice")).to_have_text("Saved.")
+        expect(page.locator(".notice[role=status]")).to_have_text("Saved.")
         expect(email_save).to_be_disabled()
         print("save buttons follow changes")
 
