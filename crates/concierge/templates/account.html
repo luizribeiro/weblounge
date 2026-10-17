@@ -36,9 +36,15 @@
         {%- endif %}
         {%- if let Some(unconfirmed) = unconfirmed %}
         <div class="notice email-status">
-          <p>{{ unconfirmed.status }}</p>
+          <p>
+            {%- match unconfirmed.due %}
+            {%- when Some(due) %}Open the link we emailed you to confirm it.
+            {%- if let Some(left) = due.left %} Please confirm by {{ due.date }} ({{ left }} left).
+            {%- else %} It was due by {{ due.date }}.{% endif %}
+            {%- when None %}We haven't sent you a link to confirm it yet.
+            {%- endmatch %}</p>
           <form method="post" action="/verification-link">
-            <button class="button" type="submit">Send {% if unconfirmed.sent %}a new{% else %}a{% endif %} link</button>
+            <button class="button" type="submit">Send {% if unconfirmed.sent() %}a new{% else %}a{% endif %} link</button>
           </form>
         </div>
         {%- endif %}

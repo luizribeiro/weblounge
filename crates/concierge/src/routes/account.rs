@@ -14,17 +14,15 @@ use super::{
     Flash, Layout, Tab, internal_error,
     presence::Presence,
     render_with,
-    verify::{self, Mailed},
+    verify::{self, Mailed, Unconfirmed},
 };
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
     db::{self, Bot, Member},
     email::{self, Email},
-    invite_rules,
     password_rules::FieldErrors,
     rate_limit::Recipient,
-    tree, verification_rules,
 };
 
 #[derive(Template)]
@@ -59,41 +57,6 @@ struct SettingsForm<'a> {
     email: &'a str,
     news: bool,
     email_error: Option<String>,
-}
-
-/// A member's email that isn't confirmed yet.
-struct Unconfirmed {
-    /// Whether a link to confirm it went out.
-    sent: bool,
-    status: String,
-}
-
-impl Unconfirmed {
-    fn of(member: &Member, now: i64) -> Option<Self> {
-        if member.email_verified_at.is_some() {
-            return None;
-        }
-        let Some(first_sent_at) = member.verification_first_sent_at else {
-            return Some(Self {
-                sent: false,
-                status: "We haven't sent you a link to confirm it yet.".into(),
-            });
-        };
-        let deadline = verification_rules::deadline(first_sent_at);
-        let due = tree::date(deadline);
-        let when = if now < deadline {
-            format!(
-                "Please confirm by {due} ({} left).",
-                invite_rules::in_words(deadline - now)
-            )
-        } else {
-            format!("It was due by {due}.")
-        };
-        Some(Self {
-            sent: true,
-            status: format!("Open the link we emailed you to confirm it. {when}"),
-        })
-    }
 }
 
 /// What's wrong with a password change; never what was typed.

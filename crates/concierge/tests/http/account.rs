@@ -53,7 +53,7 @@ async fn an_email_past_its_week_says_when_it_was_due() {
 async fn an_email_never_mailed_says_so() {
     let (page, _) = account_tab_mailed(None).await;
     assert!(
-        page.contains("We haven&#39;t sent you a link to confirm it yet."),
+        page.contains("We haven't sent you a link to confirm it yet."),
         "{page}"
     );
 }

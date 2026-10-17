@@ -12,10 +12,10 @@ use super::{Layout, Link, Tab, internal_error, render};
 use crate::{
     app::{App, AppState},
     auth::Visitor,
-    db::{self, Verification},
+    db::{self, Member, Verification},
     email, invite_rules, link_code,
     rate_limit::{self, ClientAddress, MailRefusal, Recipient},
-    verification_mail, verification_rules,
+    tree, verification_mail, verification_rules,
 };
 
 #[derive(Template)]
@@ -76,6 +76,39 @@ pub enum Mailed {
     Refused(MailRefusal),
     /// Queueing failed, and was logged.
     Failed,
+}
+
+/// Where confirming a member's email stands, until they confirm it.
+pub struct Unconfirmed {
+    /// When their grace period ends, once a link to confirm it went out.
+    pub due: Option<Due>,
+}
+
+pub struct Due {
+    pub date: String,
+    /// How long is left, in words, until it passes.
+    pub left: Option<String>,
+}
+
+impl Unconfirmed {
+    pub fn of(member: &Member, now: i64) -> Option<Self> {
+        if member.email_verified_at.is_some() {
+            return None;
+        }
+        let due = member.verification_first_sent_at.map(|first_sent_at| {
+            let deadline = verification_rules::deadline(first_sent_at);
+            Due {
+                date: tree::date(deadline),
+                left: (now < deadline).then(|| invite_rules::in_words(deadline - now)),
+            }
+        });
+        Some(Self { due })
+    }
+
+    /// Whether a link to confirm it went out.
+    pub fn sent(&self) -> bool {
+        self.due.is_some()
+    }
 }
 
 /// Mails `account` a new verification link, replacing their last, if the
