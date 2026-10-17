@@ -144,10 +144,14 @@ def files_containing(*texts: str) -> list[str]:
 Mail = TypedDict("Mail", {"from": str, "to": list[str], "subject": str, "text": str})
 
 
-def mailpit(path: str, method: str = "GET") -> Any:
-    """What Mailpit's API on the mail node answers, for tests with `mail = true;`."""
+def mailpit_request(path: str, method: str = "GET") -> str:
+    """Calls Mailpit's API on the mail node, for tests with `mail = true;`."""
     url = f"http://127.0.0.1:8025/api/v1/{path}"
-    return json.loads(mail.succeed(shlex.join(["curl", "-sf", "-X", method, url])) or "null")
+    return mail.succeed(shlex.join(["curl", "-sf", "-X", method, url]))
+
+
+def mailpit(path: str) -> Any:
+    return json.loads(mailpit_request(path))
 
 
 def mailbox(address: dict[str, str]) -> str:
@@ -187,7 +191,7 @@ def link_in(message: Mail, prefix: str) -> str:
 
 
 def clear_mail() -> None:
-    mailpit("messages", method="DELETE")
+    mailpit_request("messages", method="DELETE")
 
 
 start_all()
