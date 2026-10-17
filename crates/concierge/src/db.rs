@@ -942,7 +942,44 @@ pub(crate) mod tests {
         )
         .await;
 
-        let db = Db::migrate(&path).await.unwrap();
+        migrating_keeps_alice_bob_and_what_refers_to_them(&path).await;
+    }
+
+    #[tokio::test]
+    async fn requiring_an_email_keeps_members_and_whatever_refers_to_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        let open: String = invite_code::hash("open")
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        written_by_version(
+            &path,
+            20261020120000,
+            &format!(
+                "INSERT INTO members (account, email, joined_at, is_admin)
+                 VALUES ('alice', 'alice@example.org', 1, TRUE);
+                 INSERT INTO members (account, invited_by, joined_at, removed_at)
+                 VALUES ('bob', 'alice', 2, 3);
+                 INSERT INTO invites (code_hash, created_by, created_at, expires_at)
+                 VALUES (x'{open}', 'alice', 4, 5);
+                 INSERT INTO sessions (token_hash, account, created_at, expires_at)
+                 VALUES (x'00', 'alice', 6, 70);
+                 INSERT INTO oauth_tokens (token_hash, session_hash, client_id, created_at, expires_at)
+                 VALUES (x'01', x'00', 'gamja', 6, 70);
+                 INSERT INTO bots (account, owner, created_at) VALUES ('bender', 'alice', 8);"
+            ),
+        )
+        .await;
+
+        migrating_keeps_alice_bob_and_what_refers_to_them(&path).await;
+    }
+
+    /// Migrates the database at `path`, where alice runs bender, holds a
+    /// session with a token and made the invite "open", and bob, whom she
+    /// invited, was removed; checks all of it is still there.
+    async fn migrating_keeps_alice_bob_and_what_refers_to_them(path: &Path) {
+        let db = Db::migrate(path).await.unwrap();
 
         assert_eq!(
             db.session(b"\x00", 10)
@@ -1099,6 +1136,34 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_current_member_has_an_email() {
+        let (db, _dir) = temp_db().await;
+        let error = execute(
+            &db,
+            "INSERT INTO members (account, joined_at) VALUES ('alice', 0)",
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("CHECK"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_current_member_without_an_email_fails_the_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261020120000,
+            "INSERT INTO members (account, joined_at) VALUES ('alice', 0);",
+        )
+        .await;
+
+        let error = Db::migrate(&path).await.err().unwrap();
+
+        assert!(format!("{error:#}").contains("CHECK"), "{error:#}");
     }
 
     #[tokio::test]
