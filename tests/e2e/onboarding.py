@@ -1,14 +1,31 @@
+import hashlib
 import re
+import secrets
 import shlex
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Account, Browser, concierge_admin, invite_code, irc, irc_command, members, outcome
+    from helpers import (
+        Account,
+        Browser,
+        concierge_admin,
+        concierge_sql,
+        invite_code,
+        irc,
+        irc_command,
+        members,
+        outcome,
+    )
 
 erin: Account = {"account": "erin", "password": "lantern-orchard-71"}
 frank: Account = {"account": "frank", "password": "copper-meadow-94"}
 erins_browser = Browser("erin")
+
+
+def email_verified_at(account: str) -> str:
+    return concierge_sql(f"SELECT email_verified_at FROM members WHERE account = '{account}'").strip()
+
 
 credenza.wait_for_unit("nginx.service")
 credenza.wait_for_unit("concierge.service")
@@ -59,16 +76,40 @@ with subtest("in a browser, the new member's invite link names them and signs so
     assert " 903 " in irc(**frank)
     _, open_link = erins_browser.create_invite()
 
+with subtest("opening a verification link, in curl or a browser, verifies nothing until Confirm is pressed"):
+    verify_code = secrets.token_urlsafe(32)
+    code_hash = hashlib.sha256(verify_code.encode()).hexdigest()
+    concierge_sql(
+        "INSERT INTO verification_codes (code_hash, account, email, created_at, expires_at) "
+        f"SELECT x'{code_hash}', account, email, unixepoch(), unixepoch() + 172800 FROM members WHERE account = 'erin'",
+        write=True,
+    )
+    verify_link = f"https://{members}/verify#{verify_code}"
+    assert "Confirm my email" in erins_browser.get(f"/verify?code={verify_code}", "-f")
+    looked = client.succeed(f"verify-browser look {shlex.quote(verify_link)} 2>&1")
+    assert "verifies nothing by loading" in looked, looked
+    assert email_verified_at("erin") == ""
+
+with subtest("in a browser, pressing Confirm verifies the new member's email, and the link works once"):
+    confirmed = client.succeed(f"verify-browser confirm {shlex.quote(verify_link)} 2>&1")
+    assert "confirmed from the link" in confirmed, confirmed
+    assert email_verified_at("erin") != ""
+    again = Browser("scanner").post("/verify", f"code={verify_code}", flags=["-w", "\n%{http_code}"])
+    assert again.endswith("\n422") and "This link doesn&#39;t work any more." in again, again
+    client.copy_from_machine("/tmp/screens")
+
 with subtest("member reset-password locks the old password out of IRC and ends the website session"):
     new_password = concierge_admin("member", "reset-password", "erin").strip()
     client.fail(irc_command(**erin))
     assert erins_browser.get("/", *outcome) == f"303 https://{members}/signin"
     assert " 903 " in irc(account="erin", password=new_password)
 
-with subtest("the passwords and invite codes never reach the journal"):
+with subtest("the passwords and link codes never reach the journal, nor nginx's log the verification code"):
     credenza.succeed("journalctl --sync")
-    for secret in [erin["password"], frank["password"], new_password, invite_code(link), invite_code(franks_link)]:
+    codes = [invite_code(link), invite_code(franks_link), verify_code]
+    for secret in [erin["password"], frank["password"], new_password, *codes]:
         credenza.fail(f"journalctl | grep -qF {secret}")
+    credenza.fail(f"grep -qF {verify_code} /var/log/nginx/access.log")
 
 with subtest("concierge's database keeps no invite code, only its hash"):
     for code in [invite_code(link), invite_code(franks_link), invite_code(open_link)]:

@@ -4,6 +4,7 @@ import "./invite";
 import "./password";
 import "./signup";
 import "./unsaved";
+import "./verify";
 
 const FEEDBACK_MS = 1500;
 

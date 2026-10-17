@@ -11,7 +11,7 @@
           <div class="field" data-link-code>
             <label for="code">Code</label>
             <input id="code" name="code" required pattern="{{ code_pattern }}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="code-hint">
-            <p class="hint" id="code-hint">From the link in your email: the part after the #. Pasting the whole link works too.</p>
+            <p class="hint" id="code-hint" data-cut-short="This link looks cut short. Paste the whole link from your email.">From the link in your email: the part after the #. Pasting the whole link works too.</p>
           </div>
           <button class="button button-primary" type="submit">Confirm my email</button>
         </form>
