@@ -1,5 +1,6 @@
 //! Who may invite, how many, and how long an invite stays open. Members
-//! invite from the day they join, a few open invites at a time.
+//! invite from the day they confirm their email, a few open invites at a
+//! time.
 //!
 //! Times are Unix seconds.
 
@@ -24,6 +25,22 @@ pub fn expires_at(created_at: i64) -> i64 {
 /// The member who wants to invite someone.
 pub struct Inviter {
     pub removed: bool,
+    /// Whether they confirmed their email.
+    pub verified: bool,
+}
+
+impl Inviter {
+    /// Why they may create no invite at all, however many they have open.
+    /// Barring them revokes none of those.
+    pub fn barred(&self) -> Option<Refusal> {
+        if self.removed {
+            Some(Refusal::Removed)
+        } else if !self.verified {
+            Some(Refusal::Unverified)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct Invite {
@@ -65,6 +82,7 @@ impl Invite {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     Removed,
+    Unverified,
     TooManyOpen,
 }
 
@@ -95,7 +113,7 @@ pub fn remaining<'a>(
     invites: impl IntoIterator<Item = &'a Invite>,
     now: i64,
 ) -> i64 {
-    if inviter.removed {
+    if inviter.barred().is_some() {
         return 0;
     }
     (MAX_OPEN - open(invites, now)).max(0)
@@ -107,8 +125,8 @@ pub fn may_invite<'a>(
     invites: impl IntoIterator<Item = &'a Invite>,
     now: i64,
 ) -> Result<(), Refusal> {
-    if inviter.removed {
-        return Err(Refusal::Removed);
+    if let Some(refusal) = inviter.barred() {
+        return Err(refusal);
     }
     match remaining(inviter, invites, now) {
         0 => Err(Refusal::TooManyOpen),
@@ -150,7 +168,10 @@ mod tests {
     use super::*;
 
     const JOINED: i64 = 1_760_000_000;
-    const MEMBER: Inviter = Inviter { removed: false };
+    const MEMBER: Inviter = Inviter {
+        removed: false,
+        verified: true,
+    };
 
     fn open(created_at: i64) -> Invite {
         Invite {
@@ -213,7 +234,8 @@ mod tests {
     }
 
     #[test]
-    fn members_invite_from_the_day_they_join() {
+    fn members_invite_from_the_day_they_confirm_their_email() {
+        assert_eq!(MEMBER.barred(), None);
         assert_eq!(may_invite(&MEMBER, [], JOINED), Ok(()));
         assert_eq!(remaining(&MEMBER, [], JOINED), MAX_OPEN);
     }
@@ -277,8 +299,31 @@ mod tests {
 
     #[test]
     fn removed_members_invite_nobody() {
-        let removed = Inviter { removed: true };
+        let removed = Inviter {
+            removed: true,
+            ..MEMBER
+        };
         assert_eq!(may_invite(&removed, [], JOINED), Err(Refusal::Removed));
         assert_eq!(remaining(&removed, [], JOINED), 0);
+        let unverified = Inviter {
+            verified: false,
+            ..removed
+        };
+        assert_eq!(may_invite(&unverified, [], JOINED), Err(Refusal::Removed));
+    }
+
+    #[test]
+    fn members_who_havent_confirmed_their_email_invite_nobody() {
+        let unverified = Inviter {
+            verified: false,
+            ..MEMBER
+        };
+        let invites = [open(JOINED)];
+        assert_eq!(
+            may_invite(&unverified, &invites, JOINED),
+            Err(Refusal::Unverified)
+        );
+        assert_eq!(remaining(&unverified, &invites, JOINED), 0);
+        assert_eq!(super::open(&invites, JOINED), 1);
     }
 }

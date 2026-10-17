@@ -152,5 +152,6 @@ impl Invites {
 fn inviter(member: &Member) -> Inviter {
     Inviter {
         removed: member.removed_at.is_some(),
+        verified: member.email_verified_at.is_some(),
     }
 }

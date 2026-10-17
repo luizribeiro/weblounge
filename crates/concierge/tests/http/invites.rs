@@ -265,3 +265,38 @@ async fn guests_and_other_origins_create_nothing() {
     assert_eq!(response.status(), 403);
     assert_eq!(invite_count(&site).await, 0);
 }
+
+#[tokio::test]
+async fn members_and_admins_alike_invite_nobody_until_they_confirm_their_email() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.add_member("root").await;
+    site.execute("UPDATE members SET is_admin = TRUE WHERE account = 'root'")
+        .await;
+    for nick in ["alice", "root"] {
+        let cookie = site.sign_in(nick).await;
+
+        let response = site.post("/invites", &[], Some(&cookie)).await;
+
+        assert_eq!(location(&response), "/invites");
+    }
+    assert_eq!(invite_count(&site).await, 0);
+}
+
+#[tokio::test]
+async fn changing_to_an_unconfirmed_email_keeps_open_invites_but_makes_no_more() {
+    let site = Site::start().await;
+    site.add_verified_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let link = create_invite(&site, &cookie).await;
+    let form = [("email", "alice@example.net")];
+    site.post("/settings", &form, Some(&cookie)).await;
+
+    let response = site.post("/invites", &[], Some(&cookie)).await;
+
+    assert_eq!(location(&response), "/invites");
+    assert_eq!(invite_count(&site).await, 1);
+    let code = link.rsplit('#').next().unwrap();
+    let invite = site.db.invite(code).await.unwrap().unwrap();
+    assert!(invite.revoked_at.is_none());
+}
