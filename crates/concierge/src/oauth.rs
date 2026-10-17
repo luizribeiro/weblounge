@@ -176,7 +176,8 @@ impl TokenRequest {
         code.expires_at > now
             && code.client_id == self.client_id
             && code.redirect_uri == self.redirect_uri
-            && verifies(&self.code_verifier, &code.code_challenge)
+            && CodeVerifier::parse(&self.code_verifier)
+                .is_some_and(|verifier| verifies(&verifier, &code.code_challenge))
     }
 }
 
@@ -199,14 +200,25 @@ impl CodeChallenge {
     }
 }
 
+/// The secret a client proves it started an authorization with. No Debug,
+/// so it stays out of logs.
+pub struct CodeVerifier(String);
+
+impl CodeVerifier {
+    /// `value` as a verifier, if RFC 7636 allows it.
+    pub fn parse(value: &str) -> Option<Self> {
+        let well_formed = VERIFIER_LENGTHS.contains(&value.len())
+            && value
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"-._~".contains(&c));
+        well_formed.then(|| Self(value.to_owned()))
+    }
+}
+
 /// Whether `verifier` is the one `challenge` was made from, by S256.
-pub fn verifies(verifier: &str, challenge: &CodeChallenge) -> bool {
-    let well_formed = VERIFIER_LENGTHS.contains(&verifier.len())
-        && verifier
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || b"-._~".contains(&c));
-    let derived = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    well_formed && bool::from(derived.as_bytes().ct_eq(challenge.0.as_bytes()))
+pub fn verifies(verifier: &CodeVerifier, challenge: &CodeChallenge) -> bool {
+    let derived = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.0.as_bytes()));
+    derived.as_bytes().ct_eq(challenge.0.as_bytes()).into()
 }
 
 /// Whether an `Authorization` header authenticates Ergo with `secret`,
@@ -518,36 +530,58 @@ mod tests {
         }
     }
 
+    fn verifier(value: &str) -> CodeVerifier {
+        CodeVerifier::parse(value).unwrap()
+    }
+
+    #[test]
+    fn a_verifier_is_43_to_128_unreserved_characters() {
+        let unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+        for value in [VERIFIER, unreserved, &unreserved[..43], &"~".repeat(128)] {
+            assert!(
+                CodeVerifier::parse(value).is_some_and(|v| v.0 == value),
+                "{value}"
+            );
+        }
+        for value in [
+            "",
+            &"a".repeat(42),
+            &"a".repeat(129),
+            &format!("{} ", "a".repeat(43)),
+            &format!("{}+", "a".repeat(43)),
+            &format!("{}/", "a".repeat(43)),
+            &format!("{}=", "a".repeat(43)),
+            &format!("{}%7E", "a".repeat(43)),
+            &format!("{}\u{e9}", "a".repeat(43)),
+        ] {
+            assert!(CodeVerifier::parse(value).is_none(), "{value}");
+        }
+    }
+
     #[test]
     fn verifies_the_rfc_example() {
-        assert!(verifies(VERIFIER, &challenge()));
+        assert!(verifies(&verifier(VERIFIER), &challenge()));
+    }
+
+    #[test]
+    fn verifies_the_longest_verifier() {
+        let longest = "~".repeat(128);
+        assert!(verifies(&verifier(&longest), &s256(&longest)));
     }
 
     #[test]
     fn refuses_other_verifiers() {
-        let long = "a".repeat(129);
-        for verifier in [
-            "",
-            &VERIFIER[1..],
+        for value in [
+            &format!("{VERIFIER}~"),
             "eBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
             CHALLENGE,
-            &long,
         ] {
-            assert!(!verifies(verifier, &challenge()), "{verifier}");
+            assert!(!verifies(&verifier(value), &challenge()), "{value}");
         }
         assert!(!verifies(
-            VERIFIER,
+            &verifier(VERIFIER),
             &CodeChallenge::parse(VERIFIER).unwrap()
         ));
-    }
-
-    #[test]
-    fn refuses_verifiers_outside_rfc_7636s_alphabet_and_lengths() {
-        for verifier in ["a".repeat(42), format!("{} ", "a".repeat(43))] {
-            assert!(!verifies(&verifier, &s256(&verifier)), "{verifier:?}");
-        }
-        let longest = "~".repeat(128);
-        assert!(verifies(&longest, &s256(&longest)));
     }
 
     #[test]
