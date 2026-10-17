@@ -527,8 +527,8 @@ impl Db {
         Ok(deleted.rows_affected())
     }
 
-    /// Clears everything personal about a member, ends their sessions and
-    /// revokes their open invites. Their row stays as their place in the
+    /// Clears everything personal about a member, their verification codes
+    /// included, ends their sessions and revokes their open invites. Their row stays as their place in the
     /// invite tree, so the people they invited stay attached. Mail waiting
     /// for them is in the outbox's own database.
     pub async fn remove_member(&self, account: &str, now: i64) -> sqlx::Result<Removal> {
@@ -536,13 +536,15 @@ impl Db {
         sqlx::query!(
             "UPDATE members
              SET email = NULL, email_verified_at = NULL, news_opt_in = FALSE,
-                 is_admin = FALSE, removed_at = ?
+                 is_admin = FALSE, removed_at = ?,
+                 verification_first_sent_at = NULL, verification_reminded_at = NULL
              WHERE account = ?",
             now,
             account,
         )
         .execute(&mut *transaction)
         .await?;
+        delete_verification_codes(&mut *transaction, account).await?;
         let sessions_ended = delete_sessions(&mut *transaction, account).await?;
         let invites_revoked = revoke_open_invites(&mut *transaction, account, now).await?;
         transaction.commit().await?;
@@ -1391,7 +1393,9 @@ pub(crate) mod tests {
              VALUES ('root', 'root@example.org', NULL, 0),
                     ('alice', 'alice@example.org', 'root', 10),
                     ('bob', 'bob@example.org', 'alice', 20);
-             UPDATE members SET email_verified_at = 11, news_opt_in = TRUE, is_admin = TRUE
+             UPDATE members
+             SET email_verified_at = 11, news_opt_in = TRUE, is_admin = TRUE,
+                 verification_first_sent_at = 10, verification_reminded_at = 11
              WHERE account = 'alice';",
         )
         .await
@@ -1498,12 +1502,16 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
+        let alices = issue(&db, "alice", 100).await;
+        let bobs = issue(&db, "bob", 100).await;
 
         let removal = db.remove_member("alice", 200).await.unwrap();
 
         assert!(removal.off_the_disk);
         assert!(!files_contain(&dir, b"alice@example.org"));
         assert!(files_contain(&dir, b"bob@example.org"));
+        assert_eq!(db.verification_code(&alices.code).await.unwrap(), None);
+        assert!(db.verification_code(&bobs.code).await.unwrap().is_some());
     }
 
     #[tokio::test]
