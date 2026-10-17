@@ -7,13 +7,14 @@
         <p class="eyebrow">Privacy</p>
         <h1>What we keep.</h1>
         <h2>Stored</h2>
-        <p>Your nick, your email address, who invited whom, and when you joined. The IRC server keeps a hash of your password and your settings.</p>
+        <p>Your nick, your email address and whether you've confirmed it, who invited whom, and when you joined. The IRC server keeps a hash of your password and your settings.</p>
         <h2>Not stored</h2>
-        <p>Members' IP addresses: not in the database, not in the logs. Failed sign-ins are counted per address, in memory, for {{ failed_sign_in_minutes }} minutes.</p>
+        <p>Members' IP addresses: not in the database, not in the logs. Failed sign-ins, nick lookups and email confirmations are counted per address, in memory, for {{ failed_sign_in_minutes }} minutes.</p>
         <h2>Messages</h2>
         <p>Channel messages, for a week, so you can scroll back after a restart. Direct messages never touch the disk: they stay in memory, and a restart forgets them.</p>
         <h2>Email</h2>
-        <p>News emails are opt-in, and you can turn them off on your account page.</p>
+        <p>We send email through MXroute, our mail provider. A message waits on our server only until it's sent, {{ outbox_wait }} at most; replies and bounces land in our mailbox there.</p>
+        <p>We keep links to confirm your address only as a hash, and they expire after {{ link_lifetime }}. News emails are opt-in, and you can turn them off on your account page.</p>
         <h2>Leaving</h2>
         <p>Ask an admin and they'll delete your account: your email and sessions go, and your password stops working. Your nick stays in the invite tree, so the people you invited stay attached.</p>
       </article>

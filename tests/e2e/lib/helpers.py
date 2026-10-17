@@ -63,17 +63,30 @@ def concierge_admin(*args: str) -> str:
     return credenza.succeed(concierge_admin_command(*args))
 
 
-def sqlite(database: str, query: str, *, write: bool = False) -> str:
+def sqlite_command(database: str, query: str, *, write: bool = False) -> str:
     readonly = [] if write else ["-readonly"]
-    return credenza.succeed(shlex.join([tools["sqlite3"], *readonly, database, query]))
+    return shlex.join([tools["sqlite3"], *readonly, database, query])
+
+
+def sqlite(database: str, query: str, *, write: bool = False) -> str:
+    return credenza.succeed(sqlite_command(database, query, write=write))
 
 
 def concierge_sql(query: str, *, write: bool = False) -> str:
     return sqlite("/var/lib/private/concierge/concierge.db", query, write=write)
 
 
+outbox = "/var/lib/concierge-outbox/outbox.db"
+
+
 def outbox_sql(query: str) -> str:
-    return sqlite("/var/lib/concierge-outbox/outbox.db", query)
+    return sqlite(outbox, query)
+
+
+def wait_for_empty_outbox() -> None:
+    """Waits until the mailer has sent, and deleted, every queued message."""
+    count = sqlite_command(outbox, "SELECT count(*) FROM outbox")
+    credenza.wait_until_succeeds(f'[ "$({count})" = 0 ]', timeout=60)
 
 
 def invite_code(link: str) -> str:

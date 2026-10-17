@@ -1,0 +1,3 @@
+{ vmTest, ... }:
+
+vmTest { mail = true; }

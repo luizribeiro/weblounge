@@ -4,7 +4,7 @@ import shlex
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from driver import client, credenza, subtest
+    from driver import client, credenza, mail, subtest
     from helpers import (
         Account,
         Browser,
@@ -16,6 +16,8 @@ if TYPE_CHECKING:
         members,
         outcome,
         register,
+        wait_for_empty_outbox,
+        wait_for_mail,
     )
 
 grace: Account = {"account": "grace", "password": "willow-harbor-58"}
@@ -26,6 +28,7 @@ credenza.wait_for_unit("concierge.service")
 credenza.wait_for_open_port(8080)
 credenza.wait_for_unit("ergochat.service")
 credenza.wait_for_open_port(8089)
+mail.wait_for_unit("mailpit-test.service")
 assert graces_browser.sign_up(concierge_admin("invite", "create", "--root"), **grace) == "200 "
 
 with subtest("stored: concierge's database has the columns the page was written against"):
@@ -57,6 +60,8 @@ with subtest("stored: concierge's database has the columns the page was written 
         "members.joined_at",
         "members.news_opt_in",
         "members.removed_at",
+        "members.verification_first_sent_at",
+        "members.verification_reminded_at",
         "oauth_codes.client_id",
         "oauth_codes.code_challenge",
         "oauth_codes.code_hash",
@@ -72,9 +77,17 @@ with subtest("stored: concierge's database has the columns the page was written 
         "sessions.created_at",
         "sessions.expires_at",
         "sessions.token_hash",
+        "verification_codes.account",
+        "verification_codes.code_hash",
+        "verification_codes.created_at",
+        "verification_codes.email",
+        "verification_codes.expires_at",
+        "verification_codes.replaced_at",
     ], columns
 
-with subtest("stored: a member's email stays with concierge, out of Ergo's database"):
+with subtest("stored: a member's email stays with concierge, out of Ergo's database, and leaves the outbox once sent"):
+    wait_for_mail(email)
+    wait_for_empty_outbox()
     files = files_containing(email)
     assert files and all(file.startswith("/var/lib/private/concierge/concierge.db") for file in files), files
 

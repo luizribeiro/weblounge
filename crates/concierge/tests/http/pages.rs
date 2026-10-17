@@ -46,6 +46,17 @@ async fn privacy_counts_failed_sign_ins_for_as_long_as_the_rate_limiter() {
 }
 
 #[tokio::test]
+async fn privacy_says_how_long_mail_and_its_links_last() {
+    let page = body_text(Site::start().await.get("/privacy", None).await).await;
+    assert!(page.contains("We send email through MXroute"), "{page}");
+    assert!(page.contains("until it's sent, 2 days at most;"), "{page}");
+    assert!(
+        page.contains("only as a hash, and they expire after 2 days."),
+        "{page}"
+    );
+}
+
+#[tokio::test]
 async fn guests_see_a_sign_in_link_and_members_their_nick() {
     let site = Site::start().await;
     site.add_member("Alice").await;
