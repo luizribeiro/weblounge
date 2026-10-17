@@ -61,6 +61,14 @@ pub struct Databases {
     pub outbox: PathBuf,
 }
 
+/// What `concierge remind` needs: the databases, and the site its links
+/// lead to. It talks to nothing else, so it reads no credentials.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemindConfig {
+    pub databases: Databases,
+    pub public_url: String,
+}
+
 /// The address members' IRC clients connect to, over TLS.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrcServer {
@@ -273,6 +281,20 @@ impl Databases {
         Ok(Self {
             concierge: database_in(Path::new(&state_dir)),
             outbox: required(&var, "CONCIERGE_OUTBOX")?.into(),
+        })
+    }
+}
+
+impl RemindConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let public_url = required(&var, "CONCIERGE_PUBLIC_URL")?;
+        Ok(Self {
+            databases: Databases::from_vars(&var)?,
+            public_url: origin("CONCIERGE_PUBLIC_URL", public_url)?,
         })
     }
 }
@@ -656,6 +678,39 @@ mod tests {
             mailer_with(&[("CONCIERGE_SMTP_USERNAME", None)]),
             Err(ConfigError::Missing("CONCIERGE_SMTP_USERNAME"))
         );
+    }
+
+    #[test]
+    fn reminding_needs_the_databases_and_the_public_url_alone() {
+        let vars = HashMap::from([
+            ("STATE_DIRECTORY", "/var/lib/concierge"),
+            ("CONCIERGE_OUTBOX", "/var/lib/concierge-outbox/outbox.db"),
+            ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org/"),
+        ]);
+        let remind = |missing: Option<&str>| {
+            RemindConfig::from_vars(|name| {
+                (Some(name) != missing)
+                    .then(|| vars.get(name).map(|value| (*value).to_owned()))
+                    .flatten()
+            })
+        };
+        assert_eq!(
+            remind(None),
+            Ok(RemindConfig {
+                databases: Databases {
+                    concierge: "/var/lib/concierge/concierge.db".into(),
+                    outbox: "/var/lib/concierge-outbox/outbox.db".into(),
+                },
+                public_url: "https://members.weblounge.org".into(),
+            })
+        );
+        for name in [
+            "STATE_DIRECTORY",
+            "CONCIERGE_OUTBOX",
+            "CONCIERGE_PUBLIC_URL",
+        ] {
+            assert_eq!(remind(Some(name)), Err(ConfigError::Missing(name)));
+        }
     }
 
     #[test]
