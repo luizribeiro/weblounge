@@ -71,17 +71,6 @@ with subtest("the new member logs in to IRC with SASL and lands in #lounge"):
     assert " 903 " in session, session
     assert re.search(r"^:erin!\S+ JOIN #lounge", session, re.M), session
 
-with subtest("in a browser, the new member's invite link names them and signs someone up under them"):
-    _, franks_link = erins_browser.create_invite()
-    args = shlex.join([franks_link, "erin", link, frank["account"], frank["password"]])
-    signed_up = client.succeed(f"invite-browser {args} 2>&1")
-    assert "signed up from the link" in signed_up, signed_up
-    tab = erins_browser.get("/invites", "-f")
-    assert "<li>frank</li>" in tab, tab
-    assert "frank" not in concierge_admin("member", "reconcile")
-    assert " 903 " in irc(**frank)
-    _, open_link = erins_browser.create_invite()
-
 with subtest("signing up mails a link to confirm the email, in short plain lines, under a subject without the nick"):
     message = wait_for_mail(erins_email, verification_subject)
     assert message["from"] == "weblounge.org <noreply@weblounge.org>", message
@@ -121,6 +110,17 @@ with subtest("in a browser, pressing Confirm verifies the new member's email, an
     assert email_verified_at("erin") != ""
     again = Browser("scanner").post("/verify", f"code={verify_code}", flags=["-w", "\n%{http_code}"])
     assert again.endswith("\n422") and "This link doesn&#39;t work any more." in again, again
+
+with subtest("in a browser, the new member's invite link names them and signs someone up under them"):
+    _, franks_link = erins_browser.create_invite()
+    args = shlex.join([franks_link, "erin", link, frank["account"], frank["password"]])
+    signed_up = client.succeed(f"invite-browser {args} 2>&1")
+    assert "signed up from the link" in signed_up, signed_up
+    tab = erins_browser.get("/invites", "-f")
+    assert "<li>frank</li>" in tab, tab
+    assert "frank" not in concierge_admin("member", "reconcile")
+    assert " 903 " in irc(**frank)
+    _, open_link = erins_browser.create_invite()
     client.copy_from_machine("/tmp/screens")
 
 with subtest("member reset-password locks the old password out of IRC and ends the website session"):

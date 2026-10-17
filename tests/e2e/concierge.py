@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         concierge_admin,
         concierge_admin_command,
         concierge_sql,
+        confirm_email,
         ergo_api,
         https,
         irc,
@@ -174,6 +175,7 @@ with subtest("in a browser, the Account tab's Save buttons turn on only for chan
     assert "save buttons follow changes" in result, result
 
 with subtest("the invite tree lists a new member under whoever invited them"):
+    confirm_email("Dana")
     _, link = browser.create_invite()
     assert Browser("ivy").sign_up(link, "ivy", "ivy-chose-this-one") == "200 "
     tree = browser.get("/invites", "-f")

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
         Browser,
         add_member,
         concierge_sql,
+        confirm_email,
         ergo_api,
         https,
         invite_code,
@@ -359,6 +360,7 @@ with subtest("a password change from another origin is refused, even with the me
     assert '"success":true' in body, body
 
 with subtest("a new invite's page draws its QR code within the CSP, and nothing shows its code again"):
+    confirm_email("mallory")
     page, link = mallorys_browser.create_invite()
     code = link.rsplit("/", 1)[1]
     needs = PageNeeds(page)

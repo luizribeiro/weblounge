@@ -135,6 +135,11 @@ def add_member(account: str, password: str, admin: bool = False) -> None:
     assert signed_up == "200 ", signed_up
 
 
+def confirm_email(account: str) -> None:
+    """Marks `account`'s email confirmed, as inviting needs, in tests without a mail node to mail the link."""
+    concierge_sql(f"UPDATE members SET email_verified_at = unixepoch() WHERE account = '{account}'", write=True)
+
+
 def client_addresses() -> set[str]:
     return set(credenza.succeed("getent ahosts client | cut -d' ' -f1").split())
 
