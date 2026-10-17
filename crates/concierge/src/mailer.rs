@@ -104,6 +104,20 @@ pub fn smtp(config: &MailerConfig) -> anyhow::Result<AsyncSmtpTransport<Tokio1Ex
     )
 }
 
+/// Logs in to the configured server and leaves without sending anything,
+/// which shows the way out, the certificate and the password all work.
+pub async fn check(config: &MailerConfig) -> anyhow::Result<String> {
+    let server = format!(
+        "{}:{} as {}",
+        config.smtp_host, config.smtp_port, config.smtp_username
+    );
+    match smtp(config)?.test_connection().await {
+        Ok(true) => Ok(format!("Logged in to {server}\n")),
+        Ok(false) => anyhow::bail!("{server} hung up after the login"),
+        Err(error) => anyhow::bail!("Can't log in to {server}: {}", Failure::from(&error)),
+    }
+}
+
 /// What a round did.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Round {
@@ -463,19 +477,31 @@ mod tests {
         assert_eq!(reply(5, 5, 0).to_string(), "SMTP 550");
     }
 
-    /// Sends a message through the SMTP transport to `port` on loopback.
-    async fn send_to(port: u16) -> Failure {
-        let credentials = tempfile::tempdir().unwrap();
+    /// The mailer's config for an SMTP server at `port` on loopback, with
+    /// the password in `credentials`.
+    fn config_for(port: u16, credentials: &tempfile::TempDir) -> MailerConfig {
         let password = credentials.path().join(SMTP_PASSWORD_CREDENTIAL);
         std::fs::write(password, "correct horse battery staple\n").unwrap();
-        let config = MailerConfig {
+        MailerConfig {
             smtp_host: "127.0.0.1".into(),
             smtp_port: port,
             smtp_username: "noreply@weblounge.org".into(),
             from: "noreply@weblounge.org".parse().unwrap(),
             outbox_path: "/var/lib/concierge-outbox/outbox.db".into(),
             credentials_dir: credentials.path().into(),
-        };
+        }
+    }
+
+    /// A loopback port nothing listens on.
+    fn closed_port() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    }
+
+    /// Sends a message through the SMTP transport to `port` on loopback.
+    async fn send_to(port: u16) -> Failure {
+        let credentials = tempfile::tempdir().unwrap();
+        let config = config_for(port, &credentials);
         let message = lettre::Message::builder()
             .from(config.from.clone())
             .to("alice@example.org".parse().unwrap())
@@ -487,14 +513,23 @@ mod tests {
 
     #[tokio::test]
     async fn an_unreachable_server_fails_for_now() {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        drop(listener);
-
-        let failure = send_to(port).await;
+        let failure = send_to(closed_port()).await;
 
         assert!(matches!(failure, Failure::Other(_)), "{failure:?}");
         assert!(!failure.is_permanent());
+    }
+
+    #[tokio::test]
+    async fn checking_an_unreachable_server_names_it_and_the_login() {
+        let credentials = tempfile::tempdir().unwrap();
+        let port = closed_port();
+
+        let error = check(&config_for(port, &credentials)).await.unwrap_err();
+
+        let expected = format!("Can't log in to 127.0.0.1:{port} as noreply@weblounge.org: ");
+        let error = error.to_string();
+        assert!(error.starts_with(&expected), "{error}");
+        assert!(error.contains("Connection refused"), "{error}");
     }
 
     #[tokio::test]

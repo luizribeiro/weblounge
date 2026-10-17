@@ -25,24 +25,29 @@ fn write_smtp_password(fixture: &Fixture) {
     fs::write(path, "correct horse battery staple\n").unwrap();
 }
 
-/// `concierge mailer` with only the mailer's environment, sending to a
-/// port nothing listens on.
-fn start_mailer(fixture: &Fixture) -> Child {
+/// `concierge mailer <args>` with only the mailer's environment, sending
+/// to a port nothing listens on.
+fn mailer_command(fixture: &Fixture, args: &[&str]) -> Command {
     let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = closed.local_addr().unwrap().port().to_string();
     drop(closed);
-    Command::new(env!("CARGO_BIN_EXE_concierge"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_concierge"));
+    command
         .arg("mailer")
+        .args(args)
         .env_clear()
         .env("CONCIERGE_SMTP_HOST", "127.0.0.1")
         .env("CONCIERGE_SMTP_PORT", port)
         .env("CONCIERGE_SMTP_USERNAME", "noreply@weblounge.org")
         .env("CONCIERGE_MAIL_FROM", "weblounge <noreply@weblounge.org>")
         .env("CONCIERGE_OUTBOX", &fixture.config.outbox_path)
-        .env("CREDENTIALS_DIRECTORY", &fixture.config.credentials_dir)
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap()
+        .env("CREDENTIALS_DIRECTORY", &fixture.config.credentials_dir);
+    command
+}
+
+fn start_mailer(fixture: &Fixture) -> Child {
+    let mut command = mailer_command(fixture, &[]);
+    command.stderr(Stdio::piped()).spawn().unwrap()
 }
 
 /// What `mailer` logs, up to and including the first line `until` accepts.
@@ -117,4 +122,32 @@ async fn stops_without_the_smtp_password() {
         log.last().unwrap().contains(SMTP_PASSWORD_CREDENTIAL),
         "{log:?}"
     );
+}
+
+#[tokio::test]
+async fn checking_names_the_server_it_cannot_log_in_to_and_sends_nothing() {
+    let fixture = Fixture::start().await;
+    let message = Message {
+        account: None,
+        to: Email::parse("alice@example.org").unwrap(),
+        subject: Subject::parse("Verify your email for weblounge").unwrap(),
+        body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa\n".into(),
+    };
+    let outbox = fixture.outbox().await;
+    outbox.queue(&message, db::now()).await.unwrap();
+    write_smtp_password(&fixture);
+
+    let output = mailer_command(&fixture, &["--check"]).output().unwrap();
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.starts_with("Error: Can't log in to 127.0.0.1:"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(" as noreply@weblounge.org: Connection error: "),
+        "{stderr}"
+    );
+    assert_eq!(outbox.due(db::now()).await.unwrap()[0].attempts, 0);
 }

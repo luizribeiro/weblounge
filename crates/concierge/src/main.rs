@@ -20,7 +20,10 @@ async fn main() -> anyhow::Result<()> {
     match Command::parse() {
         Command::Migrate => migrate(&Databases::from_env()?).await,
         Command::Serve => serve(Config::from_env()?).await,
-        Command::Mailer => send_mail(MailerConfig::from_env()?).await,
+        Command::Mailer { check: true } => mailer::check(&MailerConfig::from_env()?)
+            .await
+            .map(|output| print!("{output}")),
+        Command::Mailer { check: false } => send_mail(MailerConfig::from_env()?).await,
         Command::Admin(command) => admin::run(command, &Config::from_env()?)
             .await
             .map(|output| print!("{output}")),

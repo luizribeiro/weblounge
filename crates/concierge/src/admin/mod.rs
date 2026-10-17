@@ -26,7 +26,11 @@ pub enum Command {
     /// Serve the site on CONCIERGE_LISTEN.
     Serve,
     /// Send the mail concierge queues, through CONCIERGE_SMTP_HOST.
-    Mailer,
+    Mailer {
+        /// Log in to the SMTP server and leave, sending nothing.
+        #[arg(long)]
+        check: bool,
+    },
     #[command(flatten)]
     Admin(AdminCommand),
 }
