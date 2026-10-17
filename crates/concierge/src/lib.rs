@@ -25,3 +25,4 @@ pub mod session;
 mod sqlite;
 pub mod status;
 pub mod tree;
+pub mod verification_rules;
