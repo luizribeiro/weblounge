@@ -1,15 +1,15 @@
 use std::{
-    fmt,
     net::SocketAddr,
     path::{Path, PathBuf},
 };
 
-use anyhow::Context;
 use axum::http::Uri;
+use common::config::{invalid, read_credential, required};
 use ergo_api::{Client, Url};
 use lettre::message::Mailbox;
 
 pub use crate::routes::presence::Presence;
+pub use common::config::ConfigError;
 
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
 pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
@@ -86,31 +86,6 @@ impl IrcServer {
         })
     }
 }
-
-#[derive(Debug, PartialEq)]
-pub enum ConfigError {
-    Missing(&'static str),
-    Invalid {
-        name: &'static str,
-        value: String,
-        reason: &'static str,
-    },
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Missing(name) => write!(f, "{name} is not set"),
-            Self::Invalid {
-                name,
-                value,
-                reason,
-            } => write!(f, "{name}={value:?} is invalid: {reason}"),
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {}
 
 impl Config {
     pub fn from_env() -> Result<Self, ConfigError> {
@@ -299,30 +274,8 @@ impl RemindConfig {
     }
 }
 
-fn required(
-    var: impl Fn(&str) -> Option<String>,
-    name: &'static str,
-) -> Result<String, ConfigError> {
-    var(name).ok_or(ConfigError::Missing(name))
-}
-
-fn invalid(name: &'static str, value: String, reason: &'static str) -> ConfigError {
-    ConfigError::Invalid {
-        name,
-        value,
-        reason,
-    }
-}
-
 fn database_in(state_dir: &Path) -> PathBuf {
     state_dir.join(DATABASE)
-}
-
-fn read_credential(credentials_dir: &Path, name: &str) -> anyhow::Result<String> {
-    let path = credentials_dir.join(name);
-    let value =
-        std::fs::read_to_string(&path).with_context(|| format!("can't read {}", path.display()))?;
-    Ok(value.trim().to_owned())
 }
 
 pub fn invite_url(invite_links: &str, code: &str) -> String {
