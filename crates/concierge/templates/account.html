@@ -25,28 +25,16 @@
       </section>
       <section class="card tab-card" id="email-and-news" aria-labelledby="email-title">
         <h2 class="eyebrow" id="email-title">Email</h2>
-        {%- if flash.saved.is_some() %}
-        <p class="notice" role="status">Saved.</p>
-        {%- endif %}
-        {%- if flash.sent.is_some() %}
-        <p class="notice" role="status">A link is on its way. If it doesn't arrive in a few minutes, check your spam folder.</p>
-        {%- endif %}
         {%- if let Some(error) = link_error %}
-        <p class="alert" role="alert">{{ error }}</p>
-        {%- endif %}
-        {%- if let Some(unconfirmed) = unconfirmed %}
-        <div class="notice email-status">
-          <p>
-            {%- match unconfirmed.due %}
-            {%- when Some(due) %}Open the link we emailed you to confirm it.
-            {%- if let Some(left) = due.left %} Please confirm by {{ due.day }} ({{ left }} left).
-            {%- else %} It was due by {{ due.day }}.{% endif %}
-            {%- when None %}We haven't sent you a link to confirm it yet.
-            {%- endmatch %}</p>
-          <form method="post" action="/verification-link">
-            <button class="button" type="submit">Send {% if unconfirmed.sent() %}a new{% else %}a{% endif %} link</button>
-          </form>
-        </div>
+        <p class="alert" role="alert">{% if flash.saved.is_some() %}Saved. {% endif %}{{ error }}</p>
+        {%- else if flash.sent.is_some() %}
+        <p class="notice" role="status">
+          {%- if flash.saved.is_some() %}Saved. We sent a link to <strong>{{ settings.email }}</strong>; open it to confirm
+          {%- if let Some(due) = self.deadline() %} {% call components::by_deadline(due) %}{% endcall %}{% else %} your email{% endif %}.
+          {%- else %}We sent a new link to <strong>{{ settings.email }}</strong>.
+          {%- endif %} If it doesn't arrive in a few minutes, check your spam folder.</p>
+        {%- else if flash.saved.is_some() %}
+        <p class="notice" role="status">Saved.</p>
         {%- endif %}
         <form class="form" method="post" action="/settings" data-save-when-changed>
           <div class="field">
@@ -55,12 +43,22 @@
             {%- if let Some(error) = settings.email_error %}
             <p class="field-error" id="email-hint">{{ error }}</p>
             {%- else %}
-            <p class="hint" id="email-hint">{% if unconfirmed.is_some() %}Not confirmed yet{% else %}Confirmed{% endif %}. For account recovery.</p>
+            <p class="hint" id="email-hint">
+              {%- if let Some(unconfirmed) = unconfirmed %}Not confirmed yet.
+              {%- if let Some(due) = unconfirmed.upcoming() %} Confirm {% call components::by_deadline(due) %}{% endcall %}
+              {%- if let Some(left) = due.left %} ({{ left }} left){% endif %}, or {% call components::send_link(unconfirmed, false) %}{% endcall %}.
+              {%- else %} {% call components::send_link(unconfirmed, true) %}{% endcall %} to confirm it.
+              {%- endif %}
+              {%- else %}Confirmed. For account recovery.
+              {%- endif %}</p>
             {%- endif %}
           </div>
           {%- call components::news_opt_in(settings.news) %}{% endcall %}
           <button class="button button-primary" type="submit">Save</button>
         </form>
+        {%- if unconfirmed.is_some() %}
+        {%- call components::send_link_form() %}{% endcall %}
+        {%- endif %}
       </section>
       <section class="card tab-card" id="irc-settings" aria-labelledby="irc-settings-title">
         <h2 class="eyebrow" id="irc-settings-title">IRC while you're away</h2>

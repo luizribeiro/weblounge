@@ -1,7 +1,10 @@
 use axum::http::header;
 use concierge::{db, rate_limit::LINKS_PER_DAY, verification_mail, verification_rules};
 
-use crate::{NEWS_LABEL, Site, body_text, confirm, execute, location, verification_link};
+use crate::{
+    NEWS_LABEL, SEND_LINK_FORM, Site, body_text, confirm, execute, location, send_link,
+    verification_link,
+};
 
 const HOUR: i64 = 60 * 60;
 
@@ -23,39 +26,79 @@ async fn account_tab_mailed(ago: Option<i64>) -> (String, i64) {
     (page, deadline.unwrap_or_default())
 }
 
+/// The notices and alerts in the Account tab's Email card.
+fn email_notices(page: &str) -> Vec<&str> {
+    let card = page
+        .split(r#"id="email-and-news""#)
+        .nth(1)
+        .expect("an Email card");
+    let card = card.split("</section>").next().unwrap();
+    card.split(r#"<p class=""#)
+        .filter_map(|paragraph| {
+            paragraph
+                .strip_prefix(r#"notice" role="status">"#)
+                .or_else(|| paragraph.strip_prefix(r#"alert" role="alert">"#))
+        })
+        .map(|notice| notice.split("</p>").next().unwrap())
+        .collect()
+}
+
+/// The email field's hint, under the address.
+fn email_hint(page: &str) -> &str {
+    let hint = page
+        .split(r#"<p class="hint" id="email-hint">"#)
+        .nth(1)
+        .expect("a hint");
+    hint.split("</p>").next().unwrap()
+}
+
+/// The deadline as the Email card writes it.
+fn by_deadline(deadline: i64) -> String {
+    format!(
+        r#"by <time class="deadline" datetime="{}">{}</time>"#,
+        concierge::tree::date(deadline),
+        verification_rules::deadline_in_words(deadline)
+    )
+}
+
 #[tokio::test]
-async fn an_unconfirmed_email_shows_when_it_is_due() {
+async fn an_unconfirmed_email_says_when_it_is_due_and_offers_a_new_link() {
     let (page, deadline) = account_tab_mailed(Some(26 * HOUR)).await;
-    let due = verification_rules::deadline_in_words(deadline);
-    assert!(
-        page.contains(&format!(
-            r#"<p>Open the link we emailed you to confirm it. Please confirm by {due} (5 days left).</p>"#
-        )),
-        "{page}"
+    assert_eq!(
+        email_hint(&page),
+        format!(
+            "Not confirmed yet. Confirm {} (5 days left), or {}.",
+            by_deadline(deadline),
+            send_link("send a new link")
+        )
     );
-    assert!(
-        page.contains(">Not confirmed yet. For account recovery.</p>"),
-        "{page}"
+    assert!(page.contains(SEND_LINK_FORM), "{page}");
+    assert_eq!(email_notices(&page), Vec::<&str>::new());
+}
+
+#[tokio::test]
+async fn an_email_past_its_week_offers_a_new_link_without_the_date() {
+    let (page, _) = account_tab_mailed(Some(8 * 24 * HOUR)).await;
+    assert_eq!(
+        email_hint(&page),
+        format!(
+            "Not confirmed yet. {} to confirm it.",
+            send_link("Send a new link")
+        )
     );
 }
 
 #[tokio::test]
-async fn an_email_past_its_week_says_when_it_was_due() {
-    let (page, deadline) = account_tab_mailed(Some(8 * 24 * HOUR)).await;
-    let due = verification_rules::deadline_in_words(deadline);
-    assert!(
-        page.contains(&format!("to confirm it. It was due by {due}.</p>")),
-        "{page}"
-    );
-}
-
-#[tokio::test]
-async fn an_email_never_mailed_says_so() {
+async fn an_email_never_mailed_offers_a_first_link() {
     let (page, _) = account_tab_mailed(None).await;
-    assert!(
-        page.contains("We haven't sent you a link to confirm it yet."),
-        "{page}"
+    assert_eq!(
+        email_hint(&page),
+        format!(
+            "Not confirmed yet. {} to confirm it.",
+            send_link("Send a link")
+        )
     );
+    assert!(page.contains(SEND_LINK_FORM), "{page}");
 }
 
 #[tokio::test]
@@ -66,11 +109,9 @@ async fn a_confirmed_email_says_so_and_nothing_more() {
         .await;
     let cookie = site.sign_in("alice").await;
     let page = body_text(site.get("/account", Some(&cookie)).await).await;
-    assert!(
-        page.contains(">Confirmed. For account recovery.</p>"),
-        "{page}"
-    );
-    assert!(!page.contains("link we emailed you"), "{page}");
+    assert_eq!(email_hint(&page), "Confirmed. For account recovery.");
+    assert!(!page.contains(r#"form="send-link""#), "{page}");
+    assert!(!page.contains(SEND_LINK_FORM), "{page}");
 }
 
 #[tokio::test]
@@ -111,8 +152,7 @@ async fn saves_the_settings_and_says_so() {
     assert_eq!(member.email.as_deref(), Some("alice@example.net"));
     assert!(member.news_opt_in);
     let page = body_text(site.get("/account?saved", Some(&cookie)).await).await;
-    assert!(page.contains("Saved."), "{page}");
-    assert!(page.contains(r#"id="email-and-news""#), "{page}");
+    assert_eq!(email_notices(&page), ["Saved."]);
     assert!(!page.contains("IRC settings saved."), "{page}");
     assert!(page.contains(r#"value="alice@example.net""#), "{page}");
     assert!(
@@ -234,6 +274,7 @@ async fn guests_cannot_change_settings() {
 }
 
 const RESEND: &str = "/verification-link";
+const SPAM: &str = "If it doesn't arrive in a few minutes, check your spam folder.";
 
 /// alice, signed in, holding the code a link mailed her before.
 async fn with_a_code_mailed() -> (Site, String, String) {
@@ -242,20 +283,6 @@ async fn with_a_code_mailed() -> (Site, String, String) {
     let issued = site.db.issue_verification_code("alice", db::now()).await;
     let cookie = site.sign_in("alice").await;
     (site, cookie, issued.unwrap().unwrap().code)
-}
-
-#[tokio::test]
-async fn the_status_offers_a_link_or_a_new_one() {
-    let (page, _) = account_tab_mailed(None).await;
-    assert!(
-        page.contains(&format!(
-            r#"<form method="post" action="{RESEND}">
-            <button class="button" type="submit">Send a link</button>"#
-        )),
-        "{page}"
-    );
-    let (page, _) = account_tab_mailed(Some(HOUR)).await;
-    assert!(page.contains(">Send a new link</button>"), "{page}");
 }
 
 #[tokio::test]
@@ -272,7 +299,12 @@ async fn sending_a_new_link_mails_one_that_replaces_the_old() {
     assert_eq!(message.recipient, "someone@example.org");
     assert_eq!(message.subject, verification_mail::SUBJECT);
     let page = body_text(site.get("/account?sent", Some(&cookie)).await).await;
-    assert!(page.contains("A link is on its way."), "{page}");
+    assert_eq!(
+        email_notices(&page),
+        [format!(
+            "We sent a new link to <strong>someone@example.org</strong>. {SPAM}"
+        )]
+    );
     let (status, page) = confirm(&site, &old).await;
     assert_eq!(status, 422);
     assert!(page.contains("A newer email was sent."), "{page}");
@@ -288,9 +320,12 @@ async fn asking_again_at_once_is_refused_without_mailing() {
 
     assert_eq!(response.status(), 429);
     let page = body_text(response).await;
-    assert!(
-        page.contains(r#"<p class="alert" role="alert">A link went out a few minutes ago."#),
-        "{page}"
+    assert_eq!(
+        email_notices(&page),
+        [
+            "A link went out a few minutes ago. Give it time to arrive, and check your spam \
+             folder, before asking for another."
+        ]
     );
     assert!(crate::is_tab(&page, "/account"), "{page}");
     assert_eq!(site.mail().await.len(), 1);
@@ -319,9 +354,9 @@ async fn a_link_that_cannot_be_queued_says_to_try_again_and_costs_no_wait() {
 
     assert_eq!(response.status(), 503);
     let page = body_text(response).await;
-    assert!(
-        page.contains("Couldn&#39;t send a link just now. Try again in a minute."),
-        "{page}"
+    assert_eq!(
+        email_notices(&page),
+        ["Couldn&#39;t send a link just now. Try again in a minute."]
     );
     execute(&outbox, "ALTER TABLE away RENAME TO outbox").await;
     let response = site.post(RESEND, &[], Some(&cookie)).await;
@@ -353,14 +388,41 @@ async fn a_new_address_gets_a_link_and_the_old_ones_stops_working() {
     };
     assert_eq!(message.recipient, "alice@example.net");
     let page = body_text(site.get("/account?saved&sent", Some(&cookie)).await).await;
+    let alice = site.db.member("alice").await.unwrap().unwrap();
+    let deadline = verification_rules::deadline(alice.verification_first_sent_at.unwrap());
+    assert_eq!(
+        email_notices(&page),
+        [format!(
+            "Saved. We sent a link to <strong>alice@example.net</strong>; open it to confirm {}. {SPAM}",
+            by_deadline(deadline)
+        )]
+    );
     assert!(
-        page.contains("Saved.") && page.contains("A link is on its way."),
+        email_hint(&page).starts_with("Not confirmed yet. Confirm by"),
         "{page}"
     );
     assert_eq!(confirm(&site, &old).await.0, 422);
     assert_eq!(confirm(&site, verification_link(message).1).await.0, 200);
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert!(member.email_verified_at.is_some());
+}
+
+#[tokio::test]
+async fn a_new_address_past_the_week_gets_a_link_without_the_date() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    site.execute("UPDATE members SET verification_first_sent_at = 0")
+        .await;
+
+    let form = [("email", "alice@example.net")];
+    site.post("/settings", &form, Some(&cookie)).await;
+
+    let page = body_text(site.get("/account?saved&sent", Some(&cookie)).await).await;
+    assert_eq!(
+        email_notices(&page),
+        [format!(
+            "Saved. We sent a link to <strong>alice@example.net</strong>; open it to confirm your email. {SPAM}"
+        )]
+    );
 }
 
 #[tokio::test]
@@ -390,16 +452,12 @@ async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
 
     assert_eq!(response.status(), 429);
     let page = body_text(response).await;
-    assert!(
-        page.contains(r#"<p class="notice" role="status">Saved.</p>"#),
-        "{page}"
-    );
-    assert!(
-        page.contains("That&#39;s all the links for today."),
-        "{page}"
+    assert_eq!(
+        email_notices(&page),
+        ["Saved. That&#39;s all the links for today. Try again tomorrow."]
     );
     assert!(page.contains(r#"value="alice@example.net""#), "{page}");
-    assert!(page.contains(">Send a new link</button>"), "{page}");
+    assert!(page.contains(&send_link("send a new link")), "{page}");
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("alice@example.net"));
     assert_eq!(site.mail().await.len(), LINKS_PER_DAY);

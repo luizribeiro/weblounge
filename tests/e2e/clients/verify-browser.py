@@ -2,9 +2,10 @@
 checks the page offers a Confirm button that fits and is big enough to
 tap, with the code field showing only without JavaScript or for a link
 cut short; `confirm` presses it. `resend` signs in and asks the Account
-tab for a new link. `unconfirmed` signs in before confirming and checks
-the reminder on Home fits and offers a new link, and the Invites tab's
-reason leads to the Account tab. Saves screenshots in /tmp/screens."""
+tab's email hint for a new link. `unconfirmed` signs in before
+confirming and checks the reminder on Home fits and offers a new link,
+and the Invites tab's reason leads to the Account tab. Saves screenshots
+in /tmp/screens."""
 
 import os
 import sys
@@ -73,19 +74,23 @@ def confirm(page, link):
 
 
 def resend(page):
-    """The verification pages' "Send a new link" leads to the button."""
-    button = page.get_by_role("button", name="Send a new link")
+    """The verification pages' "Send a new link" leads to the hint's."""
+    hint = page.locator("#email-hint")
+    button = hint.get_by_role("button", name="send a new link")
     for name, width in WIDTHS.items():
         page.set_viewport_size({"width": width, "height": 800})
         visit(page, f"{MEMBERS}/account#email-and-news")
-        expect(page.locator(".email-status")).to_contain_text("Please confirm by")
+        expect(hint).to_contain_text("Not confirmed yet. Confirm by")
         expect(button).to_be_in_viewport()
         tappable(button, name)
+        assert asks_for_a_link(button), name
         assert fits(page), name
         page.screenshot(path=f"{SCREENS}/account-{name}.png", full_page=True)
     button.click()
     page.wait_for_url(f"{MEMBERS}/account?sent#email-and-news")
-    expect(page.locator(".notice[role=status]")).to_contain_text("A link is on its way.")
+    notices = page.locator("#email-and-news [role=status], #email-and-news [role=alert]")
+    expect(notices).to_have_count(1)
+    expect(notices).to_contain_text("We sent a new link to")
     page.screenshot(path=f"{SCREENS}/account-sent-desktop.png", full_page=True)
     print("asked for a new link")
 

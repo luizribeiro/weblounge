@@ -14,7 +14,7 @@ use super::{
     Flash, Layout, Tab, internal_error,
     presence::Presence,
     render_with,
-    verify::{self, Mailed, Unconfirmed},
+    verify::{self, Due, Mailed, Unconfirmed},
 };
 use crate::{
     app::{App, AppState},
@@ -43,6 +43,12 @@ struct Account<'a> {
     defaults: Presence,
     irc_error: Option<&'static str>,
     bots: Vec<Bot>,
+}
+
+impl Account<'_> {
+    fn deadline(&self) -> Option<&Due> {
+        self.unconfirmed.as_ref()?.upcoming()
+    }
 }
 
 #[derive(Deserialize, Default)]
