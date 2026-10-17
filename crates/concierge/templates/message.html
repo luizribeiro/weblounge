@@ -9,5 +9,8 @@
         {%- for line in lines %}
         <p class="lede">{{ line }}</p>
         {%- endfor %}
+        {%- if let Some(next) = next %}
+        <p><a class="button button-primary" href="{{ next.href }}">{{ next.label }}</a></p>
+        {%- endif %}
       </section>
 {%- endblock %}

@@ -111,7 +111,9 @@ pub fn router(app: App) -> Router {
         )
         .route(
             "/verify",
-            get(routes::verify::show).layer(map_response(routes::no_store)),
+            get(routes::verify::show)
+                .post(routes::verify::confirm)
+                .layer(map_response(routes::no_store)),
         )
         .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
     // The web client calls these from its own origin, so they sit outside

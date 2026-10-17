@@ -101,6 +101,13 @@ struct Message<'a> {
     eyebrow: &'a str,
     title: &'a str,
     lines: &'a [&'a str],
+    next: Option<Link<'a>>,
+}
+
+/// Where a page sends the reader next.
+pub struct Link<'a> {
+    pub href: &'a str,
+    pub label: &'a str,
 }
 
 /// A page that only says something.
@@ -112,11 +119,25 @@ pub fn message(
     title: &str,
     lines: &[&str],
 ) -> Response {
+    message_with_link(app, visitor, status, eyebrow, title, lines, None)
+}
+
+/// A page that says something and offers a way on.
+pub fn message_with_link(
+    app: &App,
+    visitor: &Visitor,
+    status: StatusCode,
+    eyebrow: &str,
+    title: &str,
+    lines: &[&str],
+    next: Option<Link>,
+) -> Response {
     let page = Message {
         layout: Layout::new(app, visitor.nick()),
         eyebrow,
         title,
         lines,
+        next,
     };
     render_with(status, &page)
 }
