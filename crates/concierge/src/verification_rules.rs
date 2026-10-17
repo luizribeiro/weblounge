@@ -114,7 +114,8 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{link_code, random};
+    use crate::link_code;
+    use common::random;
 
     const SENT: i64 = 1_760_000_000;
 

@@ -5,9 +5,8 @@
 //! switching keyboards on a phone. No separators: a double-click selects the
 //! whole password. Long enough for 128 bits.
 
+use common::random;
 use ergo_api::Passphrase;
-
-use crate::random;
 
 const ALPHABET: &[u8] = b"23456789abcdefghjkmnpqrstuvwxyz";
 const LENGTH: usize = 26;

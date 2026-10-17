@@ -5,10 +5,9 @@
 //! Times are Unix seconds.
 
 use axum::http::{HeaderMap, HeaderValue, header};
+use common::random;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-
-use crate::random;
 
 /// `__Host-` makes browsers insist on Secure, Path=/ and no Domain, so no
 /// other subdomain can plant or read it. Browsers treat http://localhost as

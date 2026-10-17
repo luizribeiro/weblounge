@@ -351,6 +351,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rand 0.10.3",
  "sqlx",
  "tempfile",
 ]
@@ -371,7 +372,6 @@ dependencies = [
  "http-body-util",
  "lettre",
  "qrcode",
- "rand 0.10.3",
  "regex",
  "rqrr",
  "serde",

@@ -15,7 +15,7 @@ pub fn generate() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::random;
+    use common::random;
 
     #[test]
     fn carries_at_least_128_bits() {

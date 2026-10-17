@@ -2,9 +2,8 @@
 //! email verification. Only their hashes are kept: nothing needs a code
 //! back.
 
+use common::random;
 use sha2::{Digest, Sha256};
-
-use crate::random;
 
 pub const ALPHABET: &[u8] = random::URL_SAFE;
 pub const HASH_LENGTH: usize = 32;

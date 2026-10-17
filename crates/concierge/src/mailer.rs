@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use common::random;
 use lettre::{
     Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
     message::{Mailbox, SinglePart},
@@ -24,7 +25,6 @@ use crate::{
     db,
     email::Email,
     outbox::{Outbox, QueuedMessage, Subject},
-    random,
     rate_limit::Quota,
 };
 
