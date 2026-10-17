@@ -10,7 +10,19 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Account, Browser, add_member, concierge_sql, ergo_api, https, irc, irc_command, members, outcome
+    from helpers import (
+        Account,
+        Browser,
+        add_member,
+        concierge_admin,
+        concierge_sql,
+        ergo_api,
+        https,
+        irc,
+        irc_command,
+        members,
+        outcome,
+    )
 
 webchat = "https://irc.weblounge.org"
 grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
@@ -183,7 +195,28 @@ with subtest("gamja shows each line once when one arrives while it catches up af
     shown = json.loads(client.succeed(shlex.join(browser)))
     assert set(shown.values()) == {1}, shown
 
+with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web client's login and bender take them"):
+    add_member("luiz", "plain-old-vanilla")
+    credenza.succeed("systemctl restart bender-account.service weblounge-bot-bender.service")
+    in_ram = [
+        f"/run/weblounge-secrets/{name}" for name in ["ergo-api-token", "oauth-introspection-secret", "bender-password"]
+    ]
+    before = credenza.succeed(shlex.join(["cat", *in_ram])).split()
+    credenza.shutdown()
+    credenza.start()
+    credenza.wait_for_unit("weblounge-bot-bender.service")
+    credenza.wait_for_open_port(8080)
+    credenza.wait_for_open_port(8089)
+    after = credenza.succeed(shlex.join(["cat", *in_ram])).split()
+    assert len(after) == len(before) and not set(before) & set(after), (before, after)
+    assert "ergo: http://127.0.0.1:8089/ answers" in concierge_admin("status")
+    rebooted = access_token(graces_browser)
+    names = (
+        irc_command("JOIN #bots", "NAMES #bots", token=rebooted) + " | grep ' 353 grace = #bots :.*bender' >/dev/null"
+    )
+    client.wait_until_succeeds(names, timeout=60)
+
 with subtest("tokens and codes never reach the journal"):
     credenza.succeed("journalctl --sync")
-    for secret in [token, revoked, ghost_token, code, verifier]:
+    for secret in [token, revoked, ghost_token, rebooted, code, verifier]:
         credenza.fail(f"journalctl | grep -qF -- {secret}")
