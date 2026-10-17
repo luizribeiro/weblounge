@@ -53,6 +53,17 @@
   };
   security.protectKernelImage = true;
 
+  # A core dump holds whatever the process had in memory, passwords and
+  # keys included, and would put it on the disk; crashes are debugged
+  # from the journal, where systemd-coredump still logs them.
+  systemd.coredump.settings.Coredump = {
+    Storage = "none";
+    ProcessSizeMax = 0;
+  };
+  systemd.settings.Manager.DefaultLimitCORE = 0;
+  # systemd's own sysctl.d sets 2, which dumps set-user-ID programs too.
+  boot.kernel.sysctl."fs.suid_dumpable" = 0;
+
   # Setuid root binaries nobody here runs are only ways up for an attacker.
   security.wrappers = lib.genAttrs
     [ "fusermount" "fusermount3" "mount" "umount" "newgidmap" "newuidmap" "newgrp" "sg" "su" ]

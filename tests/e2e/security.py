@@ -168,6 +168,20 @@ with subtest("the secrets services read only as they start live in RAM, and nowh
     found = credenza.succeed(f"{on_root_fs} | xargs -0 grep -laF {patterns(values)}").split()
     assert found == [generated["session-key"]], found
 
+with subtest("a crash leaves no core dump on disk, even where its limit allows one, and services can't raise theirs"):
+    assert credenza.succeed("sysctl -n kernel.core_pattern").startswith("|")
+    # systemd turns $$ into $.
+    credenza.execute("systemd-run --unit=crash --wait -p LimitCORE=infinity -- sh -c 'kill -SEGV $$$$'")
+    assert credenza.succeed("systemctl show -P Result crash").strip() == "core-dump"
+    credenza.fail("systemd-run --wait --quiet -p DynamicUser=yes -- sh -c 'ulimit -c unlimited'")
+    credenza.wait_until_succeeds("journalctl -t systemd-coredump -o cat | grep -q '(sh)'", timeout=30)
+    credenza.succeed('test -z "$(ls -A /var/lib/systemd/coredump 2>/dev/null)"')
+    stored = credenza.succeed("coredumpctl list --no-legend --no-pager 2>&1 || true")
+    assert "present" not in stored, stored
+    assert credenza.succeed("sysctl -n fs.suid_dumpable").strip() == "0"
+    assert credenza.succeed("systemctl show -P DefaultLimitCORE").strip() == "0"
+    assert credenza.succeed("systemctl show -P LimitCORE concierge ergochat").split() == ["0", "0"]
+
 with subtest("admins alone can talk to the nix daemon, not services"):
     nix = "/run/current-system/sw/bin/nix store info"
     credenza.succeed(f"su - luiz -c '{nix}'")
