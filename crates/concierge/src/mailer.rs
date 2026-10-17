@@ -11,7 +11,7 @@ use std::{
 
 use lettre::{
     Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
-    message::{Mailbox, header::ContentType},
+    message::{Mailbox, SinglePart},
     transport::smtp::{
         self,
         authentication::Credentials,
@@ -223,8 +223,7 @@ impl<T: Transport> Mailer<T> {
             .from(self.from.clone())
             .to(Mailbox::new(None, to))
             .subject(subject.as_str())
-            .header(ContentType::TEXT_PLAIN)
-            .body(queued.body.clone())
+            .singlepart(SinglePart::plain(queued.body.clone()))
             .ok()
     }
 
@@ -372,6 +371,7 @@ mod tests {
         assert_eq!(header("To"), "alice@example.org");
         assert_eq!(header("Subject"), VERIFY_SUBJECT);
         assert_eq!(header("Content-Type"), "text/plain; charset=utf-8");
+        assert_eq!(header("MIME-Version"), "1.0");
         assert!(header("Date").ends_with(" +0000"), "{headers}");
         let message_id = regex::Regex::new(r"^<[A-Za-z0-9_-]{22}@weblounge\.org>$").unwrap();
         assert!(message_id.is_match(&header("Message-ID")), "{headers}");
