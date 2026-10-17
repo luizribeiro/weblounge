@@ -1,26 +1,30 @@
-import hashlib
 import re
-import secrets
 import shlex
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from driver import client, credenza, subtest
+    from driver import client, credenza, mail, subtest
     from helpers import (
         Account,
         Browser,
+        clear_mail,
         concierge_admin,
         concierge_sql,
         invite_code,
         irc,
         irc_command,
+        link_in,
+        mails_to,
         members,
         outcome,
+        wait_for_mail,
     )
 
 erin: Account = {"account": "erin", "password": "lantern-orchard-71"}
 frank: Account = {"account": "frank", "password": "copper-meadow-94"}
 erins_browser = Browser("erin")
+erins_email = "erin@example.org"
+verification_subject = "Confirm your email for weblounge.org"
 
 
 def email_verified_at(account: str) -> str:
@@ -32,6 +36,7 @@ credenza.wait_for_unit("concierge.service")
 credenza.wait_for_open_port(8080)
 credenza.wait_for_unit("ergochat.service")
 credenza.wait_for_open_port(8089)
+mail.wait_for_unit("mailpit-test.service")
 
 with subtest("an admin mints a root invite on join.weblounge.org and the invitee opens it over HTTPS"):
     link = concierge_admin("invite", "create", "--root").strip()
@@ -49,6 +54,7 @@ with subtest("signing up answers with the welcome page, uncached, and signs the 
     assert '<a class="button button-primary" href="https://irc.weblounge.org/">Open chat</a>' in page, page
     assert "<code>irc.weblounge.org</code>" in page and "<code>6697</code>" in page, page
     assert erin["password"] not in page
+    assert f"We sent a link to <strong>{erins_email}</strong> to confirm your email." in page, page
     home = erins_browser.get("/", "-f")
     assert "Pull up a chair, erin." in home, home
 
@@ -76,15 +82,34 @@ with subtest("in a browser, the new member's invite link names them and signs so
     assert " 903 " in irc(**frank)
     _, open_link = erins_browser.create_invite()
 
+with subtest("signing up mails a link to confirm the email, in short plain lines, under a subject without the nick"):
+    message = wait_for_mail(erins_email, verification_subject)
+    assert message["from"] == "weblounge.org <noreply@weblounge.org>", message
+    assert "erin" not in message["subject"].lower(), message
+    assert message["text"].splitlines()[0] == "Hi erin,", message
+    first_link = link_in(message, f"https://{members}/verify#")
+    long_lines = [line for line in message["text"].splitlines() if len(line) > 76 and line != first_link]
+    assert long_lines == [], long_lines
+
+with subtest("asking for another link at once is refused, without mailing"):
+    refused = erins_browser.post("/verification-link", flags=["-w", "\n%{http_code}"])
+    assert refused.endswith("\n429") and "A link went out a few minutes ago." in refused, refused
+    assert len(mails_to(erins_email)) == 1
+
+with subtest("from the Account tab, a new link replaces the one signup mailed"):
+    # The limits live in memory, so a restart lets the test ask again now.
+    credenza.succeed("systemctl restart concierge")
+    credenza.wait_for_open_port(8080)
+    clear_mail()
+    resent = client.succeed(f"verify-browser resend erin {shlex.quote(erin['password'])} 2>&1")
+    assert "asked for a new link" in resent, resent
+    verify_link = link_in(wait_for_mail(erins_email, verification_subject), f"https://{members}/verify#")
+    assert verify_link != first_link
+    replaced = Browser("scanner").post("/verify", f"code={invite_code(first_link)}", flags=["-w", "\n%{http_code}"])
+    assert replaced.endswith("\n422") and "A newer email was sent." in replaced, replaced
+
 with subtest("opening a verification link, in curl or a browser, verifies nothing until Confirm is pressed"):
-    verify_code = secrets.token_urlsafe(32)
-    code_hash = hashlib.sha256(verify_code.encode()).hexdigest()
-    concierge_sql(
-        "INSERT INTO verification_codes (code_hash, account, email, created_at, expires_at) "
-        f"SELECT x'{code_hash}', account, email, unixepoch(), unixepoch() + 172800 FROM members WHERE account = 'erin'",
-        write=True,
-    )
-    verify_link = f"https://{members}/verify#{verify_code}"
+    verify_code = invite_code(verify_link)
     assert "Confirm my email" in erins_browser.get(f"/verify?code={verify_code}", "-f")
     looked = client.succeed(f"verify-browser look {shlex.quote(verify_link)} 2>&1")
     assert "verifies nothing by loading" in looked, looked
@@ -106,10 +131,11 @@ with subtest("member reset-password locks the old password out of IRC and ends t
 
 with subtest("the passwords and link codes never reach the journal, nor nginx's log the verification code"):
     credenza.succeed("journalctl --sync")
-    codes = [invite_code(link), invite_code(franks_link), verify_code]
+    codes = [invite_code(link), invite_code(franks_link), invite_code(first_link), verify_code]
     for secret in [erin["password"], frank["password"], new_password, *codes]:
         credenza.fail(f"journalctl | grep -qF {secret}")
-    credenza.fail(f"grep -qF {verify_code} /var/log/nginx/access.log")
+    for code in [invite_code(first_link), verify_code]:
+        credenza.fail(f"grep -qF {code} /var/log/nginx/access.log")
 
 with subtest("concierge's database keeps no invite code, only its hash"):
     for code in [invite_code(link), invite_code(franks_link), invite_code(open_link)]:

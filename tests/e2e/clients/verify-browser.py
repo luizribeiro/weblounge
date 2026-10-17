@@ -1,21 +1,15 @@
 """Open a verification link at a phone's width and a desktop's: `look`
 checks the page offers a Confirm button that fits and is big enough to
 tap, with the code field showing only without JavaScript or for a link
-cut short; `confirm` presses it. Saves screenshots in /tmp/screens."""
+cut short; `confirm` presses it. `resend` signs in and asks the Account
+tab for a new link. Saves screenshots in /tmp/screens."""
 
 import os
 import sys
 
 from playwright.sync_api import expect
 
-from browser import browsing
-
-WIDTHS = {"phone": 375, "desktop": 1280}
-SCREENS = "/tmp/screens"
-
-
-def fits(page):
-    return page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+from browser import MEMBERS, SCREENS, WIDTHS, browsing, fits, signed_in
 
 
 def confirm_button(page):
@@ -68,11 +62,33 @@ def confirm(page, link):
     print("confirmed from the link")
 
 
+def resend(page):
+    """The verification pages' "Send a new link" leads to the button."""
+    button = page.get_by_role("button", name="Send a new link")
+    for name, width in WIDTHS.items():
+        page.set_viewport_size({"width": width, "height": 800})
+        visit(page, f"{MEMBERS}/account#email-and-news")
+        expect(page.locator(".email-status")).to_contain_text("Please confirm by")
+        expect(button).to_be_in_viewport()
+        assert button.bounding_box()["height"] >= 44, name
+        assert fits(page), name
+        page.screenshot(path=f"{SCREENS}/account-{name}.png", full_page=True)
+    button.click()
+    page.wait_for_url(f"{MEMBERS}/account?sent#email-and-news")
+    expect(page.locator(".notice[role=status]")).to_contain_text("A link is on its way.")
+    page.screenshot(path=f"{SCREENS}/account-sent-desktop.png", full_page=True)
+    print("asked for a new link")
+
+
 def main():
-    action, link = sys.argv[1:]
+    action, *args = sys.argv[1:]
     os.makedirs(SCREENS, exist_ok=True)
+    if action == "resend":
+        with signed_in(*args) as page:
+            resend(page)
+        return
     with browsing() as page:
-        {"look": look, "confirm": confirm}[action](page, link)
+        {"look": look, "confirm": confirm}[action](page, *args)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,12 @@ from playwright.sync_api import expect, sync_playwright
 
 MEMBERS = "https://members.weblounge.org"
 TIMEOUT_MS = 30_000
+WIDTHS = {"phone": 375, "desktop": 1280}
+SCREENS = "/tmp/screens"
+
+
+def fits(page):
+    return page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
 
 @contextmanager
