@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (\n                   SELECT 1 FROM members\n                   WHERE lower(email) = lower(?) AND email_verified_at IS NOT NULL\n                     AND account != ?\n               ) AS \"taken!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "taken!: bool",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a800aa884d3018e35abb5c854ca901ac93d5a8f3d77740cac0d80023215ca30f"
+}

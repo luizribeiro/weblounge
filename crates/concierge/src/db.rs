@@ -339,6 +339,23 @@ impl Db {
         transaction.commit().await
     }
 
+    /// Whether a member other than `account` verified `email`, in any
+    /// case, as the index that keeps verified addresses unique compares
+    /// them.
+    pub async fn email_taken(&self, email: &str, account: &str) -> sqlx::Result<bool> {
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS (
+                   SELECT 1 FROM members
+                   WHERE lower(email) = lower(?) AND email_verified_at IS NOT NULL
+                     AND account != ?
+               ) AS "taken!: bool""#,
+            email,
+            account,
+        )
+        .fetch_one(&self.pool)
+        .await
+    }
+
     /// Issues a code that verifies `account`'s current email, to be mailed
     /// at `now`, replacing any code they had; the first one starts their
     /// grace period. Cleans up everyone's expired codes while at it.
@@ -1801,6 +1818,21 @@ pub(crate) mod tests {
         assert_eq!(db.end_expired_sessions(150).await.unwrap(), 2);
         assert!(db.session(b"\xa2", 150).await.unwrap().is_some());
         assert_eq!(db.end_sessions("bob").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn an_address_is_taken_once_another_member_verified_it_in_any_case() {
+        let (db, _dir) = with_unverified_members().await;
+        for (email, account, taken) in [
+            ("CAROL@Example.org", "alice", true),
+            ("carol@example.org", "newcomer", true),
+            ("carol@example.org", "Carol", false),
+            ("bob@example.org", "alice", false),
+            ("carol+irc@example.org", "alice", false),
+        ] {
+            let found = db.email_taken(email, account).await.unwrap();
+            assert_eq!(found, taken, "{email} for {account}");
+        }
     }
 
     #[tokio::test]
