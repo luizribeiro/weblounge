@@ -166,6 +166,29 @@ in
       }
     ];
 
+    # The one reminder to confirm an email, due from the fifth day. It
+    # touches nothing but the two databases, so it gets no network and no
+    # credentials.
+    systemd.services.concierge-remind = lib.mkMerge [
+      migrated
+      {
+        description = "Remind members to confirm their email";
+        startAt = "hourly";
+        environment = {
+          CONCIERGE_OUTBOX = outboxPath;
+          CONCIERGE_PUBLIC_URL = publicUrl;
+        };
+        serviceConfig = config.weblounge.sandbox // stateAccess // outboxAccess // {
+          Type = "oneshot";
+          ExecStart = "${concierge} remind";
+          PrivateNetwork = true;
+          RestrictAddressFamilies = "none";
+        };
+      }
+    ];
+    # A run missed while the machine was down happens once it's back.
+    systemd.timers.concierge-remind.timerConfig.Persistent = true;
+
     environment.systemPackages = [ admin ];
 
     services.nginx.virtualHosts.${hostName} = {

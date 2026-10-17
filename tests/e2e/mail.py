@@ -3,10 +3,27 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import credenza, mail, subtest
-    from helpers import clear_mail, concierge_admin, mails_to, outbox_sql, wait_for_mail
+    from helpers import (
+        Browser,
+        add_member,
+        clear_mail,
+        concierge_admin,
+        concierge_sql,
+        invite_code,
+        link_in,
+        mails_to,
+        members,
+        outbox_sql,
+        wait_for_empty_outbox,
+        wait_for_mail,
+    )
 
 subject = "A test message from weblounge.org"
 mailer_log = "journalctl -o cat -u concierge-mailer"
+remind_log = "journalctl -o cat -u concierge-remind"
+verification_subject = "Confirm your email for weblounge.org"
+reminder_subject = "Reminder: confirm your email for weblounge.org"
+verify_link = f"https://{members}/verify#"
 
 
 def queue_test_message(address: str) -> str:
@@ -20,6 +37,17 @@ def wait_for_log(line: str) -> None:
 
 def outbox_size() -> int:
     return int(outbox_sql("SELECT count(*) FROM outbox"))
+
+
+def remind() -> str:
+    """Runs concierge remind as its timer would, and answers what it logged."""
+    invocation = credenza.succeed("systemctl start concierge-remind && systemctl show -P InvocationID concierge-remind")
+    credenza.succeed("journalctl --sync")
+    return credenza.succeed(f"{remind_log} _SYSTEMD_INVOCATION_ID={invocation.strip()}")
+
+
+def post_code(link: str) -> str:
+    return Browser("scanner").post("/verify", f"code={invite_code(link)}", flags=["-w", "\n%{http_code}"])
 
 
 credenza.wait_for_unit("concierge-mailer.service")
@@ -51,6 +79,38 @@ with subtest("mail queued while the mail server is down waits, and goes out once
     assert outbox_size() == 0
     assert len(mails_to("bob@example.org")) == 1
 
+with subtest("concierge remind runs hourly from a timer that catches up on missed runs"):
+    credenza.succeed("systemctl is-active concierge-remind.timer")
+    assert credenza.succeed("systemctl show -P Persistent concierge-remind.timer").strip() == "yes"
+    assert "OnCalendar=*-*-* *:00:00 " in credenza.succeed("systemctl show -P TimersCalendar concierge-remind.timer")
+
+with subtest("five days after the first link, concierge remind mails a fresh one, once"):
+    add_member("grace", "willow-ember-36")
+    first_link = link_in(wait_for_mail("grace@example.org", verification_subject), verify_link)
+    # Only the times the reminder goes by move back, not the old link's
+    # expiry, so it's still on file to say that a newer email replaced it.
+    for table, column in [("members", "verification_first_sent_at"), ("verification_codes", "created_at")]:
+        backdate = f"UPDATE {table} SET {column} = {column} - 5 * 24 * 60 * 60 WHERE account = 'grace'"
+        concierge_sql(backdate, write=True)
+    assert remind().strip() == "Queued 1 reminder"
+    reminder = wait_for_mail("grace@example.org", reminder_subject)
+    assert reminder["text"].splitlines()[0] == "Hi grace,", reminder
+    assert "but you won't be able to invite others until" in reminder["text"], reminder
+    fresh_link = link_in(reminder, verify_link)
+    long_lines = [line for line in reminder["text"].splitlines() if len(line) > 76 and line != fresh_link]
+    assert long_lines == [], long_lines
+    replaced = post_code(first_link)
+    assert replaced.endswith("\n422") and "A newer email was sent." in replaced, replaced
+    confirmed = post_code(fresh_link)
+    assert confirmed.endswith("\n200") and "Your email is confirmed." in confirmed, confirmed
+    assert concierge_sql("SELECT email_verified_at IS NOT NULL FROM members WHERE account = 'grace'").strip() == "1"
+
+with subtest("running concierge remind again mails nothing more"):
+    assert remind().strip() == "Queued 0 reminders"
+    wait_for_empty_outbox()
+    assert [message["subject"] for message in mails_to("grace@example.org")] == [verification_subject, reminder_subject]
+
 with subtest("the mailer's log names no recipient and no subject"):
     credenza.succeed("journalctl --sync")
     credenza.fail(f"{mailer_log} | grep -qF -e example.org -e {shlex.quote(subject)}")
+    credenza.fail(f"{remind_log} | grep -qF example.org")
