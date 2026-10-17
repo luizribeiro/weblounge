@@ -19,7 +19,11 @@ in
     caFile = config.weblounge.selfSignedCa;
   };
 
-  weblounge.secrets."${nick}-password".loadedBy = [ account ];
+  # The account puts the password back in Ergo before every start of the bot.
+  weblounge.secrets."${nick}-password" = {
+    ephemeral = true;
+    loadedBy = [ account ];
+  };
 
   systemd.services.${account} = {
     description = "Register ${nick}'s account, or set its password";

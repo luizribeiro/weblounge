@@ -34,6 +34,7 @@ generated = {
     "ergo-api-token": f"{in_ram}/ergo-api-token",
     "session-key": f"{on_disk}/session-key",
     "oauth-introspection-secret": f"{in_ram}/oauth-introspection-secret",
+    "bender-password": f"{in_ram}/bender-password",
 }
 
 
@@ -147,10 +148,15 @@ with subtest("the generated secrets stay out of the Nix store, readable by root 
         "$(systemctl show -P ExecStart ergochat | grep -o '/nix/store/[^ ;]*')"
     )
     concierge_config = "systemctl cat concierge; cat $(readlink -f $(command -v concierge-admin))"
+    bender_config = (
+        "systemctl cat weblounge-bot-bender bender-account; "
+        "cat $(systemctl show -P ExecStart bender-account | grep -o '/nix/store/[^ ;]*')"
+    )
     for secret, config in [
         ("ergo-api-token", ergo_config),
         ("session-key", concierge_config),
         ("oauth-introspection-secret", f"{ergo_config}; {concierge_config}"),
+        ("bender-password", bender_config),
     ]:
         credenza.fail(f"{{ {config}; }} | grep -qF $(cat {generated[secret]})")
 
