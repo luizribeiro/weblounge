@@ -104,6 +104,11 @@ with subtest("the outbox is a database of its own, in a directory only concierge
     assert "outbox" not in tables and "members" in tables, tables
     credenza.succeed("systemctl start concierge-mailer-vacuum")
 
+with subtest("the hourly vacuums of both databases wait for concierge-migrate"):
+    for unit in ["concierge-vacuum", "concierge-mailer-vacuum"]:
+        after = credenza.succeed(f"systemctl show -P After {unit}").split()
+        assert "concierge-migrate.service" in after, (unit, after)
+
 with subtest("concierge's database lives in its state directory, private to the service"):
     modes = credenza.succeed(
         "stat -L -c %a /var/lib/private /var/lib/concierge /var/lib/concierge/concierge.db"

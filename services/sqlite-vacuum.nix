@@ -10,6 +10,9 @@ let
     let owner = config.systemd.services.${service}.serviceConfig;
     in lib.nameValuePair "${service}-vacuum" {
       description = "Clear deleted data out of ${database}";
+      # A vacuum waits for what its owner waits for, such as the unit that
+      # creates and migrates the database.
+      inherit (config.systemd.services.${service}) after;
       startAt = "hourly";
       serviceConfig = config.weblounge.sandbox // lib.filterAttrs (key: _: lib.elem key shared) owner // {
         Type = "oneshot";
