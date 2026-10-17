@@ -37,10 +37,16 @@ let
     [ "TXT" "_dmarc" "v=DMARC1; p=none" ]
     [ "TXT" "_da-verify-bbbfa40b313de02f113fc58ed97fecf1" "domain-verified" ]
   ];
+
+  # Gmail Postmaster Tools reports our sender reputation at Gmail only to
+  # an owner it has verified.
+  gmailPostmaster = [
+    [ "TXT" "@" "google-site-verification=wb1kjFnT5ogH9jj24q8peN6cp6jNGkUArKC2KLZtbc8" ]
+  ];
 in
 {
   inherit domain;
   # deSEC refuses anything shorter.
   ttl = 3600;
-  records = lib.concatMap hostRecords configs ++ mxroute;
+  records = lib.concatMap hostRecords configs ++ mxroute ++ gmailPostmaster;
 }

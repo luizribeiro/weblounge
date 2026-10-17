@@ -31,6 +31,7 @@ in
         [ "TXT" "x._domainkey" "v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApwyfGWLuUrgBWuiOXrZjZgeDBuyZ3Zxw/WX6M42Qb6LlmWLRFGUqQgnz+5YnzAmz0yYOp6vjtNy8ZICfAJ+PfqMWH5Ym2DcxsLyTGct8GItOtL1Hc51a9fEtcmsbcRbczb+0ya0ur3qkQ7U3mz/lxvUJ0CMe39wrRe/cKlX2SrXWX+h/aCIhR78WN3il0MDjp1bZ5AfdqSX2PoZyx4mtyCssH8qv1ISnHrKat+L5SVVr0VCBse/wz3bKavYbxPS9A8+tA5LM4Fg3TIoOqY9dFsF9hpNZgqkWbyfUhXY0rEfLbMoSUmf+IhmOmA0vR4sbe9kTVgx/ohw6d4XHjpOi2QIDAQAB" ]
         [ "TXT" "_dmarc" "v=DMARC1; p=none" ]
         [ "TXT" "_da-verify-bbbfa40b313de02f113fc58ed97fecf1" "domain-verified" ]
+        [ "TXT" "@" "google-site-verification=wb1kjFnT5ogH9jj24q8peN6cp6jNGkUArKC2KLZtbc8" ]
       ];
     };
   };
