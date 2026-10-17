@@ -241,7 +241,7 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
         assert!(page.contains(REMINDER), "{page}");
         assert!(
             page.contains(&format!(
-                r#"Please confirm your email by <time datetime="{date}">{day}</time>. You won't be able to invite others until you do.</p>"#
+                r#"Please confirm your email by <time class="deadline" datetime="{date}">{day}</time>. You won't be able to invite others until you do.</p>"#
             )),
             "{page}"
         );

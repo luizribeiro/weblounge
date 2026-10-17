@@ -114,6 +114,11 @@ impl Unconfirmed {
     pub fn sent(&self) -> bool {
         self.due.is_some()
     }
+
+    /// When their grace period ends, until it passes.
+    pub fn upcoming(&self) -> Option<&Due> {
+        self.due.as_ref().filter(|due| due.left.is_some())
+    }
 }
 
 /// Mails `account` a new verification link, replacing their last, if the

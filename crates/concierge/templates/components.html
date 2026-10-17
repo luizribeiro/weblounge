@@ -100,3 +100,7 @@
             <span>Email me about new features and planned downtime <span class="hint check-hint">A few times a year at most.</span></span>
           </label>
 {%- endmacro %}
+
+{% macro by_deadline(due) -%}
+by <time class="deadline" datetime="{{ due.date }}">{{ due.day }}</time>
+{%- endmacro %}

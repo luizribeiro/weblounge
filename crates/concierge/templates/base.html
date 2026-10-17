@@ -1,3 +1,4 @@
+{%- import "components.html" as components -%}
 <!doctype html>
 <html lang="en">
   <head>
@@ -45,7 +46,7 @@
       {%- if let Some(unconfirmed) = layout.unconfirmed %}
       <div class="notice email-status email-reminder">
         <p>Please confirm your email
-          {%- if let Some(due) = unconfirmed.due %}{% if due.left.is_some() %} by <time datetime="{{ due.date }}">{{ due.day }}</time>{% endif %}{% endif -%}
+          {%- if let Some(due) = unconfirmed.upcoming() %} {% call components::by_deadline(due) %}{% endcall %}{% endif -%}
           . You won't be able to invite others until you do.</p>
         <a class="button button-small" href="{{ crate::routes::verify::ACCOUNT_EMAIL }}">Send {% if unconfirmed.sent() %}a new{% else %}a{% endif %} link</a>
       </div>

@@ -604,8 +604,8 @@
   gap: 0.5rem 1rem;
   padding-block: 0.625rem;
   font-size: 0.9375rem;
+}
 
-  & time {
-    white-space: nowrap;
-  }
+.deadline {
+  white-space: nowrap;
 }
