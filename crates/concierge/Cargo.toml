@@ -10,6 +10,7 @@ askama = "0.16.1"
 axum = "0.8.9"
 base64 = "0.22.1"
 clap = { version = "4.6.7", features = ["derive"] }
+common = { path = "../common" }
 ergo-api = { path = "../ergo-api" }
 form_urlencoded = "1.2.2"
 hmac = "0.12.1"
@@ -25,6 +26,7 @@ tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "net", "t
 tower-livereload = "0.10.3"
 
 [dev-dependencies]
+common = { path = "../common", features = ["testing"] }
 ergo-api = { path = "../ergo-api", features = ["fake"] }
 http-body-util = "0.1.5"
 regex = "1.13.1"

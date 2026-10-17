@@ -7,9 +7,10 @@
 use std::{fmt, path::Path};
 
 use anyhow::Context;
+use common::sqlite;
 use sqlx::{SqlitePool, migrate::Migrator};
 
-use crate::{email::Email, sqlite};
+use crate::email::Email;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./outbox-migrations");
 
@@ -221,7 +222,7 @@ impl Outbox {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::sqlite::tests::files_contain;
+    use common::sqlite::testing::files_contain;
 
     const NOW: i64 = 1_760_000_000;
 

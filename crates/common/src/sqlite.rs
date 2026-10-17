@@ -14,7 +14,7 @@ use sqlx::{
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The database at `path`, which `create` creates if it's missing.
-pub(crate) async fn connect(path: &Path, create: bool) -> anyhow::Result<SqlitePool> {
+pub async fn connect(path: &Path, create: bool) -> anyhow::Result<SqlitePool> {
     let options = SqliteConnectOptions::new()
         .filename(path)
         .create_if_missing(create)
@@ -30,7 +30,7 @@ pub(crate) async fn connect(path: &Path, create: bool) -> anyhow::Result<SqliteP
 }
 
 /// The newest migration `migrator` knows.
-pub(crate) fn latest_migration(migrator: &Migrator) -> i64 {
+pub fn latest_migration(migrator: &Migrator) -> i64 {
     migrator
         .iter()
         .map(|migration| migration.version)
@@ -39,7 +39,7 @@ pub(crate) fn latest_migration(migrator: &Migrator) -> i64 {
 }
 
 /// The newest migration applied to `pool`'s database, if any.
-pub(crate) async fn migration_version(pool: &SqlitePool) -> sqlx::Result<Option<i64>> {
+pub async fn migration_version(pool: &SqlitePool) -> sqlx::Result<Option<i64>> {
     sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations WHERE success")
         .fetch_one(pool)
         .await
@@ -47,7 +47,7 @@ pub(crate) async fn migration_version(pool: &SqlitePool) -> sqlx::Result<Option<
 
 /// Fails unless `concierge migrate` brought the database at `path` up to
 /// `migrator`'s schema.
-pub(crate) async fn ensure_migrated(
+pub async fn ensure_migrated(
     pool: &SqlitePool,
     migrator: &Migrator,
     path: &Path,
@@ -68,7 +68,7 @@ pub(crate) async fn ensure_migrated(
 /// Copies the write-ahead log into the database and truncates it, so the
 /// rows a change overwrote leave the disk, not just the database. Answers
 /// whether it could, which a reader holding the log prevents.
-pub(crate) async fn empty_write_ahead_log(pool: &SqlitePool) -> bool {
+pub async fn empty_write_ahead_log(pool: &SqlitePool) -> bool {
     let checkpoint: sqlx::Result<(i64, i64, i64)> =
         sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
             .fetch_one(pool)
@@ -76,10 +76,10 @@ pub(crate) async fn empty_write_ahead_log(pool: &SqlitePool) -> bool {
     matches!(checkpoint, Ok((0, _, _)))
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+#[cfg(feature = "testing")]
+pub mod testing {
     /// Whether any of the database files in `dir` holds `text`.
-    pub(crate) fn files_contain(dir: &tempfile::TempDir, text: &[u8]) -> bool {
+    pub fn files_contain(dir: &tempfile::TempDir, text: &[u8]) -> bool {
         let on_disk: Vec<u8> = std::fs::read_dir(dir.path())
             .unwrap()
             .flat_map(|entry| std::fs::read(entry.unwrap().path()).unwrap())

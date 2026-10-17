@@ -1,11 +1,11 @@
 use std::{path::Path, time::SystemTime};
 
 use anyhow::Context;
+use common::sqlite;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 use crate::{
-    invite_code, invite_rules, link_code, oauth::CodeChallenge, sqlite, tree::Branch,
-    verification_rules,
+    invite_code, invite_rules, link_code, oauth::CodeChallenge, tree::Branch, verification_rules,
 };
 
 static MIGRATOR: Migrator = sqlx::migrate!();
@@ -1110,7 +1110,7 @@ async fn delete_sessions(executor: impl SqliteExecutor<'_>, account: &str) -> sq
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::sqlite::tests::files_contain;
+    use common::sqlite::testing::files_contain;
     use sqlx::sqlite::SqliteConnectOptions;
     use std::sync::LazyLock;
 
