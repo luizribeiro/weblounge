@@ -1,23 +1,15 @@
 //! Invite codes: the secret part of an invite link.
 
-use sha2::{Digest, Sha256};
+pub use crate::link_code::{HASH_LENGTH, hash};
 
-use crate::random;
+use crate::link_code;
 
-const ALPHABET: &[u8] = random::URL_SAFE;
 const LENGTH: usize = 22;
-pub const HASH_LENGTH: usize = 32;
 // The database tells hashed codes from ones kept before hashing by length.
 const _: () = assert!(LENGTH != HASH_LENGTH);
 
 pub fn generate() -> String {
-    random::string(ALPHABET, LENGTH)
-}
-
-/// What the database keeps of `code`. A plain hash is enough: codes are
-/// random and long, so nobody can search for one that hashes the same.
-pub fn hash(code: &str) -> Vec<u8> {
-    Sha256::digest(code.as_bytes()).to_vec()
+    link_code::generate(LENGTH)
 }
 
 /// The code in what someone typed into the invite code field: the code
@@ -30,6 +22,7 @@ pub fn from_input(input: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::random;
 
     #[test]
     fn takes_the_code_alone_or_out_of_a_pasted_link() {
@@ -47,35 +40,11 @@ mod tests {
 
     #[test]
     fn carries_at_least_128_bits() {
-        assert!(random::entropy_bits(ALPHABET, LENGTH) >= 128.0);
+        assert!(random::entropy_bits(link_code::ALPHABET, LENGTH) >= 128.0);
     }
 
     #[test]
-    fn needs_no_escaping_in_a_url() {
-        let code = generate();
-        assert_eq!(code.len(), LENGTH);
-        assert!(
-            code.bytes()
-                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_'),
-            "{code}"
-        );
-    }
-
-    #[test]
-    fn hashes_with_sha256() {
-        let hex: String = hash("q7Hx2mZp9vLcT4wRfBa-_w")
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
-        assert_eq!(
-            hex,
-            "22cdf3661de9f286e70ff43127a6d9e94aadeb9a076cfcdaa771265fcaf85f70"
-        );
-        assert_eq!(hash("x").len(), HASH_LENGTH);
-    }
-
-    #[test]
-    fn differs_every_time() {
-        assert_ne!(generate(), generate());
+    fn has_its_own_length() {
+        assert_eq!(generate().len(), LENGTH);
     }
 }
