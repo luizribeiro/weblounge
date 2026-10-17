@@ -325,17 +325,19 @@ async fn a_code_and_its_verifier_buy_a_token_that_lasts_as_long_as_the_session()
     let headers = response.headers();
     assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], WEBCHAT_URL);
     assert_eq!(headers[header::CACHE_CONTROL], "no-store");
-    let session_left = site.session_expiry(&cookie).await.unwrap() - concierge::db::now();
     let answer = json(response).await;
     assert_eq!(answer["token_type"], "Bearer");
     assert_eq!(answer["access_token"].as_str().unwrap().len(), 43);
-    let expires_in = answer["expires_in"].as_i64().unwrap();
-    assert!(
-        (session_left - 2..=session_left).contains(&expires_in),
-        "{answer}"
-    );
     let stored: i64 = site.query_scalar("SELECT COUNT(*) FROM oauth_tokens").await;
     assert_eq!(stored, 1);
+    let expires_at: i64 = site
+        .query_scalar("SELECT expires_at FROM oauth_tokens")
+        .await;
+    assert_eq!(Some(expires_at), site.session_expiry(&cookie).await);
+    let lifetime: i64 = site
+        .query_scalar("SELECT expires_at - created_at FROM oauth_tokens")
+        .await;
+    assert_eq!(answer["expires_in"], lifetime, "{answer}");
 }
 
 #[tokio::test]
