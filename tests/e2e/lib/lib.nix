@@ -12,6 +12,7 @@ let
   tools = {
     python3 = "${pkgs.python3}/bin/python3";
     sqlite3 = "${pkgs.sqlite}/bin/sqlite3";
+    strace = "${pkgs.strace}/bin/strace";
   };
   # Under its name in the repository, so tracebacks point at it.
   runFile = label: file: ''exec(compile(open("${file}").read(), "${label}", "exec"))'';

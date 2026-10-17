@@ -172,11 +172,13 @@ in
     networking.firewall.allowedTCPPorts = [ port ];
 
     # What concierge relies on, asked the way concierge asks. Only reading
-    # the token takes root.
+    # the token takes root. The header goes in on standard input, since any
+    # user on the machine can read a command line.
     weblounge.deployChecks."Ergo's API answers its token".script = ''
       token=$(${config.security.wrapperDir}/sudo cat ${config.weblounge.secrets.ergo-api-token.path})
-      ${pkgs.curl}/bin/curl --silent --show-error --max-time 10 -H "Authorization: Bearer $token" -d '{}' \
-        http://${cfg.settings.api.listener}/v1/status | ${pkgs.gnugrep}/bin/grep '"success":true'
+      printf 'Authorization: Bearer %s\n' "$token" \
+        | ${pkgs.curl}/bin/curl --silent --show-error --max-time 10 -H @- -d '{}' \
+          http://${cfg.settings.api.listener}/v1/status | ${pkgs.gnugrep}/bin/grep '"success":true'
     '';
 
     weblounge.deployChecks."IRC turns away clients that don't log in" = {

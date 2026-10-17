@@ -2,8 +2,8 @@ import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from driver import credenza, mail, subtest
-    from helpers import add_member
+    from driver import credenza, mail, subtest, tools
+    from helpers import add_member, ergo_api_token
 
 # As in host.nix, whose stand-in certificate order fails its first attempt.
 cert = "irc.weblounge.org"
@@ -83,6 +83,13 @@ with subtest("the deploy checks pass on a healthy credenza, and name a unit that
     status, report = credenza.execute("DEPLOY_CHECKS_TIMEOUT=3 /run/current-system/deploy-checks-host 2>&1")
     assert status == 1 and "✗ no unit failed or is waiting to retry" in report and "doomed.service" in report, report
     credenza.succeed("systemctl reset-failed doomed.service")
+
+with subtest("the deploy checks hand Ergo's API token to curl off its command line, which anyone may read"):
+    credenza.succeed(
+        f"{tools['strace']} -f -qq -e trace=execve -s 65536 -o /tmp/execs /run/current-system/deploy-checks-host"
+    )
+    execs = credenza.succeed("cat /tmp/execs")
+    assert "/bin/curl" in execs and ergo_api_token() not in execs, execs
 
 with subtest("the mailer's deploy check fails while the SMTP password is wrong, and says why it may be"):
     password = "/run/secrets/smtp-password"
