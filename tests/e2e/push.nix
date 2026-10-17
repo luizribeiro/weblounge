@@ -26,6 +26,9 @@ let
   };
 in
 vmTest {
+  # The deploy checks include the mailer's login.
+  mail = true;
+
   credenza = { lib, ... }: {
     # The test boots the kernel directly; there's no disk GRUB could go on.
     boot.loader.grub.enable = lib.mkForce false;

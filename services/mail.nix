@@ -5,6 +5,22 @@ let
   inherit (config.weblounge) domain;
   sender = "noreply@${domain}";
   inherit (config.weblounge.concierge) outbox;
+  mailer = config.systemd.services.concierge-mailer;
+
+  serviceOnly = {
+    ExecStart = "${lib.getExe pkgs.weblounge.concierge} mailer";
+    Restart = "on-failure";
+  };
+
+  # `concierge mailer --check`, confined, configured and credentialed as
+  # the mailer is, so it fails wherever the mailer would.
+  check = pkgs.writeShellScript "concierge-mailer-check" ''
+    exec ${config.security.wrapperDir}/sudo ${config.systemd.package}/bin/systemd-run \
+      --quiet --pipe --wait --collect --service-type=exec \
+      ${lib.escapeShellArgs (config.weblounge.runProperties (removeAttrs mailer.serviceConfig (lib.attrNames serviceOnly))
+        ++ lib.mapAttrsToList (name: value: "--setenv=${name}=${value}") mailer.environment)} \
+      ${serviceOnly.ExecStart} --check
+  '';
 in
 {
   imports = [ ./concierge.nix ./egress.nix ./sandbox.nix ./secrets.nix ];
@@ -43,11 +59,9 @@ in
           # follow; the mailer sends one message at a time.
           TOKIO_WORKER_THREADS = "2";
         };
-        serviceConfig = config.weblounge.sandbox // {
+        serviceConfig = config.weblounge.sandbox // serviceOnly // {
           User = "concierge-mailer";
           DynamicUser = true;
-          ExecStart = "${lib.getExe pkgs.weblounge.concierge} mailer";
-          Restart = "on-failure";
 
           # It talks to MXroute alone: nothing on this machine but resolved's
           # stub, and nothing on private networks.
@@ -76,5 +90,17 @@ in
         };
       }
     ];
+
+    # MXroute may block an address that fails to log in again and again,
+    # so this tries for a few seconds alone.
+    weblounge.deployChecks."the mailer runs and logs in to its SMTP server" = {
+      timeout = 5;
+      script = ''
+        systemctl is-active --quiet concierge-mailer || { echo "concierge-mailer isn't running"; exit 1; }
+        ${check} && exit 0
+        echo "Until the real password replaces the placeholder (sops secrets/credenza.yaml), this fails."
+        exit 1
+      '';
+    };
   };
 }

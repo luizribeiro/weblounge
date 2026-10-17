@@ -2,7 +2,7 @@ import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from driver import credenza, subtest
+    from driver import credenza, mail, subtest
     from helpers import add_member
 
 # As in host.nix, whose stand-in certificate order fails its first attempt.
@@ -75,6 +75,7 @@ with subtest("systemd knows every setting in credenza's units, so no sandbox opt
 
 
 with subtest("the deploy checks pass on a healthy credenza, and name a unit that failed"):
+    mail.wait_for_open_port(465)
     add_member("luiz", "plain-old-vanilla")
     credenza.succeed("systemctl restart bender-account.service weblounge-bot-bender.service")
     credenza.succeed("/run/current-system/deploy-checks-host")
@@ -82,6 +83,16 @@ with subtest("the deploy checks pass on a healthy credenza, and name a unit that
     status, report = credenza.execute("DEPLOY_CHECKS_TIMEOUT=3 /run/current-system/deploy-checks-host 2>&1")
     assert status == 1 and "✗ no unit failed or is waiting to retry" in report and "doomed.service" in report, report
     credenza.succeed("systemctl reset-failed doomed.service")
+
+with subtest("the mailer's deploy check fails while the SMTP password is wrong, and says why it may be"):
+    password = "/run/secrets/smtp-password"
+    credenza.succeed(f"cp {password} /tmp/smtp-password && echo not-the-password > {password}")
+    status, report = credenza.execute("/run/current-system/deploy-checks-host 2>&1")
+    credenza.succeed(f"cp /tmp/smtp-password {password}")
+    assert status == 1 and "✗ the mailer runs and logs in to its SMTP server" in report, report
+    assert "Can't log in to mail:465 as noreply@weblounge.org: SMTP 535" in report, report
+    assert "the real password replaces the placeholder" in report, report
+    credenza.succeed("/run/current-system/deploy-checks-host")
 
 
 with subtest("secrets from sops are decrypted for root alone"):

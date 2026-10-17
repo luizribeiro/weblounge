@@ -5,6 +5,9 @@ let
   attempted = "/var/lib/acme/.attempted-${cert}";
 in
 vmTest {
+  # The deploy checks include the mailer's login.
+  mail = true;
+
   # One certificate's order, which the VM otherwise leaves off, stands in
   # for one the CA refuses the first time, the way it does while a new name
   # hasn't reached every nameserver.
