@@ -3,7 +3,8 @@
 let
   outerConfig = config;
   unit = "weblounge-secrets";
-  directory = "/var/lib/${unit}";
+  stateDirectory = "/var/lib/${unit}";
+  runtimeDirectory = "/run/${unit}";
   inherit (config.weblounge) secrets;
   generated = lib.filterAttrs (_: secret: !secret.fromSops) secrets;
   fromSops = lib.filterAttrs (_: secret: secret.fromSops) secrets;
@@ -18,10 +19,21 @@ let
           under its name, rather than generated on the machine.
         '';
       };
+      ephemeral = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Whether the generated secret lives in RAM alone, so every boot
+          generates it anew and no copy of the disk holds it. For secrets
+          whose users all take a new one as they start.
+        '';
+      };
       path = lib.mkOption {
         type = lib.types.str;
         readOnly = true;
-        default = if config.fromSops then outerConfig.sops.secrets.${name}.path else "${directory}/${name}";
+        default =
+          if config.fromSops then outerConfig.sops.secrets.${name}.path
+          else "${if config.ephemeral then runtimeDirectory else stateDirectory}/${name}";
       };
       loadedBy = lib.mkOption {
         type = lib.types.listOf lib.types.str;
@@ -58,6 +70,13 @@ in
   };
 
   config = {
+    assertions = lib.mapAttrsToList
+      (name: secret: {
+        assertion = !(secret.fromSops && secret.ephemeral);
+        message = "weblounge.secrets.${name} comes from sops, so it can't be generated anew at each boot.";
+      })
+      secrets;
+
     sops = lib.mkIf (fromSops != { }) {
       defaultSopsFile = lib.mkDefault ../secrets/${config.networking.hostName}.yaml;
       secrets = lib.mapAttrs (_: _: { }) fromSops;
@@ -73,6 +92,11 @@ in
           RemainAfterExit = true;
           StateDirectory = unit;
           StateDirectoryMode = "0700";
+          RuntimeDirectory = unit;
+          RuntimeDirectoryMode = "0700";
+          # A deploy may stop and start this unit; a new value then would
+          # leave the services it didn't restart holding the old one.
+          RuntimeDirectoryPreserve = true;
           UMask = "0077";
         };
       };
