@@ -10,7 +10,10 @@ use concierge::{
     mailer::{self, Mailer},
     oauth::Webchat,
     outbox::Outbox,
-    rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS},
+    rate_limit::{
+        AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS,
+        VERIFICATIONS_PER_ADDRESS,
+    },
     session,
 };
 use tokio::net::TcpListener;
@@ -67,6 +70,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         limiter: Limiter::default(),
         lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
         oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
+        verifications: AddressLimiter::new(VERIFICATIONS_PER_ADDRESS),
         public_url: config.public_url.clone(),
         invite_links: config.invite_links.clone(),
         webchat: Webchat {

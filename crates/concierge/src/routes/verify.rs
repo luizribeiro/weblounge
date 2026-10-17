@@ -2,6 +2,8 @@
 //! fragment, which no server sees, and mail scanners open links, so the
 //! page verifies nothing until its button posts the code.
 
+use std::time::Instant;
+
 use askama::Template;
 use axum::{Form, extract::State, http::StatusCode, response::Response};
 use serde::Deserialize;
@@ -11,7 +13,9 @@ use crate::{
     app::{App, AppState},
     auth::Visitor,
     db::{self, Verification},
-    invite_rules, link_code, verification_rules,
+    invite_rules, link_code,
+    rate_limit::{self, ClientAddress},
+    verification_rules,
 };
 
 #[derive(Template)]
@@ -41,8 +45,12 @@ pub async fn show(State(app): State<AppState>, visitor: Visitor) -> Response {
 pub async fn confirm(
     State(app): State<AppState>,
     visitor: Visitor,
+    address: ClientAddress,
     Form(confirmation): Form<Confirmation>,
 ) -> Response {
+    if !app.verifications.allows(address.0, Instant::now()) {
+        return too_many(&app, &visitor);
+    }
     let outcome = match link_code::parse(&confirmation.code, verification_rules::CODE_LENGTH) {
         Some(code) => match app.db.verify_email(code, db::now()).await {
             Ok(outcome) => outcome,
@@ -144,5 +152,16 @@ fn address_taken(app: &App, visitor: &Visitor) -> Response {
             href: ACCOUNT_EMAIL,
             label: "Change your email",
         },
+    )
+}
+
+fn too_many(app: &App, visitor: &Visitor) -> Response {
+    super::message(
+        app,
+        visitor,
+        StatusCode::TOO_MANY_REQUESTS,
+        "Email",
+        rate_limit::TRY_LATER,
+        &[],
     )
 }

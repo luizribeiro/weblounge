@@ -1,6 +1,7 @@
-use concierge::{db, verification_rules};
+use axum::http::header;
+use concierge::{db, rate_limit::VERIFICATIONS_PER_ADDRESS, verification_rules};
 
-use crate::{Site, body_text};
+use crate::{PUBLIC_URL, Site, body_text};
 
 /// alice, whose email isn't verified, holding a code to verify it.
 async fn with_a_code() -> (Site, String) {
@@ -166,4 +167,49 @@ async fn an_address_another_member_verified_first_stays_theirs() {
     );
     assert!(!verified(&site, "alice").await);
     assert!(verified(&site, "bob").await);
+}
+
+#[tokio::test]
+async fn confirming_from_another_origin_is_refused() {
+    let (site, code) = with_a_code().await;
+    let headers = [(header::ORIGIN.as_str(), "https://evil.example")];
+
+    let response = site
+        .post_with("/verify", &[("code", &code)], None, &headers)
+        .await;
+
+    assert_eq!(response.status(), 403);
+    assert!(!verified(&site, "alice").await);
+    assert!(site.db.verification_code(&code).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn an_address_gets_twenty_tries_then_waits() {
+    let (site, code) = with_a_code().await;
+    let from = |address| {
+        [
+            (header::ORIGIN.as_str(), PUBLIC_URL),
+            ("x-real-ip", address),
+        ]
+    };
+    let unknown = "A".repeat(verification_rules::CODE_LENGTH);
+    for _ in 0..VERIFICATIONS_PER_ADDRESS {
+        let response = site
+            .post_with("/verify", &[("code", &unknown)], None, &from("192.0.2.7"))
+            .await;
+        assert_eq!(response.status(), 422);
+    }
+
+    let response = site
+        .post_with("/verify", &[("code", &code)], None, &from("192.0.2.7"))
+        .await;
+
+    assert_eq!(response.status(), 429);
+    let page = body_text(response).await;
+    assert!(page.contains("Try again in 15 minutes."), "{page}");
+    assert!(!verified(&site, "alice").await);
+    let response = site
+        .post_with("/verify", &[("code", &code)], None, &from("198.51.100.9"))
+        .await;
+    assert_eq!(response.status(), 200);
 }

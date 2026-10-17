@@ -34,7 +34,10 @@ use concierge::{
     db::{self, Db, NewInvite, NewMember},
     invite_rules,
     oauth::Webchat,
-    rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS},
+    rate_limit::{
+        AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS,
+        VERIFICATIONS_PER_ADDRESS,
+    },
     session::{self, Token},
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
@@ -78,6 +81,7 @@ impl Site {
             limiter: Limiter::default(),
             lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
             oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
+            verifications: AddressLimiter::new(VERIFICATIONS_PER_ADDRESS),
             public_url: PUBLIC_URL.into(),
             invite_links: format!("{JOIN_URL}/#"),
             webchat: Webchat {

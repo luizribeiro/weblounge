@@ -30,6 +30,7 @@ pub struct App {
     pub limiter: Limiter,
     pub lookups: AddressLimiter,
     pub oauth_requests: AddressLimiter,
+    pub verifications: AddressLimiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
     /// What invite links start with; the code follows.

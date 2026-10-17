@@ -174,6 +174,11 @@ pub const LOOKUPS_PER_ADDRESS: usize = 60;
 /// dozens of loads, far fewer than codes take to guess.
 pub const OAUTH_REQUESTS_PER_ADDRESS: usize = 120;
 
+/// Confirming takes one press per email; this leaves room for a
+/// household's worth, and keeps scripted posts from hogging the database's
+/// one writer.
+pub const VERIFICATIONS_PER_ADDRESS: usize = 20;
+
 /// Requests in the last [`WINDOW`], by client address, up to a limit.
 pub struct AddressLimiter {
     requests: Recent<IpAddr>,
