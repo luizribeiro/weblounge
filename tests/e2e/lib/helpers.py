@@ -1,13 +1,15 @@
 import json
 import re
 import shlex
+import time
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from test_driver.machine import QemuMachine
 
-    from driver import client, credenza, start_all, tools
+    from driver import client, credenza, mail, start_all, tools
 
 
 class Account(TypedDict):
@@ -61,9 +63,17 @@ def concierge_admin(*args: str) -> str:
     return credenza.succeed(concierge_admin_command(*args))
 
 
-def concierge_sql(query: str, *, write: bool = False) -> str:
+def sqlite(database: str, query: str, *, write: bool = False) -> str:
     readonly = [] if write else ["-readonly"]
-    return credenza.succeed(shlex.join([tools["sqlite3"], *readonly, "/var/lib/private/concierge/concierge.db", query]))
+    return credenza.succeed(shlex.join([tools["sqlite3"], *readonly, database, query]))
+
+
+def concierge_sql(query: str, *, write: bool = False) -> str:
+    return sqlite("/var/lib/private/concierge/concierge.db", query, write=write)
+
+
+def outbox_sql(query: str) -> str:
+    return sqlite("/var/lib/concierge-outbox/outbox.db", query)
 
 
 def invite_code(link: str) -> str:
@@ -129,6 +139,55 @@ def files_containing(*texts: str) -> list[str]:
     """Files under /var/lib and /var/log, the journal's aside, that hold any of texts."""
     credenza.succeed("sync")
     return credenza.succeed(f"grep -rlaF --exclude-dir=journal {patterns(texts)} /var/lib /var/log || true").split()
+
+
+Mail = TypedDict("Mail", {"from": str, "to": list[str], "subject": str, "text": str})
+
+
+def mailpit(path: str, method: str = "GET") -> Any:
+    """What Mailpit's API on the mail node answers, for tests with `mail = true;`."""
+    url = f"http://127.0.0.1:8025/api/v1/{path}"
+    return json.loads(mail.succeed(shlex.join(["curl", "-sf", "-X", method, url])) or "null")
+
+
+def mailbox(address: dict[str, str]) -> str:
+    return f"{address['Name']} <{address['Address']}>" if address["Name"] else address["Address"]
+
+
+def mails_to(address: str) -> list[Mail]:
+    """The mail that reached address, oldest first."""
+    summaries = mailpit(f"search?query={quote(f'to:"{address}"')}")["messages"]
+    summaries.sort(key=lambda summary: summary["Created"])
+    messages = [mailpit(f"message/{summary['ID']}") for summary in summaries]
+    return [
+        {
+            "from": mailbox(message["From"]),
+            "to": [mailbox(to) for to in message["To"]],
+            "subject": message["Subject"],
+            "text": message["Text"],
+        }
+        for message in messages
+    ]
+
+
+def wait_for_mail(to: str, subject: str | None = None, timeout: int = 60) -> Mail:
+    """The newest mail to `to`, with `subject` if given, once there is one."""
+    deadline = time.monotonic() + timeout
+    while not (found := [message for message in mails_to(to) if subject in (None, message["subject"])]):
+        assert time.monotonic() < deadline, f"no mail to {to} with subject {subject!r} in {timeout}s"
+        time.sleep(1)
+    return found[-1]
+
+
+def link_in(message: Mail, prefix: str) -> str:
+    """The one link in message's text that starts with prefix."""
+    links = re.findall(rf"{re.escape(prefix)}\S*", message["text"])
+    assert len(links) == 1, (prefix, message)
+    return links[0]
+
+
+def clear_mail() -> None:
+    mailpit("messages", method="DELETE")
 
 
 start_all()

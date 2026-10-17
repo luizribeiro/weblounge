@@ -6,6 +6,8 @@ from test_driver.machine import QemuMachine
 
 credenza: QemuMachine
 client: QemuMachine
+# Only in tests with `mail = true;`.
+mail: QemuMachine
 tools: dict[str, str]
 
 def start_all() -> None: ...

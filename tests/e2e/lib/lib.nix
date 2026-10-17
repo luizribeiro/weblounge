@@ -1,11 +1,13 @@
 # Builds a VM test of credenza's real configuration, probed from a client,
-# that runs tests/e2e/<name>.py. Takes { credenza, client, browsers } to
-# add to the nodes; browsers maps command names to Playwright scripts.
+# that runs tests/e2e/<name>.py. Takes { credenza, client, browsers, mail }
+# to add to the nodes; browsers maps command names to Playwright scripts,
+# and `mail = true;` adds the mail node of ./mail.nix.
 { pkgs, weblounge, name, script }:
 
 test:
 let
   inherit (pkgs) lib;
+  mail = lib.optionalAttrs (test.mail or false) (import ./mail.nix { inherit pkgs; });
   # Programs a test runs on credenza that production doesn't have.
   tools = {
     python3 = "${pkgs.python3}/bin/python3";
@@ -42,7 +44,12 @@ pkgs.testers.runNixOSTest {
 
   nodes = {
     credenza = {
-      imports = weblounge.hostModules "credenza" ++ [ ../../../modules/offline-acme.nix ../../../modules/vm-secrets.nix (test.credenza or { }) ];
+      imports = weblounge.hostModules "credenza" ++ [
+        ../../../modules/offline-acme.nix
+        ../../../modules/vm-secrets.nix
+        (mail.credenza or { })
+        (test.credenza or { })
+      ];
       environment.systemPackages = [ pkgs.curl ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.
       virtualisation.qemu.options = [
@@ -56,7 +63,7 @@ pkgs.testers.runNixOSTest {
         ++ lib.mapAttrsToList browserCommand browsers;
       virtualisation.memorySize = lib.mkIf (browsers != { }) 2048;
     };
-  };
+  } // lib.optionalAttrs (mail ? node) { mail = mail.node; };
 
   testScript = lib.concatLines [
     "tools = ${builtins.toJSON tools}"
