@@ -9,6 +9,7 @@ use axum::{
     routing::{get, post},
 };
 use ergo_api::Client;
+use outbox::Outbox;
 
 use crate::{
     assets::{self, Assets},
@@ -17,7 +18,6 @@ use crate::{
     csrf,
     db::Db,
     oauth::Webchat,
-    outbox::Outbox,
     rate_limit::{AddressLimiter, Limiter, MailLimiter},
     routes, session,
 };

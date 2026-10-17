@@ -1,9 +1,9 @@
 use concierge::{
     db::{self, NewBot, NewInvite},
     email::Email,
-    outbox::{Message, Subject},
 };
 use ergo_api::fake::Failure;
+use outbox::{Message, Subject};
 
 use crate::{Fixture, OLD_PASSWORD};
 
@@ -319,10 +319,8 @@ mod reconcile {
 
 mod send_verification {
     use super::*;
-    use concierge::{
-        outbox::QueuedMessage,
-        verification_mail::{PER_RUN, SUBJECT},
-    };
+    use concierge::verification_mail::{PER_RUN, SUBJECT};
+    use outbox::QueuedMessage;
 
     /// alice, who joined before emails were confirmed, bob, who was sent a
     /// link, and carol, who confirmed hers.

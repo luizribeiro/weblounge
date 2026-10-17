@@ -9,13 +9,13 @@ use concierge::{
     db::{self, Db},
     mailer::{self, Mailer},
     oauth::Webchat,
-    outbox::Outbox,
     rate_limit::{
         AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
         VERIFICATIONS_PER_ADDRESS,
     },
     session, verification_mail,
 };
+use outbox::Outbox;
 use tokio::net::TcpListener;
 
 #[tokio::main]

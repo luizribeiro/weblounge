@@ -1,11 +1,8 @@
 use clap::Subcommand;
+use outbox::{Message, Subject};
 
 use super::Admin;
-use crate::{
-    db,
-    email::Email,
-    outbox::{Message, Subject},
-};
+use crate::{db, email::Email};
 
 const TEST_SUBJECT: &str = "A test message from weblounge.org";
 const TEST_BODY: &str = "An admin of weblounge.org sent this to check that the \

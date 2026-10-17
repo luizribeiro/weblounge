@@ -17,9 +17,9 @@ use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
     db::{Db, NewMember, NewSession},
-    outbox::Outbox,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
+use outbox::Outbox;
 use tempfile::TempDir;
 
 /// The password [`Fixture::register`] gives accounts.

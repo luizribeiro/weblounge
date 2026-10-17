@@ -4,7 +4,7 @@ use askama::Template;
 use axum::{extract::State, response::Response};
 
 use super::{Layout, render};
-use crate::{app::AppState, auth::Visitor, invite_rules, outbox, rate_limit, verification_rules};
+use crate::{app::AppState, auth::Visitor, invite_rules, rate_limit, verification_rules};
 
 #[derive(Template)]
 #[template(path = "rules.html")]

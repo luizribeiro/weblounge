@@ -1,4 +1,4 @@
-//! What concierge's SQLite databases share: how they're opened, how a
+//! What concierge's database and the outbox share: how they're opened, how a
 //! service checks it's opening one at its build's schema, and how deleted
 //! rows leave the disk.
 

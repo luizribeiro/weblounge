@@ -9,11 +9,11 @@ mod member;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use ergo_api::{Client, Passphrase};
+use outbox::Outbox;
 
 use crate::{
     config::Config,
     db::{Db, Member},
-    outbox::Outbox,
     password, status,
 };
 

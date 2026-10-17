@@ -6,12 +6,8 @@ use std::{
     time::Duration,
 };
 
-use concierge::{
-    config::SMTP_PASSWORD_CREDENTIAL,
-    db,
-    email::Email,
-    outbox::{Message, Subject},
-};
+use concierge::{config::SMTP_PASSWORD_CREDENTIAL, db, email::Email};
+use outbox::{Message, Subject};
 
 use crate::Fixture;
 

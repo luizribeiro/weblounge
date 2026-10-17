@@ -34,7 +34,6 @@ use concierge::{
     db::{self, Db, NewInvite, NewMember},
     invite_rules,
     oauth::Webchat,
-    outbox::{Outbox, QueuedMessage},
     rate_limit::{
         AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
         VERIFICATIONS_PER_ADDRESS,
@@ -43,6 +42,7 @@ use concierge::{
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
 use http_body_util::BodyExt;
+use outbox::{Outbox, QueuedMessage};
 use tempfile::TempDir;
 use tower::ServiceExt;
 

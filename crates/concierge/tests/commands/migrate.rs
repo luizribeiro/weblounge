@@ -3,7 +3,8 @@ use std::{
     process::{Command, Output},
 };
 
-use concierge::{db::Db, outbox::Outbox};
+use concierge::db::Db;
+use outbox::Outbox;
 
 /// `concierge migrate` with only what its unit sets: the state directory
 /// and the outbox.

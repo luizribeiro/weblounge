@@ -52,5 +52,5 @@ prepare:
   export DATABASE_URL="sqlite://$scratch/prepare.db"
   sqlx database create
   sqlx migrate run --source crates/concierge/migrations
-  sqlx migrate run --ignore-missing --source crates/concierge/outbox-migrations
+  sqlx migrate run --ignore-missing --source crates/outbox/migrations
   cargo sqlx prepare --workspace -- --all-targets

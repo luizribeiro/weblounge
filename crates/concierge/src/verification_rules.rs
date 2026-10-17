@@ -4,7 +4,7 @@
 //!
 //! Times are Unix seconds.
 
-use crate::{outbox, tree};
+use crate::tree;
 
 const HOUR: i64 = 60 * 60;
 const DAY: i64 = 24 * HOUR;

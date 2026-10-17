@@ -7,12 +7,10 @@
 use std::{fmt, path::Path};
 
 use anyhow::Context;
-use common::sqlite;
+use common::{email::Email, sqlite};
 use sqlx::{SqlitePool, migrate::Migrator};
 
-use crate::email::Email;
-
-static MIGRATOR: Migrator = sqlx::migrate!("./outbox-migrations");
+static MIGRATOR: Migrator = sqlx::migrate!();
 
 const MINUTE: i64 = 60;
 const HOUR: i64 = 60 * MINUTE;
@@ -219,9 +217,55 @@ impl Outbox {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+/// A migrated outbox, and the mail tests queue in it.
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
     use super::*;
+
+    pub const QUEUED: i64 = 1_760_000_000;
+    pub const VERIFY_SUBJECT: &str = "Verify your email for weblounge";
+
+    pub async fn temp_outbox() -> (Outbox, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let outbox = Outbox::migrate(&dir.path().join("outbox.db"))
+            .await
+            .unwrap();
+        (outbox, dir)
+    }
+
+    pub async fn execute(outbox: &Outbox, sql: &str) -> sqlx::Result<()> {
+        sqlx::query(sql).execute(&outbox.pool).await.map(drop)
+    }
+
+    pub(crate) fn message(account: Option<&str>, to: &str, subject: &str) -> Message {
+        Message {
+            account: account.map(Into::into),
+            to: Email::parse(to).unwrap(),
+            subject: Subject::parse(subject).unwrap(),
+            body: format!(
+                "Hi {},\n\n\
+                 Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
+                 the address you gave weblounge.org. Zoë says hello.\n",
+                account.unwrap_or("there"),
+            ),
+        }
+    }
+
+    /// alice's verification email, then bob's a minute later.
+    pub async fn with_outbox() -> (Outbox, tempfile::TempDir) {
+        let (outbox, dir) = temp_outbox().await;
+        for (account, queued_at) in [("alice", QUEUED), ("bob", QUEUED + 60)] {
+            let to = format!("{account}@example.org");
+            let message = message(Some(account), &to, VERIFY_SUBJECT);
+            outbox.queue(&message, queued_at).await.unwrap();
+        }
+        (outbox, dir)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{testing::*, *};
     use common::sqlite::testing::files_contain;
 
     const NOW: i64 = 1_760_000_000;
@@ -255,46 +299,6 @@ pub(crate) mod tests {
         ] {
             assert_eq!(Subject::parse(subject), Err(InvalidSubject), "{subject:?}");
         }
-    }
-
-    pub(crate) const QUEUED: i64 = 1_760_000_000;
-    pub(crate) const VERIFY_SUBJECT: &str = "Verify your email for weblounge";
-
-    pub(crate) async fn temp_outbox() -> (Outbox, tempfile::TempDir) {
-        let dir = tempfile::tempdir().unwrap();
-        let outbox = Outbox::migrate(&dir.path().join("outbox.db"))
-            .await
-            .unwrap();
-        (outbox, dir)
-    }
-
-    pub(crate) async fn execute(outbox: &Outbox, sql: &str) -> sqlx::Result<()> {
-        sqlx::query(sql).execute(&outbox.pool).await.map(drop)
-    }
-
-    fn message(account: Option<&str>, to: &str, subject: &str) -> Message {
-        Message {
-            account: account.map(Into::into),
-            to: Email::parse(to).unwrap(),
-            subject: Subject::parse(subject).unwrap(),
-            body: format!(
-                "Hi {},\n\n\
-                 Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
-                 the address you gave weblounge.org. Zoë says hello.\n",
-                account.unwrap_or("there"),
-            ),
-        }
-    }
-
-    /// alice's verification email, then bob's a minute later.
-    pub(crate) async fn with_outbox() -> (Outbox, tempfile::TempDir) {
-        let (outbox, dir) = temp_outbox().await;
-        for (account, queued_at) in [("alice", QUEUED), ("bob", QUEUED + 60)] {
-            let to = format!("{account}@example.org");
-            let message = message(Some(account), &to, VERIFY_SUBJECT);
-            outbox.queue(&message, queued_at).await.unwrap();
-        }
-        (outbox, dir)
     }
 
     fn recipients(messages: &[QueuedMessage]) -> Vec<&str> {

@@ -2,13 +2,12 @@
 //! the same for everyone, so nothing a member chose reaches a header.
 
 use askama::Template;
+use outbox::{Message, Outbox, Subject};
 
 use crate::{
     db::{Db, IssuedCode},
     email::Email,
-    invite_rules,
-    outbox::{Message, Outbox, Subject},
-    rate_limit, verification_rules,
+    invite_rules, rate_limit, verification_rules,
 };
 
 pub const SUBJECT: &str = "Confirm your email for weblounge.org";
@@ -148,7 +147,7 @@ pub async fn remind(db: &Db, outbox: &Outbox, public_url: &str, now: i64) -> any
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{db, nick, outbox};
+    use crate::{db, nick};
 
     const PUBLIC_URL: &str = "https://members.weblounge.org";
     const SENT: i64 = 1_760_000_000;
@@ -255,7 +254,7 @@ mod tests {
     #[tokio::test]
     async fn sending_queues_the_link_to_a_code_on_file() {
         let (db, _db_dir) = db::tests::temp_db().await;
-        let (outbox, _outbox_dir) = outbox::tests::temp_outbox().await;
+        let (outbox, _outbox_dir) = outbox::testing::temp_outbox().await;
         db::tests::execute(
             &db,
             "INSERT INTO members (account, email, joined_at) VALUES ('Bob', 'bob@example.org', 0)",
@@ -289,7 +288,7 @@ mod tests {
     #[tokio::test]
     async fn a_verified_member_gets_nothing() {
         let (db, _db_dir) = db::tests::temp_db().await;
-        let (outbox, _outbox_dir) = outbox::tests::temp_outbox().await;
+        let (outbox, _outbox_dir) = outbox::testing::temp_outbox().await;
         db::tests::execute(
             &db,
             "INSERT INTO members (account, email, email_verified_at, joined_at)
@@ -314,7 +313,7 @@ mod tests {
 
         async fn with_members(accounts: &[&str]) -> (Db, Outbox, [tempfile::TempDir; 2]) {
             let (db, db_dir) = db::tests::temp_db().await;
-            let (outbox, outbox_dir) = outbox::tests::temp_outbox().await;
+            let (outbox, outbox_dir) = outbox::testing::temp_outbox().await;
             for account in accounts {
                 db::tests::execute(
                     &db,

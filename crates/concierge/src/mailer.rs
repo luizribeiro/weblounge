@@ -19,12 +19,9 @@ use lettre::{
         response::{Category, Code, Severity},
     },
 };
+use outbox::{Outbox, QueuedMessage, Subject};
 
-use crate::{
-    config::MailerConfig,
-    email::Email,
-    outbox::{Outbox, QueuedMessage, Subject},
-};
+use crate::{config::MailerConfig, email::Email};
 
 /// How long the outbox sits unchecked. Concierge can't wake the mailer, and
 /// a member waiting for a verification email notices more than a few
@@ -240,12 +237,10 @@ mod tests {
     use lettre::transport::smtp::response::Detail;
 
     use super::*;
-    use crate::{
-        config::SMTP_PASSWORD_CREDENTIAL,
-        outbox::{
-            self, GIVE_UP_AFTER,
-            tests::{QUEUED, VERIFY_SUBJECT, execute, with_outbox},
-        },
+    use crate::config::SMTP_PASSWORD_CREDENTIAL;
+    use outbox::{
+        GIVE_UP_AFTER,
+        testing::{QUEUED, VERIFY_SUBJECT, execute, with_outbox},
     };
 
     /// An SMTP server that takes everything but what it's told to refuse.

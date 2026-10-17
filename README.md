@@ -61,11 +61,13 @@ start over. `cargo test` runs the tests; `just check` adds clippy and
 rustfmt.
 
 Concierge keeps its data in SQLite through sqlx, which checks every query
-at compile time against the metadata in `.sqlx`. After
-changing a query or adding a migration to `crates/concierge/migrations`,
-run `just concierge prepare` and commit what it writes. On the server,
-`concierge-migrate.service` applies new migrations before anything else
-opens the database; `just concierge dev` migrates as it starts.
+at compile time against the metadata in `.sqlx`. The outbox, the mail
+concierge queues for its mailer, is a database of its own, owned by
+`crates/outbox`. After changing a query or adding a migration to either
+crate's `migrations`, run `just concierge prepare` and commit what it
+writes. On the server, `concierge-migrate.service` applies new migrations
+to both before anything else opens them; `just concierge dev` migrates as
+it starts.
 
 ## The web client
 
