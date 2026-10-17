@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use clap::Subcommand;
 
 use super::{Admin, bot, erase_reminder, print_once};
-use crate::db;
+use crate::{
+    db,
+    verification_mail::{self, Kind},
+};
 
 #[derive(Subcommand)]
 pub enum MemberCommand {
@@ -18,6 +21,17 @@ pub enum MemberCommand {
     /// bots Ergo lacks, removed ones whose accounts are still to be erased,
     /// and bots whose owner was removed.
     Reconcile,
+    /// Mail a member a link to confirm their email, replacing any they
+    /// had. Temporary: for the members who joined before emails were
+    /// confirmed, to be removed once they all have.
+    SendVerification {
+        #[arg(required_unless_present = "unverified", conflicts_with = "unverified")]
+        account: Option<String>,
+        /// Instead, every unconfirmed member who was never sent a link, as
+        /// many as one batch takes; run it again for the rest.
+        #[arg(long)]
+        unverified: bool,
+    },
 }
 
 pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -25,6 +39,9 @@ pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result
         MemberCommand::ResetPassword { account } => reset_password(admin, &account).await,
         MemberCommand::Delete { account } => delete(admin, &account).await,
         MemberCommand::Reconcile => reconcile(admin).await,
+        MemberCommand::SendVerification { account, .. } => {
+            send_verification(admin, account.as_deref()).await
+        }
     }
 }
 
@@ -56,6 +73,51 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
         removal.invites_revoked,
         erase_reminder(account),
     ))
+}
+
+async fn send_verification(admin: &Admin, name: Option<&str>) -> anyhow::Result<String> {
+    let accounts = match name {
+        Some(name) => vec![admin.current_member(name).await?.account],
+        None => never_sent_a_link(admin).await?,
+    };
+    if accounts.is_empty() {
+        return Ok("every unconfirmed member was sent a link already\n".into());
+    }
+    let public_url = &admin.config.public_url;
+    let batch = verification_mail::send_batch(
+        &admin.db,
+        &admin.outbox,
+        public_url,
+        &accounts,
+        Kind::Link,
+        db::now(),
+    )
+    .await?;
+    let mut lines: String = accounts
+        .iter()
+        .take(verification_mail::PER_RUN)
+        .map(|account| {
+            if batch.sent.contains(account) {
+                format!("sent {account} a link\n")
+            } else {
+                format!("{account} confirmed their email already\n")
+            }
+        })
+        .collect();
+    if batch.left > 0 {
+        lines += &format!("{} more to send: run this again in an hour\n", batch.left);
+    }
+    Ok(lines)
+}
+
+/// The unconfirmed members who were never sent a link.
+async fn never_sent_a_link(admin: &Admin) -> anyhow::Result<Vec<String>> {
+    let progress = admin.db.verification_progress().await?;
+    Ok(progress
+        .into_iter()
+        .filter(|(_, progress)| !progress.verified && progress.first_sent_at.is_none())
+        .map(|(account, _)| account)
+        .collect())
 }
 
 async fn reconcile(admin: &Admin) -> anyhow::Result<String> {

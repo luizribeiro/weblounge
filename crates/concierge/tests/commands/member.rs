@@ -316,3 +316,136 @@ mod reconcile {
         assert!(error.to_string().contains("API token"), "{error}");
     }
 }
+
+mod send_verification {
+    use super::*;
+    use concierge::{
+        outbox::QueuedMessage,
+        verification_mail::{PER_RUN, SUBJECT},
+    };
+
+    /// alice, who joined before emails were confirmed, bob, who was sent a
+    /// link, and carol, who confirmed hers.
+    async fn with_members() -> Fixture {
+        let fixture = Fixture::start().await;
+        for account in ["alice", "bob", "carol"] {
+            fixture.insert_member(account, None).await;
+        }
+        let db = fixture.db().await;
+        db.issue_verification_code("bob", db::now()).await.unwrap();
+        let carols = db.issue_verification_code("carol", db::now()).await;
+        db.verify_email(&carols.unwrap().unwrap().code, db::now())
+            .await
+            .unwrap();
+        fixture
+    }
+
+    async fn queued(fixture: &Fixture) -> Vec<QueuedMessage> {
+        fixture.outbox().await.due(db::now()).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn unverified_mails_a_link_to_whoever_never_had_one() {
+        let fixture = with_members().await;
+
+        let output = fixture
+            .run(&["member", "send-verification", "--unverified"])
+            .await
+            .unwrap();
+
+        assert_eq!(output, "sent alice a link\n");
+        let [message] = &queued(&fixture).await[..] else {
+            panic!("one message");
+        };
+        assert_eq!(message.subject, SUBJECT);
+        assert!(message.body.starts_with("Hi alice,\n"), "{}", message.body);
+        let alice = fixture.db().await.member("alice").await.unwrap().unwrap();
+        assert!(alice.verification_first_sent_at.is_some());
+
+        let again = fixture
+            .run(&["member", "send-verification", "--unverified"])
+            .await
+            .unwrap();
+        assert_eq!(again, "every unconfirmed member was sent a link already\n");
+        assert_eq!(queued(&fixture).await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_member_named_gets_a_new_link_even_after_one_went_out() {
+        let fixture = with_members().await;
+
+        let output = fixture
+            .run(&["member", "send-verification", "BOB"])
+            .await
+            .unwrap();
+
+        assert_eq!(output, "sent bob a link\n");
+        let queued = queued(&fixture).await;
+        assert_eq!(queued.len(), 1);
+        assert!(
+            queued[0].body.starts_with("Hi bob,\n"),
+            "{}",
+            queued[0].body
+        );
+    }
+
+    #[tokio::test]
+    async fn a_member_named_who_confirmed_gets_nothing() {
+        let fixture = with_members().await;
+
+        let output = fixture
+            .run(&["member", "send-verification", "carol"])
+            .await
+            .unwrap();
+
+        assert_eq!(output, "carol confirmed their email already\n");
+        assert!(queued(&fixture).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn refuses_someone_who_is_not_a_member_and_needs_an_account_or_unverified() {
+        let fixture = with_members().await;
+        let not_a_member = fixture.run(&["member", "send-verification", "dave"]);
+        assert_eq!(
+            not_a_member.await.unwrap_err().to_string(),
+            "dave is not a member"
+        );
+        for args in [
+            &["member", "send-verification"][..],
+            &["member", "send-verification", "alice", "--unverified"],
+        ] {
+            assert!(fixture.run(args).await.is_err(), "{args:?}");
+        }
+        assert!(queued(&fixture).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn mails_a_batch_a_run_and_says_how_many_are_left() {
+        let fixture = Fixture::start().await;
+        for n in 0..PER_RUN + 2 {
+            fixture.insert_member(&format!("m{n:03}"), None).await;
+        }
+
+        let output = fixture
+            .run(&["member", "send-verification", "--unverified"])
+            .await
+            .unwrap();
+
+        let lines: Vec<_> = output.lines().collect();
+        assert_eq!(lines.len(), PER_RUN + 1, "{output}");
+        assert_eq!(lines[0], "sent m000 a link");
+        assert_eq!(lines[PER_RUN], "2 more to send: run this again in an hour");
+        assert_eq!(queued(&fixture).await.len(), PER_RUN);
+        let rest = fixture
+            .run(&["member", "send-verification", "--unverified"])
+            .await
+            .unwrap();
+        assert_eq!(
+            rest,
+            format!(
+                "sent m{PER_RUN:03} a link\nsent m{:03} a link\n",
+                PER_RUN + 1
+            )
+        );
+    }
+}

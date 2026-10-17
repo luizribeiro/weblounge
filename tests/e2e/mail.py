@@ -9,6 +9,7 @@ if TYPE_CHECKING:
         clear_mail,
         concierge_admin,
         concierge_sql,
+        confirm_email,
         invite_code,
         link_in,
         mails_to,
@@ -109,6 +110,22 @@ with subtest("running concierge remind again mails nothing more"):
     assert remind().strip() == "Queued 0 reminders"
     wait_for_empty_outbox()
     assert [message["subject"] for message in mails_to("grace@example.org")] == [verification_subject, reminder_subject]
+
+with subtest("member send-verification mails a link to whoever joined before links, none to the confirmed"):
+    add_member("heidi", "saffron-quarry-52")
+    add_member("ivan", "marble-thicket-17")
+    wait_for_empty_outbox()
+    clear_mail()
+    concierge_sql("UPDATE members SET verification_first_sent_at = NULL WHERE account = 'heidi'", write=True)
+    concierge_sql("DELETE FROM verification_codes WHERE account = 'heidi'", write=True)
+    confirm_email("ivan")
+    assert concierge_admin("member", "send-verification", "--unverified") == "sent heidi a link\n"
+    link = link_in(wait_for_mail("heidi@example.org", verification_subject), verify_link)
+    confirmed = post_code(link)
+    assert confirmed.endswith("\n200") and "Your email is confirmed." in confirmed, confirmed
+    assert concierge_admin("member", "send-verification", "ivan") == "ivan confirmed their email already\n"
+    wait_for_empty_outbox()
+    assert mails_to("ivan@example.org") == []
 
 with subtest("the mailer's log names no recipient and no subject"):
     credenza.succeed("journalctl --sync")
