@@ -68,9 +68,8 @@ run `just concierge prepare` and commit what it writes.
 ## The web client
 
 `https://irc.weblounge.org` serves [gamja](https://codeberg.org/emersion/gamja)
-from nixpkgs, with a small patch (`pkgs/gamja-oauth2.patch`) that makes it
-send a state and a PKCE challenge. A member signed in on the members' site
-lands in #lounge without typing anything:
+from nixpkgs, patched in `pkgs/gamja.nix`. A member signed in on the
+members' site lands in #lounge without typing anything:
 
 1. gamja's `config.json`, generated in `services/webchat.nix`, sends it to
    concierge's `/oauth/authorize`. Concierge, a small OAuth 2.0 server,
