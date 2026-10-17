@@ -458,6 +458,48 @@ impl Db {
         verification_code(&self.pool, &link_code::hash(code)).await
     }
 
+    /// How far each current member got with verifying their email.
+    pub async fn verification_progress(
+        &self,
+    ) -> sqlx::Result<Vec<(String, verification_rules::Progress)>> {
+        let rows = sqlx::query!(
+            r#"SELECT account AS "account!",
+                      email_verified_at IS NOT NULL AS "verified!: bool",
+                      verification_first_sent_at AS first_sent_at,
+                      verification_reminded_at AS reminded_at,
+                      (SELECT max(created_at) FROM verification_codes AS codes
+                       WHERE codes.account = members.account AND replaced_at IS NULL)
+                        AS "last_sent_at: i64"
+               FROM members WHERE removed_at IS NULL ORDER BY account"#
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let progress = verification_rules::Progress {
+                    verified: row.verified,
+                    first_sent_at: row.first_sent_at,
+                    reminded_at: row.reminded_at,
+                    last_sent_at: row.last_sent_at,
+                };
+                (row.account, progress)
+            })
+            .collect())
+    }
+
+    /// Notes that `account`'s one reminder went out at `now`.
+    pub async fn record_reminder(&self, account: &str, now: i64) -> sqlx::Result<()> {
+        sqlx::query!(
+            "UPDATE members SET verification_reminded_at = ? WHERE account = ?",
+            now,
+            account,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
     /// Every member's account, removed ones included.
     pub async fn member_accounts(&self) -> sqlx::Result<Vec<MemberAccount>> {
         sqlx::query_as!(
@@ -2075,6 +2117,65 @@ pub(crate) mod tests {
         let verification = db.verify_email(&kept.code, MAILED).await.unwrap();
         assert_eq!(verification, Verification::Unknown);
         assert!(db.verification_code(&bobs.code).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn progress_follows_the_newest_link_and_the_reminder_of_current_members() {
+        let (db, _dir) = with_unverified_members().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, joined_at, removed_at)
+             VALUES ('dave', NULL, 0, 1)",
+        )
+        .await
+        .unwrap();
+        issue(&db, "alice", MAILED).await;
+        issue(&db, "alice", MAILED + 60).await;
+        db.record_reminder("alice", MAILED + 60).await.unwrap();
+
+        let progress = db.verification_progress().await.unwrap();
+
+        let summary: Vec<_> = progress
+            .iter()
+            .map(|(account, progress)| {
+                (
+                    account.as_str(),
+                    progress.verified,
+                    progress.first_sent_at,
+                    progress.reminded_at,
+                    progress.last_sent_at,
+                )
+            })
+            .collect();
+        assert_eq!(
+            summary,
+            [
+                (
+                    "Alice",
+                    false,
+                    Some(MAILED),
+                    Some(MAILED + 60),
+                    Some(MAILED + 60)
+                ),
+                ("bob", false, None, None, None),
+                ("carol", true, None, None, None),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_link_that_was_used_or_cleared_out_leaves_no_last_sent_at() {
+        let (db, _dir) = with_unverified_members().await;
+        let expired = verification_rules::expires_at(MAILED);
+        issue(&db, "bob", MAILED).await;
+        let alices = issue(&db, "alice", expired).await;
+        db.verify_email(&alices.code, expired).await.unwrap();
+
+        let progress = db.verification_progress().await.unwrap();
+
+        for (account, progress) in &progress[..2] {
+            assert_eq!(progress.last_sent_at, None, "{account}");
+        }
     }
 
     fn code<'a>(

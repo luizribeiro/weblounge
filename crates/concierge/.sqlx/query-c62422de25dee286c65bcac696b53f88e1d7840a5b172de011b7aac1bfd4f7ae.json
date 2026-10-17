@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members SET verification_reminded_at = ? WHERE account = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c62422de25dee286c65bcac696b53f88e1d7840a5b172de011b7aac1bfd4f7ae"
+}
