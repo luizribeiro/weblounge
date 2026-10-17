@@ -71,6 +71,13 @@ with subtest("the new member logs in to IRC with SASL and lands in #lounge"):
     assert " 903 " in session, session
     assert re.search(r"^:erin!\S+ JOIN #lounge", session, re.M), session
 
+with subtest("until the new member confirms her email, she's refused an invite, and the Invites tab says why"):
+    refused = erins_browser.post("/invites")
+    assert refused == f"303 https://{members}/invites", refused
+    tab = erins_browser.get("/invites", "-f")
+    assert "Inviting others needs a confirmed email." in tab, tab
+    assert concierge_sql("SELECT count(*) FROM invites WHERE created_by = 'erin'").strip() == "0"
+
 with subtest("signing up mails a link to confirm the email, in short plain lines, under a subject without the nick"):
     message = wait_for_mail(erins_email, verification_subject)
     assert message["from"] == "weblounge.org <noreply@weblounge.org>", message

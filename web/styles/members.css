@@ -390,7 +390,14 @@
   }
 }
 
-.invite-meter + .hint {
+.invite-reason {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.invite-meter + .hint,
+.invite-reason + .hint {
   margin-bottom: 1.25rem;
   font-size: 0.9375rem;
 }

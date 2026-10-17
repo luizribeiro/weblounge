@@ -8,7 +8,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 
-use super::{Layout, Tab, internal_error, render};
+use super::{Layout, Tab, internal_error, render, verify::Unconfirmed};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
@@ -133,6 +133,9 @@ pub struct Invites {
     pub remaining: i64,
     /// How long until the first unused one expires, in words.
     pub first_expires_in: Option<String>,
+    /// Where confirming the member's email stands, until they do; inviting
+    /// waits on it.
+    pub unconfirmed: Option<Unconfirmed>,
 }
 
 impl Invites {
@@ -145,6 +148,7 @@ impl Invites {
             remaining: invite_rules::remaining(&inviter(member), &rules, now),
             first_expires_in: invite_rules::first_expiry_in(&rules, now)
                 .map(invite_rules::wait_in_words),
+            unconfirmed: Unconfirmed::of(member, now),
         })
     }
 }

@@ -7,6 +7,12 @@
       <h1>Invites</h1>
       <section class="card tab-card invites" aria-labelledby="invites-title">
         <h2 class="eyebrow" id="invites-title">Your invites</h2>
+        {%- if let Some(unconfirmed) = invites.unconfirmed %}
+        <p class="invite-reason">Inviting others needs a confirmed email.</p>
+        <p class="hint">{% if unconfirmed.sent() %}Open the link we emailed you, or get a new one from the Account tab.{% else %}We haven't sent you a link to confirm it yet; send one from the Account tab.{% endif %}</p>
+        <div class="invite-actions">
+          <a class="button button-primary" href="{{ crate::routes::verify::ACCOUNT_EMAIL }}">Confirm your email</a>
+        {%- else %}
         <p class="invite-count"><span class="invite-count-number">{{ invites.remaining }} of {{ crate::invite_rules::MAX_OPEN }}</span> invites available</p>
         <div class="invite-meter" aria-hidden="true">
           {%- for slot in 0..crate::invite_rules::MAX_OPEN %}<span{% if slot < invites.remaining %} class="available"{% endif %}></span>{% endfor -%}
@@ -17,6 +23,7 @@
           <form method="post" action="/invites">
             <button class="button button-primary" type="submit"{% if invites.remaining == 0 %} disabled{% endif %}>Invite someone</button>
           </form>
+        {%- endif %}
           {%- if invites.open > 0 %}
           <a class="revoke-link" href="/invites/revoke" data-dialog="revoke-invites">Revoke unused invites</a>
           <dialog class="card" id="revoke-invites" aria-labelledby="revoke-invites-title" aria-describedby="revoke-invites-question">

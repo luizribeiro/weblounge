@@ -31,7 +31,8 @@ pub struct Confirmation {
     code: String,
 }
 
-const ACCOUNT_EMAIL: &str = "/account#email-and-news";
+/// Where a member sees how confirming their email stands, and asks for a link.
+pub const ACCOUNT_EMAIL: &str = "/account#email-and-news";
 
 pub async fn show(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&VerifyPage {

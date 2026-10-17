@@ -279,8 +279,44 @@ async fn members_and_admins_alike_invite_nobody_until_they_confirm_their_email()
         let response = site.post("/invites", &[], Some(&cookie)).await;
 
         assert_eq!(location(&response), "/invites");
+        let page = invites_tab(&site, &cookie).await;
+        assert!(page.contains(NEEDS_A_CONFIRMED_EMAIL), "{page}");
     }
     assert_eq!(invite_count(&site).await, 0);
+}
+
+const NEEDS_A_CONFIRMED_EMAIL: &str =
+    r#"<p class="invite-reason">Inviting others needs a confirmed email.</p>"#;
+
+#[tokio::test]
+async fn the_tab_tells_an_unconfirmed_member_why_and_where_to_confirm_instead_of_a_count() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let never_mailed = invites_tab(&site, &cookie).await;
+    site.execute("UPDATE members SET verification_first_sent_at = unixepoch()")
+        .await;
+    let mailed = invites_tab(&site, &cookie).await;
+
+    for page in [&never_mailed, &mailed] {
+        assert!(page.contains(NEEDS_A_CONFIRMED_EMAIL), "{page}");
+        assert!(
+            page.contains(r##"<a class="button button-primary" href="/account#email-and-news">Confirm your email</a>"##),
+            "{page}"
+        );
+        assert!(!page.contains("invites available"), "{page}");
+        assert!(!page.contains("Invite someone"), "{page}");
+    }
+    assert!(
+        never_mailed.contains(
+            "We haven't sent you a link to confirm it yet; send one from the Account tab."
+        ),
+        "{never_mailed}"
+    );
+    assert!(
+        mailed.contains("Open the link we emailed you, or get a new one from the Account tab."),
+        "{mailed}"
+    );
 }
 
 #[tokio::test]
