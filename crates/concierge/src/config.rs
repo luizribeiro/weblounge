@@ -33,22 +33,32 @@ pub struct Config {
     pub ergo_api: Url,
     pub assets_dir: PathBuf,
     pub state_dir: PathBuf,
+    /// The outbox's database, which the mailer sends from.
+    pub outbox_path: PathBuf,
     pub credentials_dir: PathBuf,
     /// Ergo's multiclient always-on and auto-away, as what members get
     /// until they choose.
     pub presence_defaults: Presence,
 }
 
-/// What concierge-mailer needs: the database it sends the outbox of, and
-/// the SMTP server it logs in to, over implicit TLS.
+/// What concierge-mailer needs: the outbox it sends, and the SMTP server it
+/// logs in to, over implicit TLS.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MailerConfig {
     pub smtp_host: String,
     pub smtp_port: u16,
     pub smtp_username: String,
     pub from: Mailbox,
-    pub state_dir: PathBuf,
+    pub outbox_path: PathBuf,
     pub credentials_dir: PathBuf,
+}
+
+/// The databases `concierge migrate` brings up to date: concierge's own in
+/// `STATE_DIRECTORY`, and the outbox.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Databases {
+    pub concierge: PathBuf,
+    pub outbox: PathBuf,
 }
 
 /// The address members' IRC clients connect to, over TLS.
@@ -171,6 +181,7 @@ impl Config {
             })?,
             assets_dir: require("CONCIERGE_ASSETS")?.into(),
             state_dir: require("STATE_DIRECTORY")?.into(),
+            outbox_path: require("CONCIERGE_OUTBOX")?.into(),
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
             presence_defaults: Presence {
                 always_on: multiclient_default("CONCIERGE_ALWAYS_ON_DEFAULT")?,
@@ -256,13 +267,9 @@ impl MailerConfig {
                     "expected an address, or a name and an <address>",
                 )
             })?,
-            state_dir: require("STATE_DIRECTORY")?.into(),
+            outbox_path: require("CONCIERGE_OUTBOX")?.into(),
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
         })
-    }
-
-    pub fn database_path(&self) -> PathBuf {
-        database_in(&self.state_dir)
     }
 
     /// The password of the SMTP server's account.
@@ -276,11 +283,18 @@ impl MailerConfig {
     }
 }
 
-/// The database in `STATE_DIRECTORY`, which is all `concierge migrate`
-/// needs.
-pub fn database_from_env() -> Result<PathBuf, ConfigError> {
-    let state_dir = required(|name| std::env::var(name).ok(), "STATE_DIRECTORY")?;
-    Ok(database_in(Path::new(&state_dir)))
+impl Databases {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let state_dir = required(&var, "STATE_DIRECTORY")?;
+        Ok(Self {
+            concierge: database_in(Path::new(&state_dir)),
+            outbox: required(&var, "CONCIERGE_OUTBOX")?.into(),
+        })
+    }
 }
 
 fn required(
@@ -349,7 +363,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 10] = [
+    const PRODUCTION: [(&str, &str); 11] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
@@ -362,6 +376,7 @@ mod tests {
             "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members",
         ),
         ("STATE_DIRECTORY", "/var/lib/concierge"),
+        ("CONCIERGE_OUTBOX", "/var/lib/concierge-outbox/outbox.db"),
         (
             "CREDENTIALS_DIRECTORY",
             "/run/credentials/concierge.service",
@@ -400,6 +415,7 @@ mod tests {
                 assets_dir: "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members"
                     .into(),
                 state_dir: "/var/lib/concierge".into(),
+                outbox_path: "/var/lib/concierge-outbox/outbox.db".into(),
                 credentials_dir: "/run/credentials/concierge.service".into(),
                 presence_defaults: Presence {
                     always_on: true,
@@ -621,7 +637,7 @@ mod tests {
         ("CONCIERGE_SMTP_HOST", "shadow.mxrouting.net"),
         ("CONCIERGE_SMTP_USERNAME", "noreply@weblounge.org"),
         ("CONCIERGE_MAIL_FROM", "weblounge <noreply@weblounge.org>"),
-        ("STATE_DIRECTORY", "/var/lib/concierge"),
+        ("CONCIERGE_OUTBOX", "/var/lib/concierge-outbox/outbox.db"),
         (
             "CREDENTIALS_DIRECTORY",
             "/run/credentials/concierge-mailer.service",
@@ -636,7 +652,7 @@ mod tests {
     }
 
     #[test]
-    fn the_mailer_needs_only_smtp_settings_and_systemds_directories() {
+    fn the_mailer_needs_only_smtp_settings_the_outbox_and_its_credentials() {
         let config = mailer_with(&[]).unwrap();
         assert_eq!(
             config,
@@ -645,19 +661,40 @@ mod tests {
                 smtp_port: 465,
                 smtp_username: "noreply@weblounge.org".into(),
                 from: "weblounge <noreply@weblounge.org>".parse().unwrap(),
-                state_dir: "/var/lib/concierge".into(),
+                outbox_path: "/var/lib/concierge-outbox/outbox.db".into(),
                 credentials_dir: "/run/credentials/concierge-mailer.service".into(),
             }
-        );
-        assert_eq!(
-            config.database_path(),
-            PathBuf::from("/var/lib/concierge/concierge.db")
         );
         assert_eq!(config.from.email.to_string(), "noreply@weblounge.org");
         assert_eq!(
             mailer_with(&[("CONCIERGE_SMTP_USERNAME", None)]),
             Err(ConfigError::Missing("CONCIERGE_SMTP_USERNAME"))
         );
+    }
+
+    #[test]
+    fn migrating_needs_the_state_directory_and_the_outbox() {
+        let vars = HashMap::from([
+            ("STATE_DIRECTORY", "/var/lib/concierge"),
+            ("CONCIERGE_OUTBOX", "/var/lib/concierge-outbox/outbox.db"),
+        ]);
+        let databases = |missing: Option<&str>| {
+            Databases::from_vars(|name| {
+                (Some(name) != missing)
+                    .then(|| vars.get(name).map(|value| (*value).to_owned()))
+                    .flatten()
+            })
+        };
+        assert_eq!(
+            databases(None),
+            Ok(Databases {
+                concierge: "/var/lib/concierge/concierge.db".into(),
+                outbox: "/var/lib/concierge-outbox/outbox.db".into(),
+            })
+        );
+        for name in ["STATE_DIRECTORY", "CONCIERGE_OUTBOX"] {
+            assert_eq!(databases(Some(name)), Err(ConfigError::Missing(name)));
+        }
     }
 
     #[test]

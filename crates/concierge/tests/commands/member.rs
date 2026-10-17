@@ -1,4 +1,8 @@
-use concierge::db::{self, NewBot, NewInvite};
+use concierge::{
+    db::{self, NewBot, NewInvite},
+    email::Email,
+    outbox::{Message, Subject},
+};
 use ergo_api::fake::Failure;
 
 use crate::{Fixture, OLD_PASSWORD};
@@ -103,6 +107,29 @@ mod delete {
         let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
         assert!(invite.revoked_at.is_some());
         assert_eq!(db.end_sessions("alice").await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn deletes_the_mail_waiting_for_the_member_alone() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.add_member("bob", Some("alice")).await;
+        let outbox = fixture.outbox().await;
+        for account in ["alice", "bob"] {
+            let message = Message {
+                account: Some(account.into()),
+                to: Email::parse("someone@example.org").unwrap(),
+                subject: Subject::parse("Verify your email for weblounge").unwrap(),
+                body: format!("Hi {account}, open the link to verify.\n"),
+            };
+            outbox.queue(&message, db::now()).await.unwrap();
+        }
+
+        fixture.run(&["member", "delete", "alice"]).await.unwrap();
+
+        let due = outbox.due(db::now()).await.unwrap();
+        let bodies: Vec<_> = due.iter().map(|message| message.body.as_str()).collect();
+        assert_eq!(bodies, ["Hi bob, open the link to verify.\n"]);
     }
 
     #[tokio::test]

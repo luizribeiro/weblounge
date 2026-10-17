@@ -16,6 +16,7 @@ use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
     db::{Db, NewMember, NewSession},
+    outbox::Outbox,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
 use tempfile::TempDir;
@@ -27,13 +28,14 @@ struct Fixture {
     config: Config,
     ergo: FakeErgo,
     _state: TempDir,
+    _outbox: TempDir,
     _credentials: TempDir,
 }
 
 impl Fixture {
     async fn start() -> Self {
         let ergo = FakeErgo::start().await;
-        let (state, credentials) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let [state, outbox, credentials] = [(); 3].map(|()| tempfile::tempdir().unwrap());
         let credential =
             |name, value: &str| fs::write(credentials.path().join(name), value).unwrap();
         credential(SESSION_KEY_CREDENTIAL, &"k".repeat(64));
@@ -50,6 +52,7 @@ impl Fixture {
             ergo_api: ergo.url(),
             assets_dir: "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members".into(),
             state_dir: state.path().into(),
+            outbox_path: outbox.path().join("outbox.db"),
             credentials_dir: credentials.path().into(),
             presence_defaults: Presence {
                 always_on: true,
@@ -57,10 +60,12 @@ impl Fixture {
             },
         };
         Db::migrate(&config.database_path()).await.unwrap();
+        Outbox::migrate(&config.outbox_path).await.unwrap();
         Self {
             config,
             ergo,
             _state: state,
+            _outbox: outbox,
             _credentials: credentials,
         }
     }
@@ -76,6 +81,10 @@ impl Fixture {
 
     async fn db(&self) -> Db {
         Db::open(&self.config.database_path()).await.unwrap()
+    }
+
+    async fn outbox(&self) -> Outbox {
+        Outbox::open(&self.config.outbox_path).await.unwrap()
     }
 
     fn state_dir(&self) -> &Path {

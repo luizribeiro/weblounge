@@ -4,7 +4,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  shared = [ "DynamicUser" "StateDirectory" "StateDirectoryMode" "UMask" ];
+  shared = [ "DynamicUser" "StateDirectory" "StateDirectoryMode" "SupplementaryGroups" "ReadWritePaths" "UMask" ];
 
   vacuum = service: database:
     let owner = config.systemd.services.${service}.serviceConfig;

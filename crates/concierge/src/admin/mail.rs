@@ -31,6 +31,6 @@ async fn test(admin: &Admin, address: &str) -> anyhow::Result<String> {
         subject: Subject::parse(TEST_SUBJECT)?,
         body: TEST_BODY.into(),
     };
-    let id = admin.db.queue_message(&message, db::now()).await?;
+    let id = admin.outbox.queue(&message, db::now()).await?;
     Ok(format!("queued message {id}\n"))
 }

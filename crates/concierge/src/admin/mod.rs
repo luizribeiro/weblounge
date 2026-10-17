@@ -13,13 +13,15 @@ use ergo_api::{Client, Passphrase};
 use crate::{
     config::Config,
     db::{Db, Member},
+    outbox::Outbox,
     password, status,
 };
 
 /// The members' site of weblounge.org, and the admin commands behind it.
 #[derive(Parser)]
 pub enum Command {
-    /// Bring the database in STATE_DIRECTORY up to this build's schema.
+    /// Bring the database in STATE_DIRECTORY, and the outbox at
+    /// CONCIERGE_OUTBOX, up to this build's schema.
     Migrate,
     /// Serve the site on CONCIERGE_LISTEN.
     Serve,
@@ -62,6 +64,7 @@ pub async fn run(command: AdminCommand, config: &Config) -> anyhow::Result<Strin
 struct Admin {
     config: Config,
     db: Db,
+    outbox: Outbox,
     ergo: Client,
 }
 
@@ -70,6 +73,7 @@ impl Admin {
         Ok(Self {
             config: config.clone(),
             db: Db::open(&config.database_path()).await?,
+            outbox: Outbox::open(&config.outbox_path).await?,
             ergo: config.ergo_client()?,
         })
     }

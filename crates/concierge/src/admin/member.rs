@@ -43,8 +43,9 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
         bots_removed += &bot::remove(admin, &bot.account).await?;
     }
     admin.set_generated_password(account).await?;
+    let mail = admin.outbox.delete_for(account).await?;
     let removal = admin.db.remove_member(account, db::now()).await?;
-    let lingering = if removal.off_the_disk {
+    let lingering = if removal.off_the_disk && mail.off_the_disk {
         ""
     } else {
         "their old data stays on disk until the hourly vacuum\n"

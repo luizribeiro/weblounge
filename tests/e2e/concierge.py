@@ -12,6 +12,7 @@ if TYPE_CHECKING:
         add_member,
         concierge_admin,
         concierge_admin_command,
+        concierge_sql,
         ergo_api,
         https,
         irc,
@@ -69,14 +70,15 @@ with subtest("concierge-admin runs concierge as the service does, with its state
         "public url: https://members.weblounge.org\n"
         f"state directory: /var/lib/concierge (writable by uid {service_uid})\n"
         "session key: 64 bytes\n"
-        "database: /var/lib/concierge/concierge.db (migration 20261021120000, 0 members)\n"
+        "database: /var/lib/concierge/concierge.db (migration 20261020120000, 0 members)\n"
         "ergo: http://127.0.0.1:8089/ answers, version 2.19.1\n"
     ), (service_uid, status)
     credenza.fail(concierge_admin_command("no-such-command"))
 
-with subtest("concierge-migrate brings the database up to date before concierge or its mailer open it"):
+with subtest("concierge-migrate brings both databases up to date before concierge or its mailer open them"):
     migrated = credenza.succeed("journalctl -o cat -u concierge-migrate")
-    assert "/var/lib/concierge/concierge.db is at migration 20261021120000" in migrated, migrated
+    assert "/var/lib/concierge/concierge.db is at migration 20261020120000" in migrated, migrated
+    assert "/var/lib/concierge-outbox/outbox.db is at migration 20261021120000" in migrated, migrated
     credenza.succeed("systemctl stop concierge-migrate")
     stopped = credenza.succeed("systemctl is-active concierge concierge-mailer || true").split()
     assert stopped == ["inactive", "inactive"], stopped
@@ -84,11 +86,22 @@ with subtest("concierge-migrate brings the database up to date before concierge 
     credenza.succeed("systemctl is-active concierge-migrate")
     credenza.wait_for_open_port(8080)
 
-with subtest("concierge-mailer runs as concierge, on the same state directory"):
+with subtest("the outbox is a database of its own, in a directory only concierge and its mailer may write"):
     credenza.wait_for_unit("concierge-mailer.service")
-    mailer_uid = credenza.succeed("ps -o uid= -p $(systemctl show -P MainPID concierge-mailer)").strip()
-    assert mailer_uid == service_uid, (mailer_uid, service_uid)
-    assert credenza.succeed("systemctl show -P StateDirectory concierge-mailer").strip() == "concierge"
+    concierge_admin("mail", "test", "dana@example.org")
+    modes = credenza.succeed("cd /var/lib/concierge-outbox && stat -c '%n %a %G' . outbox.db*").splitlines()
+    assert modes == [
+        ". 2770 concierge-outbox",
+        "outbox.db 660 concierge-outbox",
+        "outbox.db-shm 660 concierge-outbox",
+        "outbox.db-wal 660 concierge-outbox",
+    ], modes
+    for unit in ["concierge", "concierge-mailer"]:
+        groups = credenza.succeed(f"systemctl show -P SupplementaryGroups {unit}").split()
+        assert groups == ["concierge-outbox"], (unit, groups)
+    tables = concierge_sql("SELECT name FROM sqlite_schema WHERE type = 'table'").split()
+    assert "outbox" not in tables and "members" in tables, tables
+    credenza.succeed("systemctl start concierge-mailer-vacuum")
 
 with subtest("concierge's database lives in its state directory, private to the service"):
     modes = credenza.succeed(
@@ -105,7 +118,7 @@ with subtest("an admin's root invite brings the network's first member in"):
     dana: Account = {"account": "Dana", "password": "an-old-password-of-hers"}
     add_member(**dana, admin=True)
     status = concierge_admin("status")
-    assert "(migration 20261021120000, 1 members)" in status, status
+    assert "(migration 20261020120000, 1 members)" in status, status
 
 with subtest("concierge-admin member reset-password replaces the IRC password and prints the new one"):
     password = concierge_admin("member", "reset-password", "dana").strip()

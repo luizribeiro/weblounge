@@ -5,10 +5,11 @@ use concierge::{
     admin::{self, Command},
     app::{self, App},
     assets::Assets,
-    config::{self, Config, MailerConfig},
+    config::{Config, Databases, MailerConfig},
     db::{self, Db},
     mailer::{self, Mailer},
     oauth::Webchat,
+    outbox::Outbox,
     rate_limit::{AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS},
     session,
 };
@@ -17,7 +18,7 @@ use tokio::net::TcpListener;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     match Command::parse() {
-        Command::Migrate => migrate(&config::database_from_env()?).await,
+        Command::Migrate => migrate(&Databases::from_env()?).await,
         Command::Serve => serve(Config::from_env()?).await,
         Command::Mailer => send_mail(MailerConfig::from_env()?).await,
         Command::Admin(command) => admin::run(command, &Config::from_env()?)
@@ -26,16 +27,25 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn migrate(path: &Path) -> anyhow::Result<()> {
-    let db = Db::migrate(path).await?;
-    let version = db.migration_version().await?.unwrap_or_default();
-    eprintln!("{} is at migration {version}", path.display());
+async fn migrate(databases: &Databases) -> anyhow::Result<()> {
+    let db = Db::migrate(&databases.concierge).await?;
+    report_migration(&databases.concierge, db.migration_version().await?);
+    let outbox = Outbox::migrate(&databases.outbox).await?;
+    report_migration(&databases.outbox, outbox.migration_version().await?);
     Ok(())
 }
 
+fn report_migration(path: &Path, version: Option<i64>) {
+    eprintln!(
+        "{} is at migration {}",
+        path.display(),
+        version.unwrap_or_default()
+    );
+}
+
 async fn send_mail(config: MailerConfig) -> anyhow::Result<()> {
-    let db = Db::open(&config.database_path()).await?;
-    let mailer = Mailer::new(db, mailer::smtp(&config)?, config.from.clone());
+    let outbox = Outbox::open(&config.outbox_path).await?;
+    let mailer = Mailer::new(outbox, mailer::smtp(&config)?, config.from.clone());
     eprintln!(
         "Sending mail through {}:{}",
         config.smtp_host, config.smtp_port

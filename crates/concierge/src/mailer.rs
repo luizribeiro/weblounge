@@ -21,9 +21,9 @@ use lettre::{
 
 use crate::{
     config::MailerConfig,
-    db::{self, Db, QueuedMessage},
+    db,
     email::Email,
-    outbox::Subject,
+    outbox::{Outbox, QueuedMessage, Subject},
     random,
     rate_limit::Quota,
 };
@@ -120,23 +120,23 @@ pub struct Round {
 }
 
 pub struct Mailer<T> {
-    pub db: Db,
+    pub outbox: Outbox,
     pub transport: T,
     pub from: Mailbox,
     pub quota: Quota,
 }
 
 impl<T: Transport> Mailer<T> {
-    pub fn new(db: Db, transport: T, from: Mailbox) -> Self {
+    pub fn new(outbox: Outbox, transport: T, from: Mailbox) -> Self {
         Self {
-            db,
+            outbox,
             transport,
             from,
             quota: Quota::new(SENDS_PER_HOUR, HOUR),
         }
     }
 
-    /// Sends the outbox, round after round, until the database fails.
+    /// Sends the outbox, round after round, until the outbox fails.
     pub async fn run(&self) -> anyhow::Result<()> {
         loop {
             self.round(db::now(), Instant::now()).await?;
@@ -148,18 +148,18 @@ impl<T: Transport> Mailer<T> {
     /// while the quota lasts.
     pub async fn round(&self, now: i64, instant: Instant) -> anyhow::Result<Round> {
         let mut round = Round {
-            given_up: self.db.delete_given_up_messages(now).await?.messages,
+            given_up: self.outbox.delete_given_up(now).await?.messages,
             ..Round::default()
         };
         if round.given_up > 0 {
             eprintln!("Gave up on {} messages and deleted them", round.given_up);
         }
-        let due = self.db.due_messages(now).await?;
+        let due = self.outbox.due(now).await?;
         for (index, queued) in due.iter().enumerate() {
             let id = queued.id;
             let Some(message) = self.message(queued) else {
                 eprintln!("Message {id} doesn't make a message any more; deleting it");
-                self.db.delete_message(id).await?;
+                self.outbox.delete(id).await?;
                 round.unreadable += 1;
                 continue;
             };
@@ -173,17 +173,17 @@ impl<T: Transport> Mailer<T> {
             }
             match self.transport.send(message).await {
                 Ok(()) => {
-                    self.db.delete_message(id).await?;
+                    self.outbox.delete(id).await?;
                     round.sent += 1;
                     eprintln!("Sent message {id}");
                 }
                 Err(failure) if failure.is_permanent() => {
-                    self.db.delete_message(id).await?;
+                    self.outbox.delete(id).await?;
                     round.rejected += 1;
                     eprintln!("The server refused message {id} ({failure}); deleting it");
                 }
                 Err(failure) => {
-                    self.db.record_failed_attempt(queued, now).await?;
+                    self.outbox.record_failed_attempt(queued, now).await?;
                     round.failed += 1;
                     eprintln!(
                         "Sending message {id} failed ({failure}) on attempt {}",
@@ -231,8 +231,10 @@ mod tests {
     use super::*;
     use crate::{
         config::SMTP_PASSWORD_CREDENTIAL,
-        db::tests::{QUEUED, VERIFY_SUBJECT, execute, with_outbox},
-        outbox::{self, GIVE_UP_AFTER},
+        outbox::{
+            self, GIVE_UP_AFTER,
+            tests::{QUEUED, VERIFY_SUBJECT, execute, with_outbox},
+        },
     };
 
     /// An SMTP server that takes everything but what it's told to refuse.
@@ -293,14 +295,14 @@ mod tests {
     /// A mailer with verification emails queued for alice and bob, a
     /// minute apart.
     async fn mailer(server: FakeServer) -> (Mailer<FakeServer>, tempfile::TempDir) {
-        let (db, dir) = with_outbox().await;
+        let (outbox, dir) = with_outbox().await;
         let from = "weblounge <noreply@weblounge.org>".parse().unwrap();
-        (Mailer::new(db, server, from), dir)
+        (Mailer::new(outbox, server, from), dir)
     }
 
     /// The recipient and failed attempts of each message due at `now`.
     async fn due(mailer: &Mailer<FakeServer>, now: i64) -> Vec<(String, i64)> {
-        let due = mailer.db.due_messages(now).await.unwrap();
+        let due = mailer.outbox.due(now).await.unwrap();
         due.into_iter()
             .map(|message| (message.recipient, message.attempts))
             .collect()
@@ -436,7 +438,7 @@ mod tests {
     async fn deletes_rows_that_no_longer_make_a_message() {
         let (mailer, _dir) = mailer(FakeServer::default()).await;
         execute(
-            &mailer.db,
+            &mailer.outbox,
             "INSERT INTO outbox (recipient, subject, body, created_at, next_attempt_at)
              VALUES ('carol', 'Verify', 'Hi', 1760000000, 1760000000),
                     ('dave@example.org', 'Verify' || char(10) || 'Bcc: x', 'Hi',
@@ -471,7 +473,7 @@ mod tests {
             smtp_port: port,
             smtp_username: "noreply@weblounge.org".into(),
             from: "noreply@weblounge.org".parse().unwrap(),
-            state_dir: "/var/lib/concierge".into(),
+            outbox_path: "/var/lib/concierge-outbox/outbox.db".into(),
             credentials_dir: credentials.path().into(),
         };
         let message = lettre::Message::builder()

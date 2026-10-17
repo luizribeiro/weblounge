@@ -14,7 +14,7 @@ mod test {
             .await
             .unwrap();
 
-        let due = fixture.db().await.due_messages(db::now()).await.unwrap();
+        let due = fixture.outbox().await.due(db::now()).await.unwrap();
         assert_eq!(output, format!("queued message {}\n", due[0].id));
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].recipient, "luiz@example.org");
@@ -41,7 +41,7 @@ mod test {
             error.to_string(),
             "That doesn't look like an email address."
         );
-        let due = fixture.db().await.due_messages(db::now()).await.unwrap();
+        let due = fixture.outbox().await.due(db::now()).await.unwrap();
         assert!(due.is_empty());
     }
 }

@@ -18,7 +18,8 @@ let
   sharedProperties = removeAttrs config.systemd.services.concierge.serviceConfig
     (lib.attrNames serviceOnly);
 
-  # Every unit that opens the database runs as concierge, with its state.
+  # Every unit that opens concierge's database runs as concierge, with its
+  # state.
   stateAccess = {
     User = "concierge";
     DynamicUser = true;
@@ -26,12 +27,23 @@ let
     StateDirectoryMode = "0700";
   };
 
+  # The outbox is the one database concierge shares with its mailer, which
+  # runs as a user of its own; they share a group, and the outbox's
+  # directory alone.
+  outboxGroup = "concierge-outbox";
+  outboxDir = "/var/lib/concierge-outbox";
+  outboxPath = "${outboxDir}/outbox.db";
+  outboxAccess = {
+    SupplementaryGroups = [ outboxGroup ];
+    # concierge-migrate creates it, so it may be missing as that starts.
+    ReadWritePaths = [ "-${outboxDir}" ];
+  };
+
   # SQLite doesn't keep two processes from migrating at once, so one unit
-  # migrates before any other opens the database.
-  databaseUnit = {
+  # migrates before any other opens either database.
+  migrated = {
     requires = [ "concierge-migrate.service" ];
     after = [ "concierge-migrate.service" ];
-    serviceConfig = stateAccess;
   };
 
   admin = pkgs.writeShellApplication {
@@ -61,11 +73,14 @@ in
     description = "concierge-admin, which runs an admin command as the service.";
   };
 
-  options.weblounge.concierge.databaseUnit = lib.mkOption {
+  options.weblounge.concierge.outbox = lib.mkOption {
     type = lib.types.attrsOf lib.types.anything;
     readOnly = true;
-    default = databaseUnit;
-    description = "Settings for a unit that opens concierge's database: its identity and state, once migrated.";
+    default = {
+      path = outboxPath;
+      unit = migrated // { serviceConfig = outboxAccess; };
+    };
+    description = "The outbox's database, and the settings of a unit that opens it once it's migrated.";
   };
 
   options.weblounge.concierge.listen = lib.mkOption {
@@ -102,11 +117,22 @@ in
 
     weblounge.sqliteVacuum.concierge = "/var/lib/concierge/concierge.db";
 
+    users.groups.${outboxGroup} = { };
+
     systemd.services.concierge-migrate = {
-      description = "Bring concierge's database up to date";
-      serviceConfig = config.weblounge.sandbox // stateAccess // {
+      description = "Bring concierge's database and outbox up to date";
+      environment.CONCIERGE_OUTBOX = outboxPath;
+      serviceConfig = config.weblounge.sandbox // stateAccess // outboxAccess // {
         Type = "oneshot";
         RemainAfterExit = true;
+        # SQLite creates databases readable by their owner alone, but gives
+        # the -wal and -shm files the database's mode, so an empty outbox
+        # that its group may write lets concierge and the mailer both in.
+        # Files in the directory take its group.
+        ExecStartPre = "+" + pkgs.writeShellScript "concierge-outbox" ''
+          ${pkgs.coreutils}/bin/install -d -m 2770 -g ${outboxGroup} ${outboxDir}
+          [ -e ${outboxPath} ] || ${pkgs.coreutils}/bin/install -m 0660 -g ${outboxGroup} /dev/null ${outboxPath}
+        '';
         ExecStart = "${concierge} migrate";
         PrivateNetwork = true;
         RestrictAddressFamilies = "none";
@@ -114,13 +140,14 @@ in
     };
 
     systemd.services.concierge = lib.mkMerge [
-      databaseUnit
+      migrated
       {
         description = "Concierge, the members' site";
         wantedBy = [ "multi-user.target" ];
         after = [ "network.target" ];
-        serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // serviceOnly // {
+        serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // stateAccess // outboxAccess // serviceOnly // {
           Environment = [
+            "CONCIERGE_OUTBOX=${outboxPath}"
             "CONCIERGE_LISTEN=${cfg.listen}"
             "CONCIERGE_PUBLIC_URL=${publicUrl}"
             "CONCIERGE_JOIN_URL=${config.weblounge.origin joinHostName}"

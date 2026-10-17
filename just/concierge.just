@@ -13,6 +13,7 @@ export CONCIERGE_IRC_SERVER := "irc.weblounge.localhost:16697"
 export CONCIERGE_ERGO_API := "http://" + ergo_api
 export CONCIERGE_ASSETS := dev_dir / "assets"
 export STATE_DIRECTORY := dev_dir / "state"
+export CONCIERGE_OUTBOX := dev_dir / "outbox.db"
 export CREDENTIALS_DIRECTORY := dev_dir / "credentials"
 
 # Run concierge and a throwaway Ergo natively, restarting concierge and reloading the page on every save
@@ -51,5 +52,6 @@ prepare:
   export DATABASE_URL="sqlite://$scratch/prepare.db"
   sqlx database create
   sqlx migrate run --source crates/concierge/migrations
+  sqlx migrate run --ignore-missing --source crates/concierge/outbox-migrations
   cd crates/concierge
   cargo sqlx prepare -- --all-targets

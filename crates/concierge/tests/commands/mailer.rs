@@ -38,7 +38,7 @@ fn start_mailer(fixture: &Fixture) -> Child {
         .env("CONCIERGE_SMTP_PORT", port)
         .env("CONCIERGE_SMTP_USERNAME", "noreply@weblounge.org")
         .env("CONCIERGE_MAIL_FROM", "weblounge <noreply@weblounge.org>")
-        .env("STATE_DIRECTORY", fixture.state_dir())
+        .env("CONCIERGE_OUTBOX", &fixture.config.outbox_path)
         .env("CREDENTIALS_DIRECTORY", &fixture.config.credentials_dir)
         .stderr(Stdio::piped())
         .spawn()
@@ -77,9 +77,9 @@ async fn retries_mail_it_cannot_send_and_logs_no_address() {
         body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa\n".into(),
     };
     fixture
-        .db()
+        .outbox()
         .await
-        .queue_message(&message, db::now())
+        .queue(&message, db::now())
         .await
         .unwrap();
     write_smtp_password(&fixture);
@@ -101,12 +101,7 @@ async fn retries_mail_it_cannot_send_and_logs_no_address() {
     for private in ["alice", "Verify", "q7Hx2mZp9vLcT4wRfBa"] {
         assert!(!log.contains(private), "{log}");
     }
-    let due = fixture
-        .db()
-        .await
-        .due_messages(db::now() + 60)
-        .await
-        .unwrap();
+    let due = fixture.outbox().await.due(db::now() + 60).await.unwrap();
     assert_eq!(due[0].attempts, 1);
 }
 
