@@ -158,8 +158,9 @@ pub fn code_redirect(authorization: &Authorization, code: &str) -> String {
     format!("{}?{query}", authorization.redirect_uri)
 }
 
-/// The form the web client posts to the token endpoint.
-#[derive(Debug, Default, Deserialize)]
+/// The form the web client posts to the token endpoint. No Debug: it
+/// holds a code and its verifier, which must stay out of logs.
+#[derive(Default, Deserialize)]
 #[serde(default)]
 pub struct TokenRequest {
     pub grant_type: String,
@@ -488,25 +489,37 @@ mod tests {
     #[test]
     fn a_code_is_bound_to_its_client_redirect_and_challenge() {
         let code = issued_code();
-        for request in [
-            TokenRequest {
-                client_id: "ergo".into(),
-                ..exchange()
-            },
-            TokenRequest {
-                redirect_uri: "https://evil.example/".into(),
-                ..exchange()
-            },
-            TokenRequest {
-                code_verifier: CHALLENGE.into(),
-                ..exchange()
-            },
-            TokenRequest {
-                code_verifier: String::new(),
-                ..exchange()
-            },
+        for (change, request) in [
+            (
+                "another client",
+                TokenRequest {
+                    client_id: "ergo".into(),
+                    ..exchange()
+                },
+            ),
+            (
+                "another redirect",
+                TokenRequest {
+                    redirect_uri: "https://evil.example/".into(),
+                    ..exchange()
+                },
+            ),
+            (
+                "the challenge as verifier",
+                TokenRequest {
+                    code_verifier: CHALLENGE.into(),
+                    ..exchange()
+                },
+            ),
+            (
+                "no verifier",
+                TokenRequest {
+                    code_verifier: String::new(),
+                    ..exchange()
+                },
+            ),
         ] {
-            assert!(!request.redeems(&code, ISSUED), "{request:?}");
+            assert!(!request.redeems(&code, ISSUED), "{change}");
         }
     }
 
