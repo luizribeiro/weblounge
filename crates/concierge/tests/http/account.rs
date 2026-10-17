@@ -1,4 +1,76 @@
+use concierge::{db, tree, verification_rules};
+
 use crate::{Site, body_text, location};
+
+const HOUR: i64 = 60 * 60;
+
+/// The Account tab of alice, whose first verification email went out
+/// `ago` seconds ago, if one did.
+async fn account_tab_mailed(ago: Option<i64>) -> (String, i64) {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let first_sent_at = ago.map(|ago| db::now() - ago);
+    if let Some(first_sent_at) = first_sent_at {
+        site.execute(&format!(
+            "UPDATE members SET verification_first_sent_at = {first_sent_at}"
+        ))
+        .await;
+    }
+    let cookie = site.sign_in("alice").await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
+    let deadline = first_sent_at.map(verification_rules::deadline);
+    (page, deadline.unwrap_or_default())
+}
+
+#[tokio::test]
+async fn an_unconfirmed_email_shows_when_it_is_due() {
+    let (page, deadline) = account_tab_mailed(Some(26 * HOUR)).await;
+    let due = tree::date(deadline);
+    assert!(
+        page.contains(&format!(
+            r#"<p class="notice">Open the link we emailed you to confirm it. Please confirm by {due} (5 days left).</p>"#
+        )),
+        "{page}"
+    );
+    assert!(
+        page.contains(">Not confirmed yet. For account recovery.</p>"),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn an_email_past_its_week_says_when_it_was_due() {
+    let (page, deadline) = account_tab_mailed(Some(8 * 24 * HOUR)).await;
+    let due = tree::date(deadline);
+    assert!(
+        page.contains(&format!("to confirm it. It was due by {due}.</p>")),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn an_email_never_mailed_says_so() {
+    let (page, _) = account_tab_mailed(None).await;
+    assert!(
+        page.contains("We haven&#39;t sent you a link to confirm it yet."),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn a_confirmed_email_says_so_and_nothing_more() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.execute("UPDATE members SET email_verified_at = 1, verification_first_sent_at = 0")
+        .await;
+    let cookie = site.sign_in("alice").await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
+    assert!(
+        page.contains(">Confirmed. For account recovery.</p>"),
+        "{page}"
+    );
+    assert!(!page.contains("link we emailed you"), "{page}");
+}
 
 #[tokio::test]
 async fn shows_the_email_and_news_settings() {

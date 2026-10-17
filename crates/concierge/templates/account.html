@@ -28,6 +28,9 @@
         {%- if flash.saved.is_some() %}
         <p class="notice" role="status">Saved.</p>
         {%- endif %}
+        {%- if let Some(unconfirmed) = unconfirmed %}
+        <p class="notice">{{ unconfirmed.status }}</p>
+        {%- endif %}
         <form class="form" method="post" action="/settings" data-save-when-changed>
           <div class="field">
             <label for="email">Email</label>
@@ -35,7 +38,7 @@
             {%- if let Some(error) = settings.email_error %}
             <p class="field-error" id="email-hint">{{ error }}</p>
             {%- else %}
-            <p class="hint" id="email-hint">Unverified. For account recovery.</p>
+            <p class="hint" id="email-hint">{% if unconfirmed.is_some() %}Not confirmed yet{% else %}Confirmed{% endif %}. For account recovery.</p>
             {%- endif %}
           </div>
           <label class="check">
