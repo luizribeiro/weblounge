@@ -436,9 +436,7 @@ async fn an_address_another_member_verified_is_refused_in_any_case() {
 #[tokio::test]
 async fn a_member_keeps_their_own_verified_address() {
     let site = Site::start().await;
-    site.add_member("alice").await;
-    site.execute("UPDATE members SET email_verified_at = 1")
-        .await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
 
     let form = [("email", "someone@example.org"), ("news", "on")];

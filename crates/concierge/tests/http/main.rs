@@ -186,6 +186,16 @@ impl Site {
         self.db.insert_member(&member).await.unwrap();
     }
 
+    /// A member, as `add_member` makes them, who confirmed their email, as
+    /// members must before they invite.
+    async fn add_verified_member(&self, account: &str) {
+        self.add_member(account).await;
+        self.execute(&format!(
+            "UPDATE members SET email_verified_at = 1 WHERE account = '{account}'"
+        ))
+        .await;
+    }
+
     /// Runs SQL the site has no query for, to set up a test.
     async fn execute(&self, sql: &str) {
         execute(&self.database_path(), sql).await;

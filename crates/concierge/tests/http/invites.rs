@@ -28,7 +28,7 @@ async fn invite_count(site: &Site) -> i64 {
 #[tokio::test]
 async fn a_new_invite_shows_its_link_and_qr_code_once() {
     let site = Site::start().await;
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
 
     let response = site.post("/invites", &[], Some(&cookie)).await;
@@ -61,7 +61,7 @@ const INVITE_BUTTON: &str =
 /// alice, signed in with the answered cookie, with as many open invites
 /// as anyone may have.
 async fn alice_with_every_invite_open(site: &Site) -> String {
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     for _ in 0..MAX_OPEN {
         create_invite(site, &cookie).await;
@@ -89,7 +89,7 @@ async fn open_invites_are_capped_and_the_tab_says_so() {
 #[tokio::test]
 async fn the_tab_counts_the_invites_left_and_says_when_the_oldest_expires() {
     let site = Site::start().await;
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     let page = invites_tab(&site, &cookie).await;
     assert!(page.contains(&available(3)), "{page}");
@@ -133,7 +133,7 @@ async fn an_expired_or_redeemed_invite_frees_its_place() {
 #[tokio::test]
 async fn admins_are_held_to_the_same_cap() {
     let site = Site::start().await;
-    site.add_member("root").await;
+    site.add_verified_member("root").await;
     site.execute("UPDATE members SET is_admin = TRUE WHERE account = 'root'")
         .await;
     let cookie = site.sign_in("root").await;
@@ -146,7 +146,7 @@ async fn admins_are_held_to_the_same_cap() {
 #[tokio::test]
 async fn two_invites_at_once_cannot_both_take_the_last_place() {
     let site = Site::start().await;
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     for _ in 0..MAX_OPEN - 1 {
         create_invite(&site, &cookie).await;
@@ -163,7 +163,7 @@ async fn two_invites_at_once_cannot_both_take_the_last_place() {
 #[tokio::test]
 async fn revoking_frees_every_place_and_ends_the_links() {
     let site = Site::start().await;
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     let mut links = Vec::new();
     for _ in 0..MAX_OPEN {
@@ -190,7 +190,7 @@ async fn revoking_frees_every_place_and_ends_the_links() {
 #[tokio::test]
 async fn revoking_asks_first_and_names_how_many() {
     let site = Site::start().await;
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     let response = site.get("/invites/revoke", Some(&cookie)).await;
     assert_eq!(location(&response), "/invites");
@@ -217,7 +217,7 @@ async fn revoking_asks_first_and_names_how_many() {
 #[tokio::test]
 async fn guests_and_other_origins_revoke_nothing() {
     let site = Site::start().await;
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     create_invite(&site, &cookie).await;
     let response = site.post("/invites/revoke", &[], None).await;
@@ -256,7 +256,7 @@ async fn lists_the_people_a_member_invited() {
 #[tokio::test]
 async fn guests_and_other_origins_create_nothing() {
     let site = Site::start().await;
-    site.add_member("alice").await;
+    site.add_verified_member("alice").await;
     let response = site.post("/invites", &[], None).await;
     assert_eq!(location(&response), "/signin");
     let cookie = site.sign_in("alice").await;
