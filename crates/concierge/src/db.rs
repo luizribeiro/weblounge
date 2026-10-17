@@ -1,4 +1,4 @@
-use std::{path::Path, time::SystemTime};
+use std::path::Path;
 
 use anyhow::Context;
 use common::sqlite;
@@ -10,16 +10,7 @@ use crate::{
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 
-/// The current time as the database stores times, in Unix seconds.
-pub fn now() -> i64 {
-    let since_epoch = SystemTime::UNIX_EPOCH
-        .elapsed()
-        .expect("the clock is past 1970");
-    since_epoch
-        .as_secs()
-        .try_into()
-        .expect("the clock is before 2262")
-}
+pub use common::now;
 
 pub struct NewMember<'a> {
     /// Ergo's canonical spelling of the account name.

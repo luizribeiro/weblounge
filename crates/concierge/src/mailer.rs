@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use common::{random, recent::Quota};
+use common::{now, random, recent::Quota};
 use lettre::{
     Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
     message::{Mailbox, SinglePart},
@@ -22,7 +22,6 @@ use lettre::{
 
 use crate::{
     config::MailerConfig,
-    db,
     email::Email,
     outbox::{Outbox, QueuedMessage, Subject},
 };
@@ -152,7 +151,7 @@ impl<T: Transport> Mailer<T> {
     /// Sends the outbox, round after round, until the outbox fails.
     pub async fn run(&self) -> anyhow::Result<()> {
         loop {
-            self.round(db::now(), Instant::now()).await?;
+            self.round(now(), Instant::now()).await?;
             tokio::time::sleep(POLL_INTERVAL).await;
         }
     }
