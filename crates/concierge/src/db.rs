@@ -1,19 +1,11 @@
-use std::{
-    path::Path,
-    time::{Duration, SystemTime},
-};
+use std::{path::Path, time::SystemTime};
 
 use anyhow::Context;
-use sqlx::{
-    SqliteConnection, SqliteExecutor, SqlitePool,
-    migrate::Migrator,
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
-};
+use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
-use crate::{invite_code, invite_rules, outbox, tree::Branch};
+use crate::{invite_code, invite_rules, outbox, sqlite, tree::Branch};
 
 static MIGRATOR: Migrator = sqlx::migrate!();
-const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The current time as the database stores times, in Unix seconds.
 pub fn now() -> i64 {
@@ -241,19 +233,9 @@ impl Db {
     /// Opens the database at `path`, which [`Db::migrate`] must have
     /// brought up to this build's schema.
     pub async fn open(path: &Path) -> anyhow::Result<Self> {
-        let db = Self::connect(path, false).await?;
-        let version = db
-            .migration_version()
-            .await
-            .with_context(|| format!("can't read the migrations of {}", path.display()))?;
-        let latest = latest_migration();
-        anyhow::ensure!(
-            version == Some(latest),
-            "the database {} is at migration {}, not {latest}; `concierge migrate` brings it up to date",
-            path.display(),
-            version.map_or_else(|| "none".to_owned(), |version| version.to_string()),
-        );
-        Ok(db)
+        let pool = sqlite::connect(path, false).await?;
+        sqlite::ensure_migrated(&pool, &MIGRATOR, path).await?;
+        Ok(Self { pool })
     }
 
     /// Opens the database at `path`, creating it if needed, and applies any
@@ -261,36 +243,16 @@ impl Db {
     /// migrating at once, so only `concierge migrate` calls this, before
     /// the services start.
     pub async fn migrate(path: &Path) -> anyhow::Result<Self> {
-        let db = Self::connect(path, true).await?;
-        migrate(&db.pool)
+        let pool = sqlite::connect(path, true).await?;
+        migrate(&pool)
             .await
             .with_context(|| format!("can't migrate the database {}", path.display()))?;
-        Ok(db)
-    }
-
-    async fn connect(path: &Path, create: bool) -> anyhow::Result<Self> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(create)
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Normal)
-            .foreign_keys(true)
-            .pragma("secure_delete", "ON")
-            .busy_timeout(BUSY_TIMEOUT);
-        let pool = SqlitePoolOptions::new()
-            .connect_with(options)
-            .await
-            .with_context(|| format!("can't open the database {}", path.display()))?;
         Ok(Self { pool })
     }
 
     /// The newest migration applied, if any.
     pub async fn migration_version(&self) -> sqlx::Result<Option<i64>> {
-        sqlx::query_scalar!(
-            r#"SELECT MAX(version) AS "version?" FROM _sqlx_migrations WHERE success"#
-        )
-        .fetch_one(&self.pool)
-        .await
+        sqlite::migration_version(&self.pool).await
     }
 
     pub async fn insert_member(&self, member: &NewMember<'_>) -> sqlx::Result<()> {
@@ -448,19 +410,8 @@ impl Db {
         Ok(Removal {
             sessions_ended,
             invites_revoked,
-            off_the_disk: self.empty_write_ahead_log().await,
+            off_the_disk: sqlite::empty_write_ahead_log(&self.pool).await,
         })
-    }
-
-    /// Copies the write-ahead log into the database and truncates it, so
-    /// the rows a change overwrote leave the disk, not just the database.
-    /// Answers whether it could, which a reader holding the log prevents.
-    async fn empty_write_ahead_log(&self) -> bool {
-        let checkpoint: sqlx::Result<(i64, i64, i64)> =
-            sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
-                .fetch_one(&self.pool)
-                .await;
-        matches!(checkpoint, Ok((0, _, _)))
     }
 
     /// Revokes the invites `account` made that are still open, or being
@@ -871,7 +822,7 @@ impl Db {
     async fn erase(&self, messages: u64) -> Deletion {
         Deletion {
             messages,
-            off_the_disk: messages == 0 || self.empty_write_ahead_log().await,
+            off_the_disk: messages == 0 || sqlite::empty_write_ahead_log(&self.pool).await,
         }
     }
 }
@@ -912,15 +863,6 @@ async fn insert_invite(
     .execute(executor)
     .await
     .map(drop)
-}
-
-/// The newest migration this build knows.
-fn latest_migration() -> i64 {
-    MIGRATOR
-        .iter()
-        .map(|migration| migration.version)
-        .max()
-        .unwrap_or_default()
 }
 
 /// Applies the migrations `pool`'s database lacks with foreign keys off,
@@ -1004,11 +946,17 @@ async fn delete_sessions(executor: impl SqliteExecutor<'_>, account: &str) -> sq
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::sqlite::tests::files_contain;
+    use sqlx::sqlite::SqliteConnectOptions;
 
     pub async fn temp_db() -> (Db, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let db = Db::migrate(&dir.path().join("concierge.db")).await.unwrap();
         (db, dir)
+    }
+
+    fn latest_migration() -> i64 {
+        sqlite::latest_migration(&MIGRATOR)
     }
 
     pub(crate) async fn execute(db: &Db, sql: &str) -> sqlx::Result<()> {
@@ -1388,15 +1336,6 @@ pub(crate) mod tests {
             recipients(&due),
             ["bob@example.org", "alice@example.org", "alice@example.org"]
         );
-    }
-
-    /// Whether any of the database's files in `dir` holds `text`.
-    fn files_contain(dir: &tempfile::TempDir, text: &[u8]) -> bool {
-        let on_disk: Vec<u8> = std::fs::read_dir(dir.path())
-            .unwrap()
-            .flat_map(|entry| std::fs::read(entry.unwrap().path()).unwrap())
-            .collect();
-        on_disk.windows(text.len()).any(|window| window == text)
     }
 
     #[tokio::test]

@@ -21,5 +21,6 @@ mod random;
 pub mod rate_limit;
 mod routes;
 pub mod session;
+mod sqlite;
 pub mod status;
 pub mod tree;
