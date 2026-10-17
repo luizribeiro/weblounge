@@ -140,7 +140,7 @@ with subtest("a member signs in to the website with their IRC password"):
 
 with subtest("a member changes their email and news setting on the Account tab"):
     saved = browser.post("/settings", "email=dana@example.org", "news=on")
-    assert saved == f"303 https://{members}/account?saved#email-and-news", saved
+    assert saved == f"303 https://{members}/account?saved&sent#email-and-news", saved
     tab = browser.get("/account?saved", "-f")
     assert "Saved." in tab and 'value="dana@example.org"' in tab, tab
     assert 'type="checkbox" checked' in tab, tab

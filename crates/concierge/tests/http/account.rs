@@ -1,5 +1,5 @@
 use axum::http::header;
-use concierge::{db, tree, verification_mail, verification_rules};
+use concierge::{db, rate_limit::LINKS_PER_DAY, tree, verification_mail, verification_rules};
 
 use crate::{Site, body_text, confirm, execute, location, verification_link};
 
@@ -362,9 +362,26 @@ async fn a_new_address_gets_a_link_and_the_old_ones_stops_working() {
 }
 
 #[tokio::test]
-async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
+async fn a_new_address_gets_its_link_without_waiting_on_the_last() {
     let (site, cookie, _) = with_a_code_mailed().await;
     site.post(RESEND, &[], Some(&cookie)).await;
+
+    let form = [("email", "alice@example.net")];
+    let response = site.post("/settings", &form, Some(&cookie)).await;
+
+    assert_eq!(location(&response), "/account?saved&sent#email-and-news");
+    let recipients: Vec<_> = site.mail().await.into_iter().map(|m| m.recipient).collect();
+    assert_eq!(recipients, ["someone@example.org", "alice@example.net"]);
+}
+
+#[tokio::test]
+async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    for n in 0..LINKS_PER_DAY {
+        let email = format!("alice{n}@example.net");
+        site.post("/settings", &[("email", email.as_str())], Some(&cookie))
+            .await;
+    }
 
     let form = [("email", "alice@example.net")];
     let response = site.post("/settings", &form, Some(&cookie)).await;
@@ -376,14 +393,14 @@ async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
         "{page}"
     );
     assert!(
-        page.contains("A link went out a few minutes ago."),
+        page.contains("That&#39;s all the links for today."),
         "{page}"
     );
     assert!(page.contains(r#"value="alice@example.net""#), "{page}");
     assert!(page.contains(">Send a new link</button>"), "{page}");
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("alice@example.net"));
-    assert_eq!(site.mail().await.len(), 1);
+    assert_eq!(site.mail().await.len(), LINKS_PER_DAY);
 }
 
 #[tokio::test]

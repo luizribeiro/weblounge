@@ -14,7 +14,7 @@ use crate::{
     auth::Visitor,
     db::{self, Verification},
     email, invite_rules, link_code,
-    rate_limit::{self, ClientAddress, MailRefusal},
+    rate_limit::{self, ClientAddress, MailRefusal, Recipient},
     verification_mail, verification_rules,
 };
 
@@ -80,8 +80,8 @@ pub enum Mailed {
 
 /// Mails `account` a new verification link, replacing their last, if the
 /// limits on mail allow.
-pub async fn mail_link(app: &App, account: &str) -> Mailed {
-    if let Err(refusal) = app.mailed_links.check(account, Instant::now()) {
+pub async fn mail_link(app: &App, account: &str, recipient: Recipient) -> Mailed {
+    if let Err(refusal) = app.mailed_links.check(account, recipient, Instant::now()) {
         return Mailed::Refused(refusal);
     }
     let sent = verification_mail::send(&app.db, &app.outbox, &app.public_url, account, db::now());

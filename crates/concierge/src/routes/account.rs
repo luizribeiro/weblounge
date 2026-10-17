@@ -23,6 +23,7 @@ use crate::{
     email::{self, Email},
     invite_rules,
     password_rules::FieldErrors,
+    rate_limit::Recipient,
     tree, verification_rules,
 };
 
@@ -174,7 +175,7 @@ pub async fn update(
     if me.member.email.as_deref() == Some(email.as_str()) {
         return Redirect::to("/account?saved#email-and-news").into_response();
     }
-    let mailed = verify::mail_link(&app, account).await;
+    let mailed = verify::mail_link(&app, account, Recipient::NewAddress).await;
     match app.db.member(account).await {
         Ok(Some(saved)) => answer_link(&app, &saved, mailed, true).await,
         Ok(None) => internal_error("Reading back saved settings", "no member"),
@@ -184,7 +185,7 @@ pub async fn update(
 
 /// Mails the member a new link to confirm their email.
 pub async fn send_link(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
-    let mailed = verify::mail_link(&app, &me.member.account).await;
+    let mailed = verify::mail_link(&app, &me.member.account, Recipient::SameAddress).await;
     answer_link(&app, &me.member, mailed, false).await
 }
 

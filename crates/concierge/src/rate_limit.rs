@@ -253,6 +253,16 @@ impl fmt::Display for MailRefusal {
     }
 }
 
+/// Where a verification link goes, next to the member's last one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recipient {
+    /// The address the last link went to, which may still be on its way.
+    SameAddress,
+    /// An address just given, at signup or on the Account tab, which has
+    /// no link yet: a member fixing a typo shouldn't have to wait.
+    NewAddress,
+}
+
 /// Verification links mailed lately, by member and overall.
 pub struct MailLimiter {
     recent: Recent<Key>,
@@ -271,10 +281,15 @@ impl Default for MailLimiter {
 }
 
 impl MailLimiter {
-    /// Whether `account` may have a link mailed now.
-    pub fn check(&self, account: &str, now: Instant) -> Result<(), MailRefusal> {
+    /// Whether `account` may have a link mailed to `recipient` now.
+    pub fn check(
+        &self,
+        account: &str,
+        recipient: Recipient,
+        now: Instant,
+    ) -> Result<(), MailRefusal> {
         let key = account_key(account);
-        if !self.recent.under(&key, 1, now) {
+        if recipient == Recipient::SameAddress && !self.recent.under(&key, 1, now) {
             Err(MailRefusal::TooSoon)
         } else if !self.today.under(&key, LINKS_PER_DAY, now) {
             Err(MailRefusal::TooManyToday)
@@ -413,7 +428,7 @@ mod tests {
     }
 
     fn mail(links: &MailLimiter, account: &str, now: Instant) -> Result<(), MailRefusal> {
-        links.check(account, now)?;
+        links.check(account, Recipient::SameAddress, now)?;
         links.record(account, now);
         Ok(())
     }
@@ -422,10 +437,13 @@ mod tests {
     fn checking_alone_counts_nothing() {
         let (links, now) = (MailLimiter::default(), Instant::now());
         for _ in 0..=LINKS_PER_DAY {
-            assert_eq!(links.check("alice", now), Ok(()));
+            assert_eq!(links.check("alice", Recipient::SameAddress, now), Ok(()));
         }
         assert_eq!(mail(&links, "alice", now), Ok(()));
-        assert_eq!(links.check("alice", now), Err(MailRefusal::TooSoon));
+        assert_eq!(
+            links.check("alice", Recipient::SameAddress, now),
+            Err(MailRefusal::TooSoon)
+        );
     }
 
     #[test]
@@ -436,6 +454,19 @@ mod tests {
         assert_eq!(mail(&links, "Alice", soon), Err(MailRefusal::TooSoon));
         assert_eq!(mail(&links, "bob", soon), Ok(()));
         assert_eq!(mail(&links, "alice", start + LINK_INTERVAL), Ok(()));
+    }
+
+    #[test]
+    fn a_new_address_needs_no_wait_but_counts_toward_the_day() {
+        let (links, now) = (MailLimiter::default(), Instant::now());
+        for _ in 0..LINKS_PER_DAY {
+            assert_eq!(links.check("alice", Recipient::NewAddress, now), Ok(()));
+            links.record("alice", now);
+        }
+        assert_eq!(
+            links.check("alice", Recipient::NewAddress, now),
+            Err(MailRefusal::TooManyToday)
+        );
     }
 
     #[test]

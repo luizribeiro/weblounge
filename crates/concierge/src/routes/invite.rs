@@ -30,7 +30,7 @@ use crate::{
     oauth::Webchat,
     password_rules::{self, FieldErrors},
     platform::VisitorPlatform,
-    rate_limit::{self, ClientAddress},
+    rate_limit::{self, ClientAddress, Recipient},
 };
 
 #[derive(Template)]
@@ -169,7 +169,7 @@ pub async fn redeem(
         Err(Failure::Unfinished) => return unfinished(&app, &visitor),
     }
     let nick = account.nick.as_str();
-    let mailed = verify::mail_link(&app, nick).await == Mailed::Sent;
+    let mailed = verify::mail_link(&app, nick, Recipient::NewAddress).await == Mailed::Sent;
     let mailed_to = mailed.then_some(account.email.as_str());
     let cookie = match auth::start_session(&app, &visitor, nick).await {
         Ok(cookie) => Some(cookie),
