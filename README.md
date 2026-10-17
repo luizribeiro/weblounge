@@ -182,8 +182,9 @@ an oper still runs `/NS ERASE <account>`.
 deSEC hosts the `weblounge.org` zone, and this repository is its source
 of truth. `dns/zone.nix` generates it from the hosts: an A record for
 each host's own name, and a record for every name its nginx serves, so a
-new virtual host gets its DNS without anyone writing a record. The
-domain sends and receives no mail, and the zone says so.
+new virtual host gets its DNS without anyone writing a record. Mail for
+the domain goes through MXroute, whose MX, SPF, DKIM and DMARC records
+the zone also holds.
 
 ```sh
 just dns preview   # what would change at deSEC

@@ -1,5 +1,5 @@
-# Every host's own name and the names its nginx serves, plus records that
-# say the domain sends and receives no mail.
+# Every host's own name and the names its nginx serves, plus the records
+# that route the domain's mail through MXroute.
 { lib, hosts }:
 
 let
@@ -27,14 +27,14 @@ let
     in
     map recordFor (lib.unique ([ fqdn ] ++ servedNames config));
 
-  noMail = [
-    [ "MX" "@" 0 "." ]
-    [ "TXT" "@" "v=spf1 -all" ]
-    [ "TXT" "_dmarc" "v=DMARC1; p=reject" ]
-  ];
-
-  # MXroute, which will send our mail, adds the domain only once it's there.
-  mxrouteOwnership = [
+  # MXroute's DKIM key, from its panel; it changes only if MXroute
+  # rotates it. DMARC starts at p=none while delivery is new.
+  mxroute = [
+    [ "MX" "@" 10 "shadow.mxrouting.net." ]
+    [ "MX" "@" 20 "shadow-relay.mxrouting.net." ]
+    [ "TXT" "@" "v=spf1 include:mxroute.com -all" ]
+    [ "TXT" "x._domainkey" "v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApwyfGWLuUrgBWuiOXrZjZgeDBuyZ3Zxw/WX6M42Qb6LlmWLRFGUqQgnz+5YnzAmz0yYOp6vjtNy8ZICfAJ+PfqMWH5Ym2DcxsLyTGct8GItOtL1Hc51a9fEtcmsbcRbczb+0ya0ur3qkQ7U3mz/lxvUJ0CMe39wrRe/cKlX2SrXWX+h/aCIhR78WN3il0MDjp1bZ5AfdqSX2PoZyx4mtyCssH8qv1ISnHrKat+L5SVVr0VCBse/wz3bKavYbxPS9A8+tA5LM4Fg3TIoOqY9dFsF9hpNZgqkWbyfUhXY0rEfLbMoSUmf+IhmOmA0vR4sbe9kTVgx/ohw6d4XHjpOi2QIDAQAB" ]
+    [ "TXT" "_dmarc" "v=DMARC1; p=none" ]
     [ "TXT" "_da-verify-bbbfa40b313de02f113fc58ed97fecf1" "domain-verified" ]
   ];
 in
@@ -42,5 +42,5 @@ in
   inherit domain;
   # deSEC refuses anything shorter.
   ttl = 3600;
-  records = lib.concatMap hostRecords configs ++ noMail ++ mxrouteOwnership;
+  records = lib.concatMap hostRecords configs ++ mxroute;
 }
