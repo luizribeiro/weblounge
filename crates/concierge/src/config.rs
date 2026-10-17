@@ -130,23 +130,9 @@ impl Config {
                 )
             })
         };
-        let public_url = parse_origin(&public_url).ok_or_else(|| {
-            invalid(
-                "CONCIERGE_PUBLIC_URL",
-                public_url.clone(),
-                "expected an http(s) origin, without a path",
-            )
-        })?;
+        let public_url = origin("CONCIERGE_PUBLIC_URL", public_url)?;
         let join_url = join_url
-            .map(|url| {
-                parse_origin(&url).ok_or_else(|| {
-                    invalid(
-                        "CONCIERGE_JOIN_URL",
-                        url.clone(),
-                        "expected an http(s) origin, without a path",
-                    )
-                })
-            })
+            .map(|url| origin("CONCIERGE_JOIN_URL", url))
             .transpose()?;
         Ok(Self {
             listen: listen.parse().map_err(|_| {
@@ -158,13 +144,7 @@ impl Config {
             })?,
             invite_links: invite_links(&public_url, join_url.as_deref()),
             public_url,
-            webchat_url: parse_origin(&webchat_url).ok_or_else(|| {
-                invalid(
-                    "CONCIERGE_WEBCHAT_URL",
-                    webchat_url.clone(),
-                    "expected an http(s) origin, without a path",
-                )
-            })?,
+            webchat_url: origin("CONCIERGE_WEBCHAT_URL", webchat_url)?,
             irc_server: IrcServer::parse(&irc_server).ok_or_else(|| {
                 invalid(
                     "CONCIERGE_IRC_SERVER",
@@ -348,6 +328,12 @@ fn parse_multiclient_default(setting: &str) -> Option<bool> {
 
 fn parse_http_url(url: &str) -> Option<Url> {
     Url::parse(url).ok().filter(|url| url.scheme() == "http")
+}
+
+/// The origin in the variable `name`, which holds `url`.
+fn origin(name: &'static str, url: String) -> Result<String, ConfigError> {
+    parse_origin(&url)
+        .ok_or_else(|| invalid(name, url, "expected an http(s) origin, without a path"))
 }
 
 fn parse_origin(url: &str) -> Option<String> {
