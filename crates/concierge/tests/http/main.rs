@@ -34,7 +34,7 @@ use concierge::{
     db::{self, Db, NewInvite, NewMember},
     invite_rules,
     oauth::Webchat,
-    outbox::Outbox,
+    outbox::{Outbox, QueuedMessage},
     rate_limit::{
         AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
         VERIFICATIONS_PER_ADDRESS,
@@ -56,6 +56,7 @@ const INTROSPECTION_SECRET: &str = "a secret Ergo introspects tokens with";
 struct Site {
     router: Router,
     db: Db,
+    outbox: Outbox,
     ergo: FakeErgo,
     state: TempDir,
 }
@@ -80,7 +81,7 @@ impl Site {
         let mut app = App {
             assets: Assets::load(&fixtures).unwrap(),
             db: db.clone(),
-            outbox,
+            outbox: outbox.clone(),
             ergo: fake.client(),
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),
@@ -104,6 +105,7 @@ impl Site {
         Self {
             router: app::router(app),
             db,
+            outbox,
             ergo: fake,
             state,
         }
@@ -196,6 +198,11 @@ impl Site {
         let value = sqlx::query_scalar(sql).fetch_one(&pool).await.unwrap();
         pool.close().await;
         value
+    }
+
+    /// The mail waiting in the outbox, oldest first.
+    async fn mail(&self) -> Vec<QueuedMessage> {
+        self.outbox.due(db::now()).await.unwrap()
     }
 
     fn database_path(&self) -> std::path::PathBuf {
@@ -291,6 +298,17 @@ fn is_tab(page: &str, path: &str) -> bool {
 
 fn location(response: &Response) -> &str {
     response.headers()[header::LOCATION].to_str().unwrap()
+}
+
+/// The verification link in `message`, and the code it carries.
+fn verification_link(message: &QueuedMessage) -> (&str, &str) {
+    let prefix = format!("{PUBLIC_URL}/verify#");
+    let link = message
+        .body
+        .lines()
+        .find(|line| line.starts_with(&prefix))
+        .unwrap_or_else(|| panic!("a verification link in {}", message.body));
+    (link, &link[prefix.len()..])
 }
 
 async fn body_text(response: Response) -> String {

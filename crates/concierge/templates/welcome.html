@@ -7,6 +7,11 @@
       <p class="eyebrow">Account created</p>
       <h1>You're in, {{ nick }}.</h1>
       <p class="lede">Make yourself at home in #lounge.</p>
+      {%- if let Some(address) = mailed_to %}
+      <p class="notice" role="status">We sent a link to <strong>{{ address }}</strong> to confirm your email. If it doesn't arrive in a few minutes, check your spam folder.</p>
+      {%- else %}
+      <p class="alert" role="alert">We couldn't send a link to confirm your email just now. Send one from the <a href="/account#email-and-news">Account tab</a>.</p>
+      {%- endif %}
       {%- call components::open_chat(webchat) %}{% endcall %}
       <div class="account-grid">
         <section class="card" aria-labelledby="connect-title">

@@ -14,8 +14,8 @@ use crate::{
     auth::Visitor,
     db::{self, Verification},
     invite_rules, link_code,
-    rate_limit::{self, ClientAddress},
-    verification_rules,
+    rate_limit::{self, ClientAddress, MailRefusal},
+    verification_mail, verification_rules,
 };
 
 #[derive(Template)]
@@ -64,6 +64,37 @@ pub async fn confirm(
         Verification::Replaced => replaced(&app, &visitor),
         Verification::AddressChanged => address_changed(&app, &visitor),
         Verification::AddressTaken => address_taken(&app, &visitor),
+    }
+}
+
+/// What came of mailing a member a new verification link.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mailed {
+    Sent,
+    /// Their address is verified already, or they're gone.
+    NothingToVerify,
+    Refused(MailRefusal),
+    /// Queueing failed, and was logged.
+    Failed,
+}
+
+/// Mails `account` a new verification link, replacing their last, if the
+/// limits on mail allow.
+pub async fn mail_link(app: &App, account: &str) -> Mailed {
+    if let Err(refusal) = app.mailed_links.check(account, Instant::now()) {
+        return Mailed::Refused(refusal);
+    }
+    let sent = verification_mail::send(&app.db, &app.outbox, &app.public_url, account, db::now());
+    match sent.await {
+        Ok(true) => {
+            app.mailed_links.record(account, Instant::now());
+            Mailed::Sent
+        }
+        Ok(false) => Mailed::NothingToVerify,
+        Err(error) => {
+            eprintln!("Queueing a verification email failed: {error}");
+            Mailed::Failed
+        }
     }
 }
 

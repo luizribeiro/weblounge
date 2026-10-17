@@ -8,7 +8,9 @@ use ergo_api::fake::Failure;
 use serde_json::json;
 use tokio::net::TcpListener;
 
-use crate::{Site, body_text, execute, session_cookie};
+use concierge::verification_mail;
+
+use crate::{Site, body_text, execute, session_cookie, verification_link};
 
 const CODE: &str = "q7Hx2mZp9vLcT4wRfBa-_w";
 const INVITE: &str = "/invite";
@@ -72,6 +74,57 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     let home = body_text(site.get("/", Some(&cookie)).await).await;
     assert!(home.contains("Pull up a chair, Bob."), "{home}");
     assert!(!invite_is_open(&site).await);
+}
+
+#[tokio::test]
+async fn signing_up_mails_a_link_that_verifies_the_new_members_email() {
+    let site = with_invite_from_alice().await;
+
+    let page = body_text(site.post(INVITE, &bob(), None).await).await;
+
+    assert!(
+        page.contains("We sent a link to <strong>bob@example.org</strong> to confirm your email.")
+            && page.contains("check your spam folder"),
+        "{page}"
+    );
+    let [message] = &site.mail().await[..] else {
+        panic!("one message");
+    };
+    assert_eq!(message.recipient, "bob@example.org");
+    assert_eq!(message.subject, verification_mail::SUBJECT);
+    assert!(message.body.starts_with("Hi Bob,\n"), "{}", message.body);
+    let (link, code) = verification_link(message);
+    assert!(!page.contains(code), "{page}");
+    let bob = site.db.member("bob").await.unwrap().unwrap();
+    let mailed_at = bob
+        .verification_first_sent_at
+        .expect("the grace period started");
+    assert_eq!(message.created_at, mailed_at);
+
+    let confirmed = site.post("/verify", &[("code", link)], None).await;
+
+    assert_eq!(confirmed.status(), 200);
+    let bob = site.db.member("bob").await.unwrap().unwrap();
+    assert!(bob.email_verified_at.is_some());
+}
+
+#[tokio::test]
+async fn signing_up_works_even_when_the_link_cannot_be_queued() {
+    let site = with_invite_from_alice().await;
+    execute(&site.state.path().join("outbox.db"), "DROP TABLE outbox").await;
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_eq!(response.status(), 200);
+    assert!(session_cookie(&response).is_some());
+    let page = body_text(response).await;
+    assert!(page.contains("<h1>You're in, Bob.</h1>"), "{page}");
+    assert!(
+        page.contains("We couldn't send a link to confirm your email just now.")
+            && page.contains(r##"<a href="/account#email-and-news">Account tab</a>"##),
+        "{page}"
+    );
+    assert!(site.db.member("bob").await.unwrap().is_some());
 }
 
 #[tokio::test]

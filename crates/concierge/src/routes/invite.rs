@@ -14,7 +14,10 @@ use axum::{
 use ergo_api::{Passphrase, Registration};
 use serde::Deserialize;
 
-use super::{Layout, internal_error, render, render_with};
+use super::{
+    Layout, internal_error, render, render_with,
+    verify::{self, Mailed},
+};
 use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
@@ -61,6 +64,8 @@ struct SignupForm<'a> {
 struct Welcome<'a> {
     layout: Layout<'a>,
     nick: &'a str,
+    /// Where the verification link went, if one did.
+    mailed_to: Option<&'a str>,
     irc: &'a IrcServer,
     recommended: Vec<&'a Client>,
     clients: &'a [Client],
@@ -151,6 +156,8 @@ pub async fn redeem(
         Err(Failure::Unfinished) => return unfinished(&app, &visitor),
     }
     let nick = account.nick.as_str();
+    let mailed = verify::mail_link(&app, nick).await == Mailed::Sent;
+    let mailed_to = mailed.then_some(account.email.as_str());
     let cookie = match auth::start_session(&app, &visitor, nick).await {
         Ok(cookie) => Some(cookie),
         Err(error) => {
@@ -158,7 +165,7 @@ pub async fn redeem(
             None
         }
     };
-    welcome(&app, nick, platform, cookie)
+    welcome(&app, nick, mailed_to, platform, cookie)
 }
 
 /// Why [`create_account`] created no member.
@@ -269,12 +276,14 @@ async fn release(app: &App, claim: &Claim) {
 fn welcome(
     app: &App,
     nick: &str,
+    mailed_to: Option<&str>,
     VisitorPlatform(platform): VisitorPlatform,
     cookie: Option<HeaderValue>,
 ) -> Response {
     let page = Welcome {
         layout: Layout::new(app, cookie.as_ref().map(|_| nick)),
         nick,
+        mailed_to,
         irc: &app.irc_server,
         recommended: clients::recommended(platform),
         clients: &CLIENTS,
