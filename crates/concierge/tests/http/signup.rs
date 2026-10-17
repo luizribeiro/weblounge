@@ -208,6 +208,39 @@ async fn a_name_ergo_already_has_is_taken_and_the_invite_still_works() {
 }
 
 #[tokio::test]
+async fn an_address_another_member_verified_is_refused_in_any_case() {
+    let site = with_invite_from_alice().await;
+    site.execute(
+        "UPDATE members SET email = 'Bob@Example.org', email_verified_at = 1 WHERE account = 'alice'",
+    )
+    .await;
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_eq!(response.status(), 422);
+    let page = body_text(response).await;
+    assert!(
+        page.contains(
+            r#"<p class="field-error" id="email-hint">Another member uses that address.</p>"#
+        ),
+        "{page}"
+    );
+    assert!(page.contains(r#"value="Bob""#), "{page}");
+    assert!(invite_is_open(&site).await);
+    assert!(site.ergo.client().info("bob").await.unwrap().is_none());
+    assert!(site.mail().await.is_empty());
+}
+
+#[tokio::test]
+async fn an_address_another_member_only_gave_is_still_free() {
+    let site = with_invite_from_alice().await;
+    site.execute("UPDATE members SET email = 'bob@example.org' WHERE account = 'alice'")
+        .await;
+
+    assert_eq!(site.post(INVITE, &bob(), None).await.status(), 200);
+}
+
+#[tokio::test]
 async fn a_removed_members_name_stays_taken_after_ergo_erased_it() {
     let site = with_invite_from_alice().await;
     site.execute("INSERT INTO members (account, joined_at, removed_at) VALUES ('Bob', 0, 1)")

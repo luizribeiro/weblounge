@@ -3,6 +3,9 @@
 
 use std::fmt;
 
+/// What forms say of an address another member verified.
+pub const TAKEN: &str = "Another member uses that address.";
+
 /// The longest address SMTP carries.
 pub const MAX_LENGTH: usize = 254;
 

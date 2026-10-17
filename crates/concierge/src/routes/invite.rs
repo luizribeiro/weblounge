@@ -138,6 +138,19 @@ pub async fn redeem(
         Ok(true) => return refuse(taken()),
         Err(error) => return internal_error("Looking up a name", error),
     }
+    let email_taken = app
+        .db
+        .email_taken(account.email.as_str(), account.nick.as_str());
+    match email_taken.await {
+        Ok(false) => {}
+        Ok(true) => {
+            return refuse(SignupForm {
+                email_error: Some(email::TAKEN.to_owned()),
+                ..form_for(&signup)
+            });
+        }
+        Err(error) => return internal_error("Looking up an email", error),
+    }
     let now = db::now();
     let claim = match app.db.claim_invite(code, now).await {
         Ok(Some(claim)) => claim,

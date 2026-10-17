@@ -13,7 +13,7 @@ use crate::{
     app::{App, AppState},
     auth::Visitor,
     db::{self, Verification},
-    invite_rules, link_code,
+    email, invite_rules, link_code,
     rate_limit::{self, ClientAddress, MailRefusal},
     verification_mail, verification_rules,
 };
@@ -177,7 +177,7 @@ fn address_taken(app: &App, visitor: &Visitor) -> Response {
         app,
         visitor,
         StatusCode::UNPROCESSABLE_ENTITY,
-        "Another member uses that address.",
+        email::TAKEN,
         &["Each address belongs to one member. Use another from the Account tab."],
         Link {
             href: ACCOUNT_EMAIL,
