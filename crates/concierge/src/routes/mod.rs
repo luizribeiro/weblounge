@@ -10,6 +10,7 @@ pub mod pages;
 pub mod password;
 pub mod presence;
 pub mod signin;
+pub mod verify;
 
 use std::fmt::Display;
 

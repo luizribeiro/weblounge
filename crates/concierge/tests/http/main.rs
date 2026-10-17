@@ -17,6 +17,7 @@ mod signin;
 mod signup;
 mod tabs;
 mod tree;
+mod verify;
 
 use std::path::Path;
 

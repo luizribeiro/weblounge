@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm your email{% endblock %}
+
+{% block content %}
+      <section class="card narrow" aria-labelledby="verify-title">
+        <p class="eyebrow">Email</p>
+        <h1 id="verify-title">Confirm your email.</h1>
+        <p>One press confirms the address this link was sent to.</p>
+        <form class="form" method="post" action="/verify" data-verify>
+          <div class="field" data-link-code>
+            <label for="code">Code</label>
+            <input id="code" name="code" required pattern="{{ code_pattern }}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="code-hint">
+            <p class="hint" id="code-hint">From the link in your email: the part after the #. Pasting the whole link works too.</p>
+          </div>
+          <button class="button button-primary" type="submit">Confirm my email</button>
+        </form>
+      </section>
+{%- endblock %}
