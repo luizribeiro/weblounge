@@ -8,7 +8,7 @@ use crate::{
     email::Email,
     invite_rules,
     outbox::{Message, Outbox, Subject},
-    rate_limit, tree, verification_rules,
+    rate_limit, verification_rules,
 };
 
 pub const SUBJECT: &str = "Confirm your email for weblounge.org";
@@ -71,7 +71,7 @@ pub fn message(
         link: format!("{public_url}/verify#{}", issued.code),
         lifetime: invite_rules::in_words(verification_rules::LIFETIME),
         grace_period: invite_rules::in_words(verification_rules::GRACE_PERIOD),
-        due: tree::date(issued.deadline),
+        due: verification_rules::deadline_in_words(issued.deadline),
         overdue: now >= issued.deadline,
         reminder: kind == Kind::Reminder,
     };
@@ -189,7 +189,7 @@ mod tests {
         for part in [
             "The link works for 2 days.",
             "send\nyourself a new one from the Account tab.",
-            "Every member has 7 days to confirm theirs;\nyours ends on 2025-10-16.",
+            "Every member has 7 days to confirm theirs;\nyours ends on 16 October.",
             "You can chat right away, but you won't be able to invite others until\n\
              you confirm your email.",
             "If you didn't sign up for weblounge.org, you can ignore this email;",
@@ -206,8 +206,8 @@ mod tests {
                 .unwrap()
                 .body
         };
-        assert!(body(deadline - 1).contains("yours ends on 2025-10-16."));
-        assert!(body(deadline).contains("yours ended on 2025-10-16."));
+        assert!(body(deadline - 1).contains("yours ends on 16 October."));
+        assert!(body(deadline).contains("yours ended on 16 October."));
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
             "The link works for 2 days.",
             "You can chat right away, but you won't be able to invite others until\n\
              you confirm your email. Every member has 7 days to confirm theirs;\n\
-             yours ended on 2025-10-16.",
+             yours ended on 16 October.",
         ] {
             assert!(body.contains(part), "{part}: {body}");
         }

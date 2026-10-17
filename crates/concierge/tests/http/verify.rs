@@ -229,7 +229,11 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
         "UPDATE members SET verification_first_sent_at = {first_sent_at}"
     ))
     .await;
-    let due = concierge::tree::date(verification_rules::deadline(first_sent_at));
+    let deadline = verification_rules::deadline(first_sent_at);
+    let (date, day) = (
+        concierge::tree::date(deadline),
+        verification_rules::deadline_in_words(deadline),
+    );
 
     let pages = pages_of_alice(&site, &["/", "/clients", "/privacy"]).await;
 
@@ -237,7 +241,7 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
         assert!(page.contains(REMINDER), "{page}");
         assert!(
             page.contains(&format!(
-                r#"Please confirm your email by <time datetime="{due}">{due}</time>. You won't be able to invite others until you do.</p>"#
+                r#"Please confirm your email by <time datetime="{date}">{day}</time>. You won't be able to invite others until you do.</p>"#
             )),
             "{page}"
         );

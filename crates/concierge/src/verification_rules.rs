@@ -4,7 +4,7 @@
 //!
 //! Times are Unix seconds.
 
-use crate::outbox;
+use crate::{outbox, tree};
 
 const HOUR: i64 = 60 * 60;
 const DAY: i64 = 24 * HOUR;
@@ -26,6 +26,29 @@ pub fn expires_at(created_at: i64) -> i64 {
 /// When the grace period of a member first mailed at `first_sent_at` ends.
 pub fn deadline(first_sent_at: i64) -> i64 {
     first_sent_at + GRACE_PERIOD
+}
+
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// A deadline as members read it, such as "24 October", in UTC. It's
+/// never more than a week off, so the year goes without saying.
+pub fn deadline_in_words(deadline: i64) -> String {
+    let (_, month, day) = tree::civil(deadline);
+    let month = usize::try_from(month - 1).expect("months run from 1");
+    format!("{day} {}", MONTHS[month])
 }
 
 pub struct Code {
@@ -154,6 +177,16 @@ mod tests {
             ..mailed_once()
         };
         assert_eq!(never_mailed.deadline(), None);
+    }
+
+    #[test]
+    fn deadlines_read_as_a_day_and_a_month_without_the_year() {
+        assert_eq!(deadline_in_words(deadline(SENT)), "16 October");
+        let november_3 = 1_793_664_000;
+        assert_eq!(deadline_in_words(november_3), "3 November");
+        assert_eq!(deadline_in_words(november_3 - 1), "2 November");
+        let new_years_eve = 1_798_675_200;
+        assert_eq!(deadline_in_words(deadline(new_years_eve)), "7 January");
     }
 
     #[test]

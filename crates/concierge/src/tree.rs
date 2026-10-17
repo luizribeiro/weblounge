@@ -67,6 +67,12 @@ fn lay_out(
 
 /// `unix` seconds as a UTC date, such as 2026-10-14.
 pub fn date(unix: i64) -> String {
+    let (year, month, day) = civil(unix);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// The UTC year, month (1 to 12) and day of `unix` seconds.
+pub fn civil(unix: i64) -> (i64, i64, i64) {
     // Howard Hinnant's days-to-civil algorithm.
     let days = unix.div_euclid(86_400) + 719_468;
     let era = days.div_euclid(146_097);
@@ -82,7 +88,7 @@ pub fn date(unix: i64) -> String {
         month_index - 9
     };
     let year = year_of_era + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}")
+    (year, month, day)
 }
 
 #[cfg(test)]

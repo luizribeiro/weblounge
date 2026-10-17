@@ -39,8 +39,8 @@
           <p>
             {%- match unconfirmed.due %}
             {%- when Some(due) %}Open the link we emailed you to confirm it.
-            {%- if let Some(left) = due.left %} Please confirm by {{ due.date }} ({{ left }} left).
-            {%- else %} It was due by {{ due.date }}.{% endif %}
+            {%- if let Some(left) = due.left %} Please confirm by {{ due.day }} ({{ left }} left).
+            {%- else %} It was due by {{ due.day }}.{% endif %}
             {%- when None %}We haven't sent you a link to confirm it yet.
             {%- endmatch %}</p>
           <form method="post" action="/verification-link">

@@ -1,5 +1,5 @@
 use axum::http::header;
-use concierge::{db, rate_limit::LINKS_PER_DAY, tree, verification_mail, verification_rules};
+use concierge::{db, rate_limit::LINKS_PER_DAY, verification_mail, verification_rules};
 
 use crate::{NEWS_LABEL, Site, body_text, confirm, execute, location, verification_link};
 
@@ -26,7 +26,7 @@ async fn account_tab_mailed(ago: Option<i64>) -> (String, i64) {
 #[tokio::test]
 async fn an_unconfirmed_email_shows_when_it_is_due() {
     let (page, deadline) = account_tab_mailed(Some(26 * HOUR)).await;
-    let due = tree::date(deadline);
+    let due = verification_rules::deadline_in_words(deadline);
     assert!(
         page.contains(&format!(
             r#"<p>Open the link we emailed you to confirm it. Please confirm by {due} (5 days left).</p>"#
@@ -42,7 +42,7 @@ async fn an_unconfirmed_email_shows_when_it_is_due() {
 #[tokio::test]
 async fn an_email_past_its_week_says_when_it_was_due() {
     let (page, deadline) = account_tab_mailed(Some(8 * 24 * HOUR)).await;
-    let due = tree::date(deadline);
+    let due = verification_rules::deadline_in_words(deadline);
     assert!(
         page.contains(&format!("to confirm it. It was due by {due}.</p>")),
         "{page}"
