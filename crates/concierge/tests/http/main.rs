@@ -34,6 +34,7 @@ use concierge::{
     db::{self, Db, NewInvite, NewMember},
     invite_rules,
     oauth::Webchat,
+    outbox::Outbox,
     rate_limit::{
         AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, OAUTH_REQUESTS_PER_ADDRESS,
         VERIFICATIONS_PER_ADDRESS,
@@ -72,10 +73,14 @@ impl Site {
         let db = Db::migrate(&state.path().join("concierge.db"))
             .await
             .unwrap();
+        let outbox = Outbox::migrate(&state.path().join("outbox.db"))
+            .await
+            .unwrap();
         let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/assets");
         let mut app = App {
             assets: Assets::load(&fixtures).unwrap(),
             db: db.clone(),
+            outbox,
             ergo: fake.client(),
             sessions: session::Hasher::new(SESSION_KEY),
             limiter: Limiter::default(),

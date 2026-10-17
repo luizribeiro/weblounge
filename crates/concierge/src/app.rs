@@ -17,6 +17,7 @@ use crate::{
     csrf,
     db::Db,
     oauth::Webchat,
+    outbox::Outbox,
     rate_limit::{AddressLimiter, Limiter},
     routes, session,
 };
@@ -25,6 +26,8 @@ use crate::{
 pub struct App {
     pub assets: Assets,
     pub db: Db,
+    /// Where the site leaves mail for concierge-mailer to send.
+    pub outbox: Outbox,
     pub ergo: Client,
     pub sessions: session::Hasher,
     pub limiter: Limiter,

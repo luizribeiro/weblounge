@@ -65,6 +65,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let app = App {
         assets: Assets::load(&config.assets_dir)?,
         db,
+        outbox: Outbox::open(&config.outbox_path).await?,
         ergo: config.ergo_client()?,
         sessions: session::Hasher::new(&config.read_session_key()?),
         limiter: Limiter::default(),
