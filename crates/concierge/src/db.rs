@@ -1151,6 +1151,35 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn a_verified_address_belongs_to_one_member_whatever_its_case() {
+        let (db, _dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, email_verified_at, joined_at)
+             VALUES ('alice', 'Alice@Example.org', 1, 0),
+                    ('bob', 'alice@example.org', NULL, 0),
+                    ('carol', 'ALICE@EXAMPLE.ORG', NULL, 0),
+                    ('dave', 'a.lice+irc@example.org', 1, 0);",
+        )
+        .await
+        .unwrap();
+        let error = execute(
+            &db,
+            "UPDATE members SET email_verified_at = 2 WHERE account = 'bob'",
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("UNIQUE"), "{error}");
+        db.remove_member("alice", 3).await.unwrap();
+        execute(
+            &db,
+            "UPDATE members SET email_verified_at = 4 WHERE account = 'bob'",
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
     async fn a_current_member_without_an_email_fails_the_migration() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("concierge.db");
