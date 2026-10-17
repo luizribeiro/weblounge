@@ -54,10 +54,6 @@ with subtest("ergo hashes passwords with bcrypt at cost 12"):
 with subtest("logging in shows weblounge's MOTD"):
     assert ":- Pull up a chair and make yourself at home." in session, session
 
-with subtest("members' addresses are cloaked under weblounge"):
-    whois = irc("WHOIS alice", **alice)
-    assert re.search(r" 311 alice alice \S+ \S+\.weblounge ", whois), whois
-
 with subtest("clients on credenza reach ergo by its public name over loopback"):
     assert credenza.succeed("getent hosts irc.weblounge.org").split()[0] == "127.0.0.1"
     session = credenza.succeed(irc_command(host="irc.weblounge.org", **alice))
@@ -95,3 +91,8 @@ with subtest("the API reads and changes a member's always-on setting"):
     assert json.loads(body)["alwaysOn"] == "off", body
     body, _ = ergo_api("ns/saget", accountName=carol["account"])
     assert json.loads(body)["alwaysOn"] == "off", body
+
+with subtest("every member's host shows as weblounge alone, always-on or not, so it can't lead back to an address"):
+    whois = irc("WHOIS alice", "WHOIS carol", **renewed)
+    hosts = dict(re.findall(r" 311 carol (\S+) \S+ (\S+) ", whois))
+    assert hosts == {"alice": "weblounge", "carol": "weblounge"}, whois

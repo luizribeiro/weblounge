@@ -69,7 +69,12 @@ in
         listeners.${cfg.websocketListener}.websocket = true;
         websockets.allowed-origins = [ (config.weblounge.origin serverName) ];
         motd = "${./ergo.motd}";
-        ip-cloaking.netname = "weblounge";
+        # Any bits of the address in a cloak let whoever gets ircd.db, which
+        # holds the key, try every IPv4 address until one matches.
+        ip-cloaking = {
+          netname = "weblounge";
+          num-bits = 0;
+        };
       };
       accounts = {
         registration = {
