@@ -158,6 +158,7 @@ with subtest("ergo, concierge with its migration and mailer, nginx, bender and t
         "nginx",
         "weblounge-bot-bender",
         "concierge-vacuum",
+        "concierge-mailer-vacuum",
         "ergochat-vacuum",
     ]:
         credenza.succeed(f"systemd-analyze security --threshold=20 --no-pager {unit}.service")
@@ -168,7 +169,7 @@ internet_host = "198.51.100.2"
 
 def mailer_reaches(address: str, port: int) -> bool:
     connect = shlex.quote(f"exec 3<>/dev/tcp/{address}/{port}")
-    status, _ = credenza.execute(f"as-mailer timeout 5 bash -c {connect}")
+    status, _ = credenza.execute(f"as-concierge-mailer timeout 5 bash -c {connect}")
     return status == 0
 
 
@@ -190,6 +191,21 @@ with subtest("the mailer stops with its egress rules, and they come back when it
     credenza.succeed("systemctl start concierge-mailer")
     credenza.succeed("systemctl is-active weblounge-egress")
     assert not mailer_reaches(internet_host, 443)
+
+with subtest("concierge and its mailer share the outbox alone: neither sees the other's state or credentials"):
+    credenza.wait_for_unit("concierge-mailer.service")
+    uids = {
+        unit: credenza.succeed(f"ps -o uid= -p $(systemctl show -P MainPID {unit})").strip()
+        for unit in ["concierge", "concierge-mailer"]
+    }
+    assert len(set(uids.values())) == 2, uids
+    count = f"{tools['sqlite3']} /var/lib/concierge-outbox/outbox.db 'SELECT count(*) FROM outbox'"
+    for unit in ["concierge", "concierge-mailer"]:
+        credenza.succeed(f"as-{unit} {count}")
+    credenza.fail("as-concierge cat /run/credentials/concierge-mailer.service/smtp-password")
+    credenza.fail("as-concierge-mailer ls /var/lib/concierge/")
+    credenza.fail("as-concierge-mailer cat /run/credentials/concierge.service/session-key")
+    credenza.succeed("as-concierge ls /var/lib/concierge/concierge.db")
 
 with subtest("a client that doesn't log in with SASL is turned away, even from loopback"):
     for reply in [irc(), irc(machine=credenza, host="localhost")]:

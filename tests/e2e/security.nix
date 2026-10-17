@@ -9,19 +9,20 @@ let
   };
 in
 vmTest {
-  credenza = { config, lib, pkgs, ... }: {
-    imports = [ (onTheInternet public.credenza) ];
-    environment.systemPackages = [
-      pkgs.nftables
-      # Runs a command confined the way the mailer is.
-      (pkgs.writeShellScriptBin "as-mailer" ''
+  credenza = { config, lib, pkgs, ... }:
+    let
+      # as-<unit> runs a command confined the way the unit is.
+      confinedAs = unit: pkgs.writeShellScriptBin "as-${unit}" ''
         exec systemd-run --quiet --pipe --wait --collect --service-type=exec --setenv=PATH="$PATH" \
           ${lib.escapeShellArgs (config.weblounge.runProperties
-            (removeAttrs config.systemd.services.concierge-mailer.serviceConfig [ "ExecStart" "Restart" ]))} \
+            (removeAttrs config.systemd.services.${unit}.serviceConfig [ "ExecStart" "Restart" ]))} \
           "$@"
-      '')
-    ];
-  };
+      '';
+    in
+    {
+      imports = [ (onTheInternet public.credenza) ];
+      environment.systemPackages = [ pkgs.nftables ] ++ map confinedAs [ "concierge" "concierge-mailer" ];
+    };
 
   client = {
     imports = [ (onTheInternet public.client) ];

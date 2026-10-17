@@ -41,7 +41,7 @@ in
           CONCIERGE_MAIL_FROM = "${domain} <${sender}>";
         };
         serviceConfig = config.weblounge.sandbox // {
-          User = "concierge";
+          User = "concierge-mailer";
           DynamicUser = true;
           ExecStart = "${lib.getExe pkgs.weblounge.concierge} mailer";
           Restart = "on-failure";
