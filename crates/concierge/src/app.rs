@@ -69,6 +69,10 @@ pub fn router(app: App) -> Router {
             post(routes::account::update).layer(map_response(routes::no_store)),
         )
         .route(
+            "/verification-link",
+            post(routes::account::send_link).layer(map_response(routes::no_store)),
+        )
+        .route(
             "/password",
             post(routes::password::change).layer(map_response(routes::no_store)),
         )

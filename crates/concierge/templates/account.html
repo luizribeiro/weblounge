@@ -28,8 +28,19 @@
         {%- if flash.saved.is_some() %}
         <p class="notice" role="status">Saved.</p>
         {%- endif %}
+        {%- if flash.sent.is_some() %}
+        <p class="notice" role="status">A link is on its way. If it doesn't arrive in a few minutes, check your spam folder.</p>
+        {%- endif %}
+        {%- if let Some(error) = link_error %}
+        <p class="alert" role="alert">{{ error }}</p>
+        {%- endif %}
         {%- if let Some(unconfirmed) = unconfirmed %}
-        <p class="notice">{{ unconfirmed.status }}</p>
+        <div class="notice email-status">
+          <p>{{ unconfirmed.status }}</p>
+          <form method="post" action="/verification-link">
+            <button class="button" type="submit">Send {% if unconfirmed.sent %}a new{% else %}a{% endif %} link</button>
+          </form>
+        </div>
         {%- endif %}
         <form class="form" method="post" action="/settings" data-save-when-changed>
           <div class="field">

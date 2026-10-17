@@ -1,6 +1,7 @@
-use concierge::{db, tree, verification_rules};
+use axum::http::header;
+use concierge::{db, tree, verification_mail, verification_rules};
 
-use crate::{Site, body_text, location};
+use crate::{Site, body_text, confirm, execute, location, verification_link};
 
 const HOUR: i64 = 60 * 60;
 
@@ -28,7 +29,7 @@ async fn an_unconfirmed_email_shows_when_it_is_due() {
     let due = tree::date(deadline);
     assert!(
         page.contains(&format!(
-            r#"<p class="notice">Open the link we emailed you to confirm it. Please confirm by {due} (5 days left).</p>"#
+            r#"<p>Open the link we emailed you to confirm it. Please confirm by {due} (5 days left).</p>"#
         )),
         "{page}"
     );
@@ -225,4 +226,111 @@ async fn guests_cannot_change_settings() {
     assert_eq!(location(&response), "/signin");
     let member = site.db.member("alice").await.unwrap().unwrap();
     assert_eq!(member.email.as_deref(), Some("someone@example.org"));
+}
+
+const RESEND: &str = "/verification-link";
+
+/// alice, signed in, holding the code a link mailed her before.
+async fn with_a_code_mailed() -> (Site, String, String) {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let issued = site.db.issue_verification_code("alice", db::now()).await;
+    let cookie = site.sign_in("alice").await;
+    (site, cookie, issued.unwrap().unwrap().code)
+}
+
+#[tokio::test]
+async fn the_status_offers_a_link_or_a_new_one() {
+    let (page, _) = account_tab_mailed(None).await;
+    assert!(
+        page.contains(&format!(
+            r#"<form method="post" action="{RESEND}">
+            <button class="button" type="submit">Send a link</button>"#
+        )),
+        "{page}"
+    );
+    let (page, _) = account_tab_mailed(Some(HOUR)).await;
+    assert!(page.contains(">Send a new link</button>"), "{page}");
+}
+
+#[tokio::test]
+async fn sending_a_new_link_mails_one_that_replaces_the_old() {
+    let (site, cookie, old) = with_a_code_mailed().await;
+
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 303);
+    assert_eq!(location(&response), "/account?sent#email-and-news");
+    let [message] = &site.mail().await[..] else {
+        panic!("one message");
+    };
+    assert_eq!(message.recipient, "someone@example.org");
+    assert_eq!(message.subject, verification_mail::SUBJECT);
+    let page = body_text(site.get("/account?sent", Some(&cookie)).await).await;
+    assert!(page.contains("A link is on its way."), "{page}");
+    let (status, page) = confirm(&site, &old).await;
+    assert_eq!(status, 422);
+    assert!(page.contains("A newer email was sent."), "{page}");
+    assert_eq!(confirm(&site, verification_link(message).1).await.0, 200);
+}
+
+#[tokio::test]
+async fn asking_again_at_once_is_refused_without_mailing() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    site.post(RESEND, &[], Some(&cookie)).await;
+
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 429);
+    let page = body_text(response).await;
+    assert!(
+        page.contains(r#"<p class="alert" role="alert">A link went out a few minutes ago."#),
+        "{page}"
+    );
+    assert!(crate::is_tab(&page, "/account"), "{page}");
+    assert_eq!(site.mail().await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_confirmed_member_gets_no_link() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    site.execute("UPDATE members SET email_verified_at = 1")
+        .await;
+
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 303);
+    assert_eq!(location(&response), "/account#email-and-news");
+    assert!(site.mail().await.is_empty());
+}
+
+#[tokio::test]
+async fn a_link_that_cannot_be_queued_says_to_try_again_and_costs_no_wait() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    let outbox = site.state.path().join("outbox.db");
+    execute(&outbox, "ALTER TABLE outbox RENAME TO away").await;
+
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 503);
+    let page = body_text(response).await;
+    assert!(
+        page.contains("Couldn&#39;t send a link just now. Try again in a minute."),
+        "{page}"
+    );
+    execute(&outbox, "ALTER TABLE away RENAME TO outbox").await;
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+    assert_eq!(location(&response), "/account?sent#email-and-news");
+    assert_eq!(site.mail().await.len(), 1);
+}
+
+#[tokio::test]
+async fn guests_and_other_sites_cannot_ask_for_links() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    let response = site.post(RESEND, &[], None).await;
+    assert_eq!(location(&response), "/signin");
+    let headers = [(header::ORIGIN.as_str(), "https://evil.example")];
+    let response = site.post_with(RESEND, &[], Some(&cookie), &headers).await;
+    assert_eq!(response.status(), 403);
+    assert!(site.mail().await.is_empty());
 }

@@ -580,3 +580,15 @@
     font-size: 0.875rem;
   }
 }
+
+.email-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+
+  & p {
+    flex: 1 1 16rem;
+    margin: 0;
+  }
+}

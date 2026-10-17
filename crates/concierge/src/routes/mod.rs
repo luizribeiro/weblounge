@@ -92,6 +92,8 @@ pub struct Flash {
     pub saved: Option<String>,
     pub password: Option<String>,
     pub irc: Option<String>,
+    /// A link to confirm the email went out.
+    pub sent: Option<String>,
 }
 
 #[derive(Template)]

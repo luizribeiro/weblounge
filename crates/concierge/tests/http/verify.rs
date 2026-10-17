@@ -1,7 +1,7 @@
 use axum::http::header;
 use concierge::{db, rate_limit::VERIFICATIONS_PER_ADDRESS, verification_rules};
 
-use crate::{PUBLIC_URL, Site, body_text};
+use crate::{PUBLIC_URL, Site, body_text, confirm};
 
 /// alice, whose email isn't verified, holding a code to verify it.
 async fn with_a_code() -> (Site, String) {
@@ -45,12 +45,6 @@ async fn opening_the_page_verifies_nothing_whatever_the_url_carries() {
 
     assert!(!verified(&site, "alice").await);
     assert!(site.db.verification_code(&code).await.unwrap().is_some());
-}
-
-async fn confirm(site: &Site, code: &str) -> (u16, String) {
-    let response = site.post("/verify", &[("code", code)], None).await;
-    assert!(!response.headers().contains_key("set-cookie"));
-    (response.status().as_u16(), body_text(response).await)
 }
 
 #[tokio::test]

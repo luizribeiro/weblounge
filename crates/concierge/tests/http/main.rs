@@ -311,6 +311,14 @@ fn verification_link(message: &QueuedMessage) -> (&str, &str) {
     (link, &link[prefix.len()..])
 }
 
+/// Posts `code` the way the verify page's Confirm button does, and
+/// answers the status and page.
+async fn confirm(site: &Site, code: &str) -> (u16, String) {
+    let response = site.post("/verify", &[("code", code)], None).await;
+    assert!(!response.headers().contains_key("set-cookie"));
+    (response.status().as_u16(), body_text(response).await)
+}
+
 async fn body_text(response: Response) -> String {
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     String::from_utf8(bytes.to_vec()).unwrap()

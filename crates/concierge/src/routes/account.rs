@@ -10,7 +10,12 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{Flash, Layout, Tab, internal_error, presence::Presence, render_with};
+use super::{
+    Flash, Layout, Tab, internal_error,
+    presence::Presence,
+    render_with,
+    verify::{self, Mailed},
+};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
@@ -27,6 +32,7 @@ struct Account<'a> {
     layout: Layout<'a>,
     nick: &'a str,
     flash: Flash,
+    link_error: Option<String>,
     settings: SettingsForm<'a>,
     /// Where confirming the stored email stands, until it's confirmed.
     unconfirmed: Option<Unconfirmed>,
@@ -56,6 +62,8 @@ struct SettingsForm<'a> {
 
 /// A member's email that isn't confirmed yet.
 struct Unconfirmed {
+    /// Whether a link to confirm it went out.
+    sent: bool,
     status: String,
 }
 
@@ -66,6 +74,7 @@ impl Unconfirmed {
         }
         let Some(first_sent_at) = member.verification_first_sent_at else {
             return Some(Self {
+                sent: false,
                 status: "We haven't sent you a link to confirm it yet.".into(),
             });
         };
@@ -80,6 +89,7 @@ impl Unconfirmed {
             format!("It was due by {due}.")
         };
         Some(Self {
+            sent: true,
             status: format!("Open the link we emailed you to confirm it. {when}"),
         })
     }
@@ -99,6 +109,8 @@ pub struct Forms<'a> {
     settings: Option<SettingsForm<'a>>,
     password: PasswordForm,
     irc_error: Option<&'static str>,
+    /// Why no verification link went out.
+    link_error: Option<String>,
 }
 
 impl Forms<'_> {
@@ -156,6 +168,24 @@ pub async fn update(
     }
 }
 
+/// Mails the member a new link to confirm their email.
+pub async fn send_link(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
+    let mailed = verify::mail_link(&app, &me.member.account).await;
+    let (status, error) = match mailed {
+        Mailed::Sent => return Redirect::to("/account?sent#email-and-news").into_response(),
+        Mailed::NothingToVerify => return Redirect::to("/account#email-and-news").into_response(),
+        Mailed::Refused(refusal) => (StatusCode::TOO_MANY_REQUESTS, refusal.to_string()),
+        Mailed::Failed => (StatusCode::SERVICE_UNAVAILABLE, UNSENT.to_owned()),
+    };
+    let forms = Forms {
+        link_error: Some(error),
+        ..Forms::default()
+    };
+    page(&app, &me.member, status, forms).await
+}
+
+const UNSENT: &str = "Couldn't send a link just now. Try again in a minute.";
+
 /// The Account tab of `member`, with `forms` filled in over what's stored.
 pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
     let settings = forms.settings.unwrap_or_else(|| SettingsForm {
@@ -178,6 +208,7 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         layout: Layout::new(app, Some(&member.account)).on(Tab::Account),
         nick: &member.account,
         flash: forms.flash,
+        link_error: forms.link_error,
         settings,
         unconfirmed: Unconfirmed::of(member, db::now()),
         password: forms.password,
