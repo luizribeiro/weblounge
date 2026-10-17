@@ -93,7 +93,7 @@ def unconfirmed(page):
         page.screenshot(path=f"{SCREENS}/banner-{name}.png", full_page=True)
 
         page.goto(f"{MEMBERS}/invites")
-        expect(page.get_by_text("Inviting others needs a confirmed email.")).to_be_visible()
+        expect(page.get_by_text("You can't invite others until you confirm your email.")).to_be_visible()
         expect(reminder).to_have_count(0)
         confirm_link = page.get_by_role("link", name="Confirm your email")
         assert confirm_link.bounding_box()["height"] >= 44, name

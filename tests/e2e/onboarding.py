@@ -75,7 +75,7 @@ with subtest("until the new member confirms her email, she's refused an invite, 
     refused = erins_browser.post("/invites")
     assert refused == f"303 https://{members}/invites", refused
     tab = erins_browser.get("/invites", "-f")
-    assert "Inviting others needs a confirmed email." in tab, tab
+    assert "You can't invite others until you confirm your email." in tab, tab
     assert concierge_sql("SELECT count(*) FROM invites WHERE created_by = 'erin'").strip() == "0"
 
 with subtest("in a browser, the pages remind her to confirm by her date, and the Invites tab leads to the Account tab"):

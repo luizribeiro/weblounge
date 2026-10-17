@@ -46,7 +46,7 @@
       <div class="notice email-status email-reminder">
         <p>Please confirm your email
           {%- if let Some(due) = unconfirmed.due %}{% if due.left.is_some() %} by <time datetime="{{ due.date }}">{{ due.date }}</time>{% endif %}{% endif -%}
-          ; inviting others needs it.</p>
+          . You won't be able to invite others until you do.</p>
         <a class="button button-small" href="{{ crate::routes::verify::ACCOUNT_EMAIL }}">Send {% if unconfirmed.sent() %}a new{% else %}a{% endif %} link</a>
       </div>
       {%- endif %}

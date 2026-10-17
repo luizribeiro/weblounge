@@ -189,8 +189,9 @@ mod tests {
         for part in [
             "The link works for 2 days.",
             "send\nyourself a new one from the Account tab.",
-            "Every member has 7 days to confirm theirs; yours ends on 2025-10-16.",
-            "You can chat right away; inviting others will need a confirmed email.",
+            "Every member has 7 days to confirm theirs;\nyours ends on 2025-10-16.",
+            "You can chat right away, but you won't be able to invite others until\n\
+             you confirm your email.",
             "If you didn't sign up for weblounge.org, you can ignore this email;",
         ] {
             assert!(body.contains(part), "{part}: {body}");
@@ -222,12 +223,12 @@ mod tests {
             "You haven't confirmed your email for weblounge.org yet, so here's a\n\
              new link; the ones we sent before don't work any more.",
             "The link works for 2 days.",
-            "Your chat works as before, but inviting others needs a confirmed email.\n\
-             Every member has 7 days to confirm theirs; yours ended on 2025-10-16.",
+            "You can chat right away, but you won't be able to invite others until\n\
+             you confirm your email. Every member has 7 days to confirm theirs;\n\
+             yours ended on 2025-10-16.",
         ] {
             assert!(body.contains(part), "{part}: {body}");
         }
-        assert!(!body.contains("right away"), "{body}");
     }
 
     /// Mail goes out as 7bit when it's ASCII in lines under 76 octets,

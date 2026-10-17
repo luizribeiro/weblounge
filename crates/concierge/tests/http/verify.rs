@@ -237,7 +237,7 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
         assert!(page.contains(REMINDER), "{page}");
         assert!(
             page.contains(&format!(
-                r#"Please confirm your email by <time datetime="{due}">{due}</time>; inviting others needs it.</p>"#
+                r#"Please confirm your email by <time datetime="{due}">{due}</time>. You won't be able to invite others until you do.</p>"#
             )),
             "{page}"
         );
@@ -259,7 +259,9 @@ async fn a_member_never_mailed_a_link_is_asked_to_send_one() {
     let [page] = pages_of_alice(&site, &["/"]).await.try_into().unwrap();
 
     assert!(
-        page.contains("<p>Please confirm your email; inviting others needs it.</p>"),
+        page.contains(
+            "<p>Please confirm your email. You won't be able to invite others until you do.</p>"
+        ),
         "{page}"
     );
     assert!(
@@ -278,7 +280,9 @@ async fn a_member_past_the_date_is_reminded_without_it() {
     let [page] = pages_of_alice(&site, &["/"]).await.try_into().unwrap();
 
     assert!(
-        page.contains("<p>Please confirm your email; inviting others needs it.</p>"),
+        page.contains(
+            "<p>Please confirm your email. You won't be able to invite others until you do.</p>"
+        ),
         "{page}"
     );
     assert!(page.contains(">Send a new link</a>"), "{page}");

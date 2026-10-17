@@ -286,7 +286,7 @@ async fn members_and_admins_alike_invite_nobody_until_they_confirm_their_email()
 }
 
 const NEEDS_A_CONFIRMED_EMAIL: &str =
-    r#"<p class="invite-reason">Inviting others needs a confirmed email.</p>"#;
+    r#"<p class="invite-reason">You can't invite others until you confirm your email.</p>"#;
 
 #[tokio::test]
 async fn the_tab_tells_an_unconfirmed_member_why_and_where_to_confirm_instead_of_a_count() {

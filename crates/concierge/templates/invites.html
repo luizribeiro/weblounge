@@ -8,7 +8,7 @@
       <section class="card tab-card invites" aria-labelledby="invites-title">
         <h2 class="eyebrow" id="invites-title">Your invites</h2>
         {%- if let Some(unconfirmed) = invites.unconfirmed %}
-        <p class="invite-reason">Inviting others needs a confirmed email.</p>
+        <p class="invite-reason">You can't invite others until you confirm your email.</p>
         <p class="hint">{% if unconfirmed.sent() %}Open the link we emailed you, or get a new one from the Account tab.{% else %}We haven't sent you a link to confirm it yet; send one from the Account tab.{% endif %}</p>
         <div class="invite-actions">
           <a class="button button-primary" href="{{ crate::routes::verify::ACCOUNT_EMAIL }}">Confirm your email</a>
