@@ -24,7 +24,7 @@
         </form>
       </section>
       <section class="card tab-card" id="email-and-news" aria-labelledby="email-title">
-        <h2 class="eyebrow" id="email-title">Email and news</h2>
+        <h2 class="eyebrow" id="email-title">Email</h2>
         {%- if flash.saved.is_some() %}
         <p class="notice" role="status">Saved.</p>
         {%- endif %}
@@ -52,10 +52,7 @@
             <p class="hint" id="email-hint">{% if unconfirmed.is_some() %}Not confirmed yet{% else %}Confirmed{% endif %}. For account recovery.</p>
             {%- endif %}
           </div>
-          <label class="check">
-            <input name="news" type="checkbox"{% if settings.news %} checked{% endif %}>
-            <span>Occasional news by email</span>
-          </label>
+          {%- call components::news_opt_in(settings.news) %}{% endcall %}
           <button class="button button-primary" type="submit">Save</button>
         </form>
       </section>

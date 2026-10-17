@@ -1,7 +1,7 @@
 use axum::http::header;
 use concierge::{db, rate_limit::LINKS_PER_DAY, tree, verification_mail, verification_rules};
 
-use crate::{Site, body_text, confirm, execute, location, verification_link};
+use crate::{NEWS_LABEL, Site, body_text, confirm, execute, location, verification_link};
 
 const HOUR: i64 = 60 * 60;
 
@@ -91,6 +91,8 @@ async fn shows_the_email_and_news_settings() {
         page.contains(r#"<input name="news" type="checkbox">"#),
         "{page}"
     );
+    assert!(page.contains(NEWS_LABEL), "{page}");
+    assert!(page.contains(r#"id="email-title">Email</h2>"#), "{page}");
     assert!(!page.contains("Saved."), "{page}");
 }
 

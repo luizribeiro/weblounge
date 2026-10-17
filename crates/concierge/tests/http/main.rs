@@ -52,6 +52,8 @@ const JOIN_URL: &str = "https://join.weblounge.org";
 const SESSION_KEY: &[u8] = b"a session key for tests, at least 32 bytes";
 const PASSWORD: &str = "correct-horse-battery";
 const INTROSPECTION_SECRET: &str = "a secret Ergo introspects tokens with";
+/// The label of the checkbox for announcements, on signup and the Account tab.
+const NEWS_LABEL: &str = r#"<span>Email me about new features and planned downtime <span class="hint check-hint">A few times a year at most.</span></span>"#;
 
 struct Site {
     router: Router,

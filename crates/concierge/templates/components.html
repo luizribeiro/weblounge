@@ -93,3 +93,10 @@
           {{ caller() }}
         </form>
 {%- endmacro %}
+
+{% macro news_opt_in(checked) %}
+          <label class="check">
+            <input name="news" type="checkbox"{% if checked %} checked{% endif %}>
+            <span>Email me about new features and planned downtime <span class="hint check-hint">A few times a year at most.</span></span>
+          </label>
+{%- endmacro %}

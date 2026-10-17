@@ -1,7 +1,7 @@
 use concierge::invite_rules::LIFETIME;
 use regex::Regex;
 
-use crate::{Site, body_text};
+use crate::{NEWS_LABEL, Site, body_text};
 
 const CODE: &str = "q7Hx2mZp9vLcT4wRfBa-_w";
 
@@ -42,6 +42,7 @@ async fn the_signup_page_asks_for_the_code_and_the_account() {
         r#"name="password" type="password" required minlength="12" autocomplete="new-password""#,
         r#"name="confirmation" type="password" required autocomplete="new-password""#,
         r#"<input name="news" type="checkbox">"#,
+        NEWS_LABEL,
         r#"<li data-rule="not-common">not a common password</li>"#,
         r#"<a href="/rules">house rules</a>"#,
     ] {

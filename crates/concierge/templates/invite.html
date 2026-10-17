@@ -45,10 +45,7 @@
               {%- endif %}
             </div>
             {%- call components::new_password("Password", form.password) %}{% endcall %}
-            <label class="check">
-              <input name="news" type="checkbox"{% if form.news %} checked{% endif %}>
-              <span>Occasional updates by email</span>
-            </label>
+            {%- call components::news_opt_in(form.news) %}{% endcall %}
             <button class="button button-primary" type="submit">Join</button>
             <p class="hint">Joining means you agree to the <a href="/rules">house rules</a>.</p>
           </form>
