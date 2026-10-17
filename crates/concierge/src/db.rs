@@ -3,7 +3,10 @@ use std::{path::Path, time::SystemTime};
 use anyhow::Context;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
-use crate::{invite_code, invite_rules, link_code, sqlite, tree::Branch, verification_rules};
+use crate::{
+    invite_code, invite_rules, link_code, oauth::CodeChallenge, sqlite, tree::Branch,
+    verification_rules,
+};
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -66,7 +69,7 @@ pub struct NewAuthorizationCode<'a> {
     pub session_hash: &'a [u8],
     pub client_id: &'a str,
     pub redirect_uri: &'a str,
-    pub code_challenge: &'a str,
+    pub code_challenge: &'a CodeChallenge,
     pub expires_at: i64,
 }
 
@@ -76,7 +79,7 @@ pub struct AuthorizationCode {
     pub session_hash: Vec<u8>,
     pub client_id: String,
     pub redirect_uri: String,
-    pub code_challenge: String,
+    pub code_challenge: CodeChallenge,
     pub expires_at: i64,
 }
 
@@ -779,6 +782,7 @@ impl Db {
         sqlx::query!("DELETE FROM oauth_codes WHERE expires_at <= ?", now)
             .execute(&self.pool)
             .await?;
+        let code_challenge = code.code_challenge.as_str();
         sqlx::query!(
             "INSERT INTO oauth_codes
                  (code_hash, session_hash, client_id, redirect_uri, code_challenge, expires_at)
@@ -787,7 +791,7 @@ impl Db {
             code.session_hash,
             code.client_id,
             code.redirect_uri,
-            code.code_challenge,
+            code_challenge,
             code.expires_at,
         )
         .execute(&self.pool)
@@ -796,19 +800,28 @@ impl Db {
     }
 
     /// Removes the code that hashes to `code_hash` and answers it, so no
-    /// code is used twice, even by requests racing each other.
+    /// code is used twice, even by requests racing each other. A code whose
+    /// stored challenge isn't one is gone all the same, and redeems nothing.
     pub async fn take_authorization_code(
         &self,
         code_hash: &[u8],
     ) -> sqlx::Result<Option<AuthorizationCode>> {
-        sqlx::query_as!(
-            AuthorizationCode,
+        let row = sqlx::query!(
             "DELETE FROM oauth_codes WHERE code_hash = ?
              RETURNING session_hash, client_id, redirect_uri, code_challenge, expires_at",
             code_hash
         )
         .fetch_optional(&self.pool)
-        .await
+        .await?;
+        Ok(row.and_then(|row| {
+            Some(AuthorizationCode {
+                code_challenge: CodeChallenge::parse(&row.code_challenge)?,
+                session_hash: row.session_hash,
+                client_id: row.client_id,
+                redirect_uri: row.redirect_uri,
+                expires_at: row.expires_at,
+            })
+        }))
     }
 
     /// Stores an access token, cleaning up expired ones while at it.
@@ -1099,6 +1112,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::sqlite::tests::files_contain;
     use sqlx::sqlite::SqliteConnectOptions;
+    use std::sync::LazyLock;
 
     pub async fn temp_db() -> (Db, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -2178,6 +2192,11 @@ pub(crate) mod tests {
         }
     }
 
+    /// RFC 7636, appendix B.
+    static CHALLENGE: LazyLock<CodeChallenge> = LazyLock::new(|| {
+        CodeChallenge::parse("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM").unwrap()
+    });
+
     fn code<'a>(
         session_hash: &'a [u8],
         code_hash: &'a [u8],
@@ -2188,7 +2207,7 @@ pub(crate) mod tests {
             session_hash,
             client_id: "gamja",
             redirect_uri: "https://irc.weblounge.org/",
-            code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+            code_challenge: &CHALLENGE,
             expires_at,
         }
     }
@@ -2220,12 +2239,30 @@ pub(crate) mod tests {
                 session_hash: b"\xa1".to_vec(),
                 client_id: "gamja".into(),
                 redirect_uri: "https://irc.weblounge.org/".into(),
-                code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".into(),
+                code_challenge: CHALLENGE.clone(),
                 expires_at: 60,
             }
         );
         assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
         assert_eq!(db.take_authorization_code(b"\xff").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn a_code_with_a_malformed_challenge_is_taken_but_not_handed_back() {
+        let (db, _dir) = with_sessions().await;
+        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE oauth_codes SET code_challenge = 'plain'")
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
+        let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM oauth_codes")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(left, 0);
     }
 
     #[tokio::test]

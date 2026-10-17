@@ -62,7 +62,7 @@ pub struct AuthorizationRequest {
 pub struct Authorization {
     pub redirect_uri: String,
     pub state: String,
-    pub code_challenge: String,
+    pub code_challenge: CodeChallenge,
 }
 
 /// Why an authorization request was refused.
@@ -101,7 +101,8 @@ impl AuthorizationRequest {
         }
         let code_challenge = self
             .code_challenge
-            .filter(|challenge| is_challenge(challenge))
+            .as_deref()
+            .and_then(CodeChallenge::parse)
             .filter(|_| self.code_challenge_method.as_deref() == Some("S256"))
             .ok_or_else(|| invalid("invalid_request"))?;
         let state = state.clone().ok_or_else(|| invalid("invalid_request"))?;
@@ -179,21 +180,33 @@ impl TokenRequest {
     }
 }
 
-fn is_challenge(challenge: &str) -> bool {
-    challenge.len() == CHALLENGE_LENGTH
-        && challenge
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+/// An S256 code challenge: public, since it travels in the authorization URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeChallenge(String);
+
+impl CodeChallenge {
+    /// `value` as a challenge, if it could be a SHA-256 in unpadded base64url.
+    pub fn parse(value: &str) -> Option<Self> {
+        let well_formed = value.len() == CHALLENGE_LENGTH
+            && value
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_');
+        well_formed.then(|| Self(value.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// Whether `verifier` is the one `challenge` was made from, by S256.
-pub fn verifies(verifier: &str, challenge: &str) -> bool {
+pub fn verifies(verifier: &str, challenge: &CodeChallenge) -> bool {
     let well_formed = VERIFIER_LENGTHS.contains(&verifier.len())
         && verifier
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"-._~".contains(&c));
     let derived = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    well_formed && bool::from(derived.as_bytes().ct_eq(challenge.as_bytes()))
+    well_formed && bool::from(derived.as_bytes().ct_eq(challenge.0.as_bytes()))
 }
 
 /// Whether an `Authorization` header authenticates Ergo with `secret`,
@@ -233,6 +246,14 @@ mod tests {
     const CHALLENGE: &str = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
     const SECRET: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
+    fn challenge() -> CodeChallenge {
+        CodeChallenge::parse(CHALLENGE).unwrap()
+    }
+
+    fn s256(verifier: &str) -> CodeChallenge {
+        CodeChallenge::parse(&URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))).unwrap()
+    }
+
     fn webchat() -> Webchat {
         Webchat {
             origin: "https://irc.weblounge.org".into(),
@@ -265,7 +286,7 @@ mod tests {
             Ok(Authorization {
                 redirect_uri: "https://irc.weblounge.org/".into(),
                 state: gamja().state.unwrap(),
-                code_challenge: CHALLENGE.into(),
+                code_challenge: challenge(),
             })
         );
     }
@@ -428,7 +449,7 @@ mod tests {
             session_hash: vec![0xa1],
             client_id: "gamja".into(),
             redirect_uri: "https://irc.weblounge.org/".into(),
-            code_challenge: CHALLENGE.into(),
+            code_challenge: challenge(),
             expires_at: ISSUED + CODE_LIFETIME,
         }
     }
@@ -477,8 +498,29 @@ mod tests {
     }
 
     #[test]
+    fn a_challenge_is_43_characters_of_base64url() {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        for value in [CHALLENGE, &alphabet[..43], &alphabet[21..]] {
+            assert_eq!(CodeChallenge::parse(value).map(|c| c.0), Some(value.into()));
+        }
+        for value in [
+            "",
+            &CHALLENGE[1..],
+            &format!("{CHALLENGE}A"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw+cM",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw/cM",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-c=",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw.cM",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw~cM",
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSst\u{e9}cM",
+        ] {
+            assert_eq!(CodeChallenge::parse(value), None, "{value}");
+        }
+    }
+
+    #[test]
     fn verifies_the_rfc_example() {
-        assert!(verifies(VERIFIER, CHALLENGE));
+        assert!(verifies(VERIFIER, &challenge()));
     }
 
     #[test]
@@ -491,20 +533,21 @@ mod tests {
             CHALLENGE,
             &long,
         ] {
-            assert!(!verifies(verifier, CHALLENGE), "{verifier}");
+            assert!(!verifies(verifier, &challenge()), "{verifier}");
         }
-        assert!(!verifies(VERIFIER, VERIFIER));
+        assert!(!verifies(
+            VERIFIER,
+            &CodeChallenge::parse(VERIFIER).unwrap()
+        ));
     }
 
     #[test]
     fn refuses_verifiers_outside_rfc_7636s_alphabet_and_lengths() {
         for verifier in ["a".repeat(42), format!("{} ", "a".repeat(43))] {
-            let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-            assert!(!verifies(&verifier, &challenge), "{verifier:?}");
+            assert!(!verifies(&verifier, &s256(&verifier)), "{verifier:?}");
         }
         let longest = "~".repeat(128);
-        let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(longest.as_bytes()));
-        assert!(verifies(&longest, &challenge));
+        assert!(verifies(&longest, &s256(&longest)));
     }
 
     #[test]
