@@ -21,6 +21,20 @@ pub fn from_input(input: &str) -> &str {
     input.rsplit(['#', '/']).next().unwrap_or(input)
 }
 
+/// The code of `length` characters in `input`, as [`from_input`] reads
+/// it, if that's what it holds.
+pub fn parse(input: &str, length: usize) -> Option<&str> {
+    let code = from_input(input);
+    let well_formed = code.len() == length && code.bytes().all(|c| ALPHABET.contains(&c));
+    well_formed.then_some(code)
+}
+
+/// What [`parse`] accepts, as a form field's `pattern`. The escapes keep
+/// it valid in the `v` mode browsers compile patterns in.
+pub fn html_pattern(length: usize) -> String {
+    format!(r"\s*(?:.*[#\/])?[A-Za-z0-9_\-]{{{length}}}\s*")
+}
+
 /// What the database keeps of `code`. A plain hash is enough: codes are
 /// random and long, so nobody can search for one that hashes the same.
 pub fn hash(code: &str) -> Vec<u8> {
@@ -55,6 +69,55 @@ mod tests {
             assert_eq!(from_input(input), code, "{input:?}");
         }
         assert_eq!(from_input(""), "");
+    }
+
+    #[test]
+    fn parses_only_codes_of_the_length_and_alphabet() {
+        let code = "q7Hx2mZp9vLcT4wRfBa-_w";
+        let link = format!("https://members.weblounge.org/verify#{code}");
+        assert_eq!(parse(&link, 22), Some(code));
+        assert_eq!(parse(&format!(" {code}\n"), 22), Some(code));
+        assert_eq!(parse(code, 21), None);
+        assert_eq!(parse(code, 23), None);
+        for bad in [
+            "q7Hx2mZp9vLcT4wRfBa+_w",
+            "q7Hx2mZp9vLcT4wRfBa=_w",
+            "q7Hx2mZp9vLcT4wRfBaé_",
+        ] {
+            assert_eq!(parse(bad, 22), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_html_pattern_accepts_exactly_what_parse_accepts() {
+        let pattern = regex::Regex::new(&format!("^(?:{})$", html_pattern(4))).unwrap();
+        let mut inputs: Vec<String> = (0..=127u8)
+            .map(|c| format!("ab{}d", char::from(c)))
+            .collect();
+        inputs.extend(
+            [
+                "abcd",
+                " abcd\t",
+                "https://members.weblounge.org/verify#abcd",
+                "see https://join.weblounge.org/#ab-_ ",
+                "x/abcd",
+                "abc",
+                "abcde",
+                "abcd#",
+                "#abcd/",
+                "ab cd",
+                "abçd",
+                "",
+            ]
+            .map(String::from),
+        );
+        for input in inputs {
+            assert_eq!(
+                pattern.is_match(&input),
+                parse(&input, 4).is_some(),
+                "{input:?}"
+            );
+        }
     }
 
     #[test]
