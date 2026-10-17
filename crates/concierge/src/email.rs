@@ -1,5 +1,5 @@
-//! Which email addresses members may give. Nothing is sent yet, so this
-//! only catches typos; the address stays unverified.
+//! Which email addresses members may give. This only catches typos: the
+//! link mailed to an address is what proves it works.
 
 use std::fmt;
 
