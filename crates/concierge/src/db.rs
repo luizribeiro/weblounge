@@ -215,6 +215,8 @@ pub struct IssuedCode {
     /// The address it verifies, and goes to.
     pub email: String,
     pub expires_at: i64,
+    /// When the member's grace period ends.
+    pub deadline: i64,
 }
 
 /// A code that verifies a member's email, as the database keeps it.
@@ -351,7 +353,8 @@ impl Db {
             r#"UPDATE members
                SET verification_first_sent_at = COALESCE(verification_first_sent_at, ?)
                WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NULL
-               RETURNING account AS "account!", email AS "email!""#,
+               RETURNING account AS "account!", email AS "email!",
+                         verification_first_sent_at AS "first_sent_at!""#,
             now,
             account,
         )
@@ -390,6 +393,7 @@ impl Db {
             account: member.account,
             email: member.email,
             expires_at,
+            deadline: verification_rules::deadline(member.first_sent_at),
         }))
     }
 
@@ -1889,6 +1893,8 @@ pub(crate) mod tests {
         let second = issue(&db, "alice", MAILED + 60).await;
 
         assert_ne!(first.code, second.code);
+        assert_eq!(first.deadline, verification_rules::deadline(MAILED));
+        assert_eq!(second.deadline, first.deadline);
         let first = db.verification_code(&first.code).await.unwrap().unwrap();
         assert_eq!(first.replaced_at, Some(MAILED + 60));
         assert_eq!(
