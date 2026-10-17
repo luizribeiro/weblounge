@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO verification_codes (code_hash, account, email, created_at, expires_at)\n             VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "f40b25fe0cf079be73ac06b872656e17f374e176acd49833e460d4a5fb91766c"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE verification_codes SET replaced_at = ? WHERE account = ? AND replaced_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "0fb9d25f28f1ba108b90490ba0f6bea49038c14c9633669c454cd86380655d73"
+}

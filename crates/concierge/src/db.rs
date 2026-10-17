@@ -3,7 +3,7 @@ use std::{path::Path, time::SystemTime};
 use anyhow::Context;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
-use crate::{invite_code, invite_rules, sqlite, tree::Branch};
+use crate::{invite_code, invite_rules, link_code, sqlite, tree::Branch, verification_rules};
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -40,6 +40,10 @@ pub struct Member {
     pub joined_at: i64,
     pub is_admin: bool,
     pub removed_at: Option<i64>,
+    /// When the first email to verify their address went out, which
+    /// starts their grace period.
+    pub verification_first_sent_at: Option<i64>,
+    pub verification_reminded_at: Option<i64>,
 }
 
 /// A member's name, and whether only their placeholder is left.
@@ -202,6 +206,38 @@ pub struct BotAccount {
     pub owner_removed: bool,
 }
 
+/// A code just issued to verify a member's email, to mail to them once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssuedCode {
+    pub code: String,
+    /// Ergo's canonical spelling of the member's account name.
+    pub account: String,
+    /// The address it verifies, and goes to.
+    pub email: String,
+    pub expires_at: i64,
+}
+
+/// A code that verifies a member's email, as the database keeps it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerificationCode {
+    pub account: String,
+    /// The address it was sent to, the only one it verifies.
+    pub email: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub replaced_at: Option<i64>,
+}
+
+impl VerificationCode {
+    pub fn status(&self, now: i64) -> verification_rules::Status {
+        let code = verification_rules::Code {
+            expires_at: self.expires_at,
+            replaced_at: self.replaced_at,
+        };
+        code.status(now)
+    }
+}
+
 /// Concierge's SQLite database, migrated to the schema this build knows.
 #[derive(Clone)]
 pub struct Db {
@@ -243,7 +279,8 @@ impl Db {
         sqlx::query_as!(
             Member,
             r#"SELECT account AS "account!", email, email_verified_at, news_opt_in,
-                      invited_by, joined_at, is_admin, removed_at
+                      invited_by, joined_at, is_admin, removed_at,
+                      verification_first_sent_at, verification_reminded_at
                FROM members WHERE account = ?"#,
             account
         )
@@ -272,6 +309,67 @@ impl Db {
         .execute(&self.pool)
         .await
         .map(drop)
+    }
+
+    /// Issues a code that verifies `account`'s current email, to be mailed
+    /// at `now`, replacing any code they had; the first one starts their
+    /// grace period. Cleans up everyone's expired codes while at it.
+    /// Answers `None` unless `account` is a current, unverified member.
+    pub async fn issue_verification_code(
+        &self,
+        account: &str,
+        now: i64,
+    ) -> sqlx::Result<Option<IssuedCode>> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let member = sqlx::query!(
+            r#"UPDATE members
+               SET verification_first_sent_at = COALESCE(verification_first_sent_at, ?)
+               WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NULL
+               RETURNING account AS "account!", email AS "email!""#,
+            now,
+            account,
+        )
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(member) = member else {
+            return Ok(None);
+        };
+        sqlx::query!("DELETE FROM verification_codes WHERE expires_at <= ?", now)
+            .execute(&mut *transaction)
+            .await?;
+        sqlx::query!(
+            "UPDATE verification_codes SET replaced_at = ? WHERE account = ? AND replaced_at IS NULL",
+            now,
+            member.account,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        let code = link_code::generate(verification_rules::CODE_LENGTH);
+        let code_hash = link_code::hash(&code);
+        let expires_at = verification_rules::expires_at(now);
+        sqlx::query!(
+            "INSERT INTO verification_codes (code_hash, account, email, created_at, expires_at)
+             VALUES (?, ?, ?, ?, ?)",
+            code_hash,
+            member.account,
+            member.email,
+            now,
+            expires_at,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(Some(IssuedCode {
+            code,
+            account: member.account,
+            email: member.email,
+            expires_at,
+        }))
+    }
+
+    /// The verification code `code`, while it's on file.
+    pub async fn verification_code(&self, code: &str) -> sqlx::Result<Option<VerificationCode>> {
+        verification_code(&self.pool, &link_code::hash(code)).await
     }
 
     /// Every member's account, removed ones included.
@@ -743,6 +841,20 @@ async fn insert_member(
     .execute(executor)
     .await
     .map(drop)
+}
+
+async fn verification_code(
+    executor: impl SqliteExecutor<'_>,
+    code_hash: &[u8],
+) -> sqlx::Result<Option<VerificationCode>> {
+    sqlx::query_as!(
+        VerificationCode,
+        "SELECT account, email, created_at, expires_at, replaced_at
+         FROM verification_codes WHERE code_hash = ?",
+        code_hash
+    )
+    .fetch_optional(executor)
+    .await
 }
 
 async fn insert_invite(
@@ -1235,6 +1347,8 @@ pub(crate) mod tests {
                 joined_at: 10,
                 is_admin: false,
                 removed_at: Some(200),
+                verification_first_sent_at: None,
+                verification_reminded_at: None,
             }
         );
         for (code, redeemed_by, revoked_at) in [
@@ -1626,6 +1740,109 @@ pub(crate) mod tests {
         let alice = db.member("alice").await.unwrap().unwrap();
         assert_eq!(alice.email.as_deref(), Some("alice@example.net"));
         assert_eq!((alice.email_verified_at, alice.news_opt_in), (None, false));
+    }
+
+    const MAILED: i64 = 1_760_000_000;
+
+    /// alice and bob, who haven't verified their emails, and carol, who has.
+    async fn with_unverified_members() -> (Db, tempfile::TempDir) {
+        let (db, dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, email_verified_at, joined_at)
+             VALUES ('Alice', 'alice@example.org', NULL, 0),
+                    ('bob', 'bob@example.org', NULL, 0),
+                    ('carol', 'carol@example.org', 1, 0);",
+        )
+        .await
+        .unwrap();
+        (db, dir)
+    }
+
+    async fn issue(db: &Db, account: &str, now: i64) -> IssuedCode {
+        db.issue_verification_code(account, now)
+            .await
+            .unwrap()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn issuing_a_code_binds_it_to_the_member_and_their_address() {
+        let (db, dir) = with_unverified_members().await;
+
+        let issued = issue(&db, "alice", MAILED).await;
+
+        assert_eq!(issued.code.len(), verification_rules::CODE_LENGTH);
+        let expires_at = verification_rules::expires_at(MAILED);
+        assert_eq!(
+            (
+                issued.account.as_str(),
+                issued.email.as_str(),
+                issued.expires_at
+            ),
+            ("Alice", "alice@example.org", expires_at)
+        );
+        assert_eq!(
+            db.verification_code(&issued.code).await.unwrap(),
+            Some(VerificationCode {
+                account: "Alice".into(),
+                email: "alice@example.org".into(),
+                created_at: MAILED,
+                expires_at,
+                replaced_at: None,
+            })
+        );
+        assert!(!files_contain(&dir, issued.code.as_bytes()));
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert_eq!(alice.verification_first_sent_at, Some(MAILED));
+    }
+
+    #[tokio::test]
+    async fn a_new_code_replaces_the_old_and_the_grace_period_keeps_its_start() {
+        let (db, _dir) = with_unverified_members().await;
+        let first = issue(&db, "alice", MAILED).await;
+        let bobs = issue(&db, "bob", MAILED).await;
+
+        let second = issue(&db, "alice", MAILED + 60).await;
+
+        assert_ne!(first.code, second.code);
+        let first = db.verification_code(&first.code).await.unwrap().unwrap();
+        assert_eq!(first.replaced_at, Some(MAILED + 60));
+        assert_eq!(
+            first.status(MAILED + 60),
+            verification_rules::Status::Replaced
+        );
+        for live in [second.code, bobs.code] {
+            let live = db.verification_code(&live).await.unwrap().unwrap();
+            assert_eq!(live.status(MAILED + 60), verification_rules::Status::Live);
+        }
+        let alice = db.member("alice").await.unwrap().unwrap();
+        assert_eq!(alice.verification_first_sent_at, Some(MAILED));
+    }
+
+    #[tokio::test]
+    async fn issuing_a_code_clears_out_expired_ones() {
+        let (db, _dir) = with_unverified_members().await;
+        let old = issue(&db, "alice", MAILED).await;
+        let expired = verification_rules::expires_at(MAILED);
+        let stale = db.verification_code(&old.code).await.unwrap().unwrap();
+        assert_eq!(stale.status(expired), verification_rules::Status::Expired);
+
+        issue(&db, "bob", expired).await;
+
+        assert_eq!(db.verification_code(&old.code).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn verified_removed_and_unknown_members_get_no_code() {
+        let (db, _dir) = with_unverified_members().await;
+        db.remove_member("bob", MAILED).await.unwrap();
+        for account in ["carol", "bob", "nobody"] {
+            let issued = db.issue_verification_code(account, MAILED).await.unwrap();
+            assert_eq!(issued, None, "{account}");
+        }
+        let carol = db.member("carol").await.unwrap().unwrap();
+        assert_eq!(carol.verification_first_sent_at, None);
     }
 
     fn code<'a>(
