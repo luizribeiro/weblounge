@@ -188,10 +188,7 @@ pub struct CodeChallenge(String);
 impl CodeChallenge {
     /// `value` as a challenge, if it could be a SHA-256 in unpadded base64url.
     pub fn parse(value: &str) -> Option<Self> {
-        let well_formed = value.len() == CHALLENGE_LENGTH
-            && value
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_');
+        let well_formed = value.len() == CHALLENGE_LENGTH && is_alphanumeric_or(value, b"-_");
         well_formed.then(|| Self(value.to_owned()))
     }
 
@@ -207,12 +204,16 @@ pub struct CodeVerifier(String);
 impl CodeVerifier {
     /// `value` as a verifier, if RFC 7636 allows it.
     pub fn parse(value: &str) -> Option<Self> {
-        let well_formed = VERIFIER_LENGTHS.contains(&value.len())
-            && value
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || b"-._~".contains(&c));
+        let well_formed =
+            VERIFIER_LENGTHS.contains(&value.len()) && is_alphanumeric_or(value, b"-._~");
         well_formed.then(|| Self(value.to_owned()))
     }
+}
+
+fn is_alphanumeric_or(value: &str, punctuation: &[u8]) -> bool {
+    value
+        .bytes()
+        .all(|c| c.is_ascii_alphanumeric() || punctuation.contains(&c))
 }
 
 /// Whether `verifier` is the one `challenge` was made from, by S256.
