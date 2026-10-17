@@ -148,20 +148,26 @@ pub async fn update(
 ) -> Response {
     let account = &me.member.account;
     let news = settings.news.is_some();
+    let refuse = |error: String| {
+        let forms = Forms {
+            settings: Some(SettingsForm {
+                email: &settings.email,
+                news,
+                email_error: Some(error),
+            }),
+            ..Forms::default()
+        };
+        page(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms)
+    };
     let email = match Email::parse(&settings.email) {
         Ok(email) => email,
-        Err(error) => {
-            let forms = Forms {
-                settings: Some(SettingsForm {
-                    email: &settings.email,
-                    news,
-                    email_error: Some(error.to_string()),
-                }),
-                ..Forms::default()
-            };
-            return page(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms).await;
-        }
+        Err(error) => return refuse(error.to_string()).await,
     };
+    match app.db.email_taken(email.as_str(), account).await {
+        Ok(false) => {}
+        Ok(true) => return refuse(email::TAKEN.to_owned()).await,
+        Err(error) => return internal_error("Looking up an email", error),
+    }
     if let Err(error) = app.db.update_settings(account, email.as_str(), news).await {
         return internal_error("Saving settings", error);
     }

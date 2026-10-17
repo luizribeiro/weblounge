@@ -385,3 +385,47 @@ async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
     assert_eq!(member.email.as_deref(), Some("alice@example.net"));
     assert_eq!(site.mail().await.len(), 1);
 }
+
+#[tokio::test]
+async fn an_address_another_member_verified_is_refused_in_any_case() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.add_member("bob").await;
+    site.execute(
+        "UPDATE members SET email = 'bob@example.org', email_verified_at = 1 WHERE account = 'bob'",
+    )
+    .await;
+    let cookie = site.sign_in("alice").await;
+
+    let form = [("email", "BOB@example.org"), ("news", "on")];
+    let response = site.post("/settings", &form, Some(&cookie)).await;
+
+    assert_eq!(response.status(), 422);
+    let page = body_text(response).await;
+    assert!(
+        page.contains(
+            r#"<p class="field-error" id="email-hint">Another member uses that address.</p>"#
+        ),
+        "{page}"
+    );
+    assert!(page.contains(r#"value="BOB@example.org""#), "{page}");
+    let alice = site.db.member("alice").await.unwrap().unwrap();
+    assert_eq!(alice.email.as_deref(), Some("someone@example.org"));
+    assert!(site.mail().await.is_empty());
+}
+
+#[tokio::test]
+async fn a_member_keeps_their_own_verified_address() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.execute("UPDATE members SET email_verified_at = 1")
+        .await;
+    let cookie = site.sign_in("alice").await;
+
+    let form = [("email", "someone@example.org"), ("news", "on")];
+    let response = site.post("/settings", &form, Some(&cookie)).await;
+
+    assert_eq!(location(&response), "/account?saved#email-and-news");
+    let alice = site.db.member("alice").await.unwrap().unwrap();
+    assert!(alice.news_opt_in && alice.email_verified_at.is_some());
+}
