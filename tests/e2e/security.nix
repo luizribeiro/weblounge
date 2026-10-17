@@ -11,12 +11,15 @@ in
 vmTest {
   credenza = { config, lib, pkgs, ... }:
     let
-      # as-<unit> runs a command confined the way the unit is.
+      # as-<unit> runs a command confined the way the unit is, from the
+      # store, as a unit may not see /run/current-system.
+      bins = lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.getent ];
       confinedAs = unit: pkgs.writeShellScriptBin "as-${unit}" ''
-        exec systemd-run --quiet --pipe --wait --collect --service-type=exec --setenv=PATH="$PATH" \
+        PATH=${bins}:$PATH
+        exec systemd-run --quiet --pipe --wait --collect --service-type=exec --setenv=PATH=${bins} \
           ${lib.escapeShellArgs (config.weblounge.runProperties
             (removeAttrs config.systemd.services.${unit}.serviceConfig [ "ExecStart" "Restart" ]))} \
-          "$@"
+          "$(command -v "$1")" "''${@:2}"
       '';
     in
     {

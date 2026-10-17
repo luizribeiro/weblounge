@@ -192,6 +192,24 @@ with subtest("the mailer stops with its egress rules, and they come back when it
     credenza.succeed("systemctl is-active weblounge-egress")
     assert not mailer_reaches(internet_host, 443)
 
+with subtest("the mailer reaches nothing on credenza but resolved, and no private network"):
+    [private] = re.findall(r"inet (192\.168\.[\d.]+)/", client.succeed("ip -4 -o addr show dev eth1"))
+    for address, port in [("127.0.0.1", 8089), ("127.0.0.1", 8080), (private, 465)]:
+        assert not mailer_reaches(address, port), (address, port)
+    credenza.succeed("as-concierge-mailer getent hosts _gateway")
+    bind = shlex.quote("import socket; socket.socket().bind(('0.0.0.0', 9001))")
+    credenza.fail(f"as-concierge-mailer {tools['python3']} -c {bind}")
+
+with subtest("the mailer sees the outbox, the store and /etc, and none of credenza's other state"):
+    assert credenza.succeed("as-concierge-mailer ls /var/lib").split() == ["concierge-outbox"]
+    for path in ["/run/secrets", "/run/current-system", "/var/lib/concierge", "/var/log"]:
+        credenza.fail(f"as-concierge-mailer test -e {path}")
+    credenza.succeed("as-concierge-mailer test -r /etc/ssl/certs/ca-certificates.crt")
+    true_binary = credenza.succeed("readlink -f $(type -P true)").strip()
+    credenza.succeed(f"as-concierge-mailer bash -c 'cp {true_binary} /tmp/true && test -f /tmp/true'")
+    credenza.fail(f"as-concierge-mailer bash -c 'cp {true_binary} /tmp/true && /tmp/true'")
+    credenza.succeed("systemd-analyze security --threshold=11 --no-pager concierge-mailer.service")
+
 with subtest("concierge and its mailer share the outbox alone: neither sees the other's state or credentials"):
     credenza.wait_for_unit("concierge-mailer.service")
     uids = {

@@ -78,6 +78,7 @@ in
     readOnly = true;
     default = {
       path = outboxPath;
+      directory = outboxDir;
       unit = migrated // { serviceConfig = outboxAccess; };
     };
     description = "The outbox's database, and the settings of a unit that opens it once it's migrated.";
