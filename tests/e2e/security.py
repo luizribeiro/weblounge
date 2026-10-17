@@ -162,6 +162,35 @@ with subtest("ergo, concierge with its migration and mailer, nginx, bender and t
     ]:
         credenza.succeed(f"systemd-analyze security --threshold=20 --no-pager {unit}.service")
 
+# A server on the Internet, as security.nix stands one in.
+internet_host = "198.51.100.2"
+
+
+def mailer_reaches(address: str, port: int) -> bool:
+    connect = shlex.quote(f"exec 3<>/dev/tcp/{address}/{port}")
+    status, _ = credenza.execute(f"as-mailer timeout 5 bash -c {connect}")
+    return status == 0
+
+
+with subtest("the mailer connects to port 465 alone, wherever it leads, and to resolved's stub for names"):
+    for port in [80, 443, 465]:
+        client.succeed(f"systemd-run --unit=listen-{port} nc -lk {port}")
+        client.wait_for_open_port(port)
+    credenza.succeed(f"timeout 5 bash -c 'exec 3<>/dev/tcp/{internet_host}/443'")
+    assert mailer_reaches(internet_host, 465)
+    assert not mailer_reaches(internet_host, 443)
+    assert not mailer_reaches(internet_host, 80)
+    assert mailer_reaches("127.0.0.53", 53)
+    elements = credenza.succeed("nft list set inet weblounge_egress concierge_mailer")
+    assert "concierge-mailer.service" in elements, elements
+
+with subtest("the mailer stops with its egress rules, and they come back when it starts"):
+    credenza.succeed("systemctl stop weblounge-egress")
+    credenza.fail("systemctl is-active concierge-mailer")
+    credenza.succeed("systemctl start concierge-mailer")
+    credenza.succeed("systemctl is-active weblounge-egress")
+    assert not mailer_reaches(internet_host, 443)
+
 with subtest("a client that doesn't log in with SASL is turned away, even from loopback"):
     for reply in [irc(), irc(machine=credenza, host="localhost")]:
         assert " 001 " not in reply and re.search(r"^ERROR .*SASL", reply, re.M), reply

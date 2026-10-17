@@ -6,7 +6,7 @@ let
   sender = "noreply@${domain}";
 in
 {
-  imports = [ ./concierge.nix ./sandbox.nix ./secrets.nix ];
+  imports = [ ./concierge.nix ./egress.nix ./sandbox.nix ./secrets.nix ];
 
   options.weblounge.mail.server = lib.mkOption {
     type = lib.types.str;
@@ -20,6 +20,9 @@ in
       fromSops = true;
       loadedBy = [ "concierge-mailer" ];
     };
+
+    # MXroute's addresses change, so the mailer is held to its port.
+    weblounge.egressPorts.concierge-mailer = [ 465 ];
 
     systemd.services.concierge-mailer = lib.mkMerge [
       config.weblounge.concierge.databaseUnit
