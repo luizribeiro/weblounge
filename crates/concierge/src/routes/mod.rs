@@ -22,18 +22,26 @@ use axum::{
 
 use serde::Deserialize;
 
-use crate::{app::App, assets::Assets, auth::Visitor};
+use crate::{
+    app::App,
+    assets::Assets,
+    auth::Visitor,
+    db::{self, Member},
+};
+use verify::Unconfirmed;
 
 /// What pages say when Ergo's API doesn't answer as it should.
 pub const ERGO_UNAVAILABLE: &str =
     "Can't reach the chat server. Nothing changed; try again in a minute.";
 
 /// What the shared layout around every page needs: the assets it links,
-/// who to greet in the header and which of their tabs is open.
+/// who to greet in the header, which of their tabs is open and whether to
+/// remind them to confirm their email.
 pub struct Layout<'a> {
     pub assets: &'a Assets,
     pub nick: Option<&'a str>,
     tab: Option<Tab>,
+    pub unconfirmed: Option<Unconfirmed>,
 }
 
 impl<'a> Layout<'a> {
@@ -42,6 +50,26 @@ impl<'a> Layout<'a> {
             assets: &app.assets,
             nick,
             tab: None,
+            unconfirmed: None,
+        }
+    }
+
+    /// The layout of `member`'s pages, reminding them to confirm their
+    /// email until they do. The Account and Invites tabs say so in their
+    /// own cards, so they use [`Layout::new`].
+    pub fn member(app: &'a App, member: &'a Member) -> Self {
+        Self {
+            unconfirmed: Unconfirmed::of(member, db::now()),
+            ..Self::new(app, Some(&member.account))
+        }
+    }
+
+    /// The layout of a page anyone may see, as [`Layout::member`] for
+    /// members.
+    pub fn visitor(app: &'a App, visitor: &'a Visitor) -> Self {
+        match &visitor.0 {
+            Some(signed_in) => Self::member(app, &signed_in.member),
+            None => Self::new(app, None),
         }
     }
 

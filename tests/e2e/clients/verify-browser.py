@@ -2,7 +2,9 @@
 checks the page offers a Confirm button that fits and is big enough to
 tap, with the code field showing only without JavaScript or for a link
 cut short; `confirm` presses it. `resend` signs in and asks the Account
-tab for a new link. Saves screenshots in /tmp/screens."""
+tab for a new link. `unconfirmed` signs in before confirming and checks
+the reminder on Home and the Invites tab's reason fit and lead to the
+Account tab. Saves screenshots in /tmp/screens."""
 
 import os
 import sys
@@ -80,12 +82,35 @@ def resend(page):
     print("asked for a new link")
 
 
+def unconfirmed(page):
+    reminder = page.locator(".email-reminder")
+    for name, width in WIDTHS.items():
+        page.set_viewport_size({"width": width, "height": 800})
+        page.goto(f"{MEMBERS}/")
+        expect(reminder).to_contain_text("Please confirm your email by")
+        assert reminder.get_by_role("link", name="Send a new link").bounding_box()["height"] >= 44, name
+        assert fits(page), name
+        page.screenshot(path=f"{SCREENS}/banner-{name}.png", full_page=True)
+
+        page.goto(f"{MEMBERS}/invites")
+        expect(page.get_by_text("Inviting others needs a confirmed email.")).to_be_visible()
+        expect(reminder).to_have_count(0)
+        confirm_link = page.get_by_role("link", name="Confirm your email")
+        assert confirm_link.bounding_box()["height"] >= 44, name
+        assert fits(page), name
+        page.screenshot(path=f"{SCREENS}/invites-unverified-{name}.png", full_page=True)
+    confirm_link.click()
+    page.wait_for_url(f"{MEMBERS}/account#email-and-news")
+    expect(reminder).to_have_count(0)
+    print("the reminder and the Invites tab lead to the Account tab")
+
+
 def main():
     action, *args = sys.argv[1:]
     os.makedirs(SCREENS, exist_ok=True)
-    if action == "resend":
+    if action in ("resend", "unconfirmed"):
         with signed_in(*args) as page:
-            resend(page)
+            {"resend": resend, "unconfirmed": unconfirmed}[action](page)
         return
     with browsing() as page:
         {"look": look, "confirm": confirm}[action](page, *args)

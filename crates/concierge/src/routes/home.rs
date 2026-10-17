@@ -17,7 +17,7 @@ struct Home<'a> {
 pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
     let nick = me.member.account.as_str();
     render(&Home {
-        layout: Layout::new(&app, Some(nick)).on(Tab::Home),
+        layout: Layout::member(&app, &me.member).on(Tab::Home),
         nick,
         webchat: &app.webchat,
     })

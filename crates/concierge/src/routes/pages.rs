@@ -23,13 +23,13 @@ struct Privacy<'a> {
 
 pub async fn rules(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&Rules {
-        layout: Layout::new(&app, visitor.nick()),
+        layout: Layout::visitor(&app, &visitor),
     })
 }
 
 pub async fn privacy(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&Privacy {
-        layout: Layout::new(&app, visitor.nick()),
+        layout: Layout::visitor(&app, &visitor),
         failed_sign_in_minutes: rate_limit::WINDOW.as_secs() / 60,
         link_lifetime: invite_rules::in_words(verification_rules::LIFETIME),
         outbox_wait: invite_rules::in_words(outbox::GIVE_UP_AFTER),

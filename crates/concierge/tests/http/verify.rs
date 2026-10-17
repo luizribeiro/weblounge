@@ -207,3 +207,92 @@ async fn an_address_gets_twenty_tries_then_waits() {
         .await;
     assert_eq!(response.status(), 200);
 }
+
+const REMINDER: &str = r#"<div class="notice email-status email-reminder">"#;
+
+/// The pages alice sees once signed in, by path.
+async fn pages_of_alice(site: &Site, paths: &[&str]) -> Vec<String> {
+    let cookie = site.sign_in("alice").await;
+    let mut pages = Vec::new();
+    for path in paths {
+        pages.push(body_text(site.get(path, Some(&cookie)).await).await);
+    }
+    pages
+}
+
+#[tokio::test]
+async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let first_sent_at = db::now() - 24 * 60 * 60;
+    site.execute(&format!(
+        "UPDATE members SET verification_first_sent_at = {first_sent_at}"
+    ))
+    .await;
+    let due = concierge::tree::date(verification_rules::deadline(first_sent_at));
+
+    let pages = pages_of_alice(&site, &["/", "/clients", "/privacy"]).await;
+
+    for page in &pages {
+        assert!(page.contains(REMINDER), "{page}");
+        assert!(
+            page.contains(&format!(
+                r#"Please confirm your email by <time datetime="{due}">{due}</time>; inviting others needs it.</p>"#
+            )),
+            "{page}"
+        );
+        assert!(
+            page.contains(r##"<a class="button button-small" href="/account#email-and-news">Send a new link</a>"##),
+            "{page}"
+        );
+    }
+    for page in pages_of_alice(&site, &["/account", "/invites"]).await {
+        assert!(!page.contains(REMINDER), "{page}");
+    }
+}
+
+#[tokio::test]
+async fn a_member_never_mailed_a_link_is_asked_to_send_one() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+
+    let [page] = pages_of_alice(&site, &["/"]).await.try_into().unwrap();
+
+    assert!(
+        page.contains("<p>Please confirm your email; inviting others needs it.</p>"),
+        "{page}"
+    );
+    assert!(
+        page.contains(r##"href="/account#email-and-news">Send a link</a>"##),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn a_member_past_the_date_is_reminded_without_it() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.execute("UPDATE members SET verification_first_sent_at = 0")
+        .await;
+
+    let [page] = pages_of_alice(&site, &["/"]).await.try_into().unwrap();
+
+    assert!(
+        page.contains("<p>Please confirm your email; inviting others needs it.</p>"),
+        "{page}"
+    );
+    assert!(page.contains(">Send a new link</a>"), "{page}");
+}
+
+#[tokio::test]
+async fn confirmed_members_and_guests_get_no_reminder() {
+    let site = Site::start().await;
+    site.add_verified_member("alice").await;
+
+    let pages = pages_of_alice(&site, &["/", "/clients", "/privacy"]).await;
+    let guest = body_text(site.get("/privacy", None).await).await;
+
+    for page in pages.iter().chain([&guest]) {
+        assert!(!page.contains(REMINDER), "{page}");
+    }
+}

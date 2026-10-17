@@ -43,7 +43,7 @@ struct Index<'a> {
 pub async fn index(State(app): State<AppState>, visitor: Visitor) -> Response {
     let nick = visitor.nick();
     render(&Index {
-        layout: Layout::new(&app, nick),
+        layout: Layout::visitor(&app, &visitor),
         nick,
         irc: &app.irc_server,
         clients: &CLIENTS,
@@ -61,7 +61,7 @@ pub async fn show(
     };
     let nick = visitor.nick();
     render(&Guide {
-        layout: Layout::new(&app, nick),
+        layout: Layout::visitor(&app, &visitor),
         nick,
         irc: &app.irc_server,
         client,
