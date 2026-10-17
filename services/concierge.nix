@@ -34,18 +34,12 @@ let
     serviceConfig = stateAccess;
   };
 
-  systemdValue = value: if lib.isBool value then lib.boolToYesNo value else toString value;
-
-  propertyFlags = lib.concatLists (lib.mapAttrsToList
-    (name: values: map (value: "--property=${name}=${systemdValue value}") (lib.toList values))
-    sharedProperties);
-
   admin = pkgs.writeShellApplication {
     name = "concierge-admin";
     text = ''
       exec ${config.security.wrapperDir}/sudo ${config.systemd.package}/bin/systemd-run \
         --quiet --pipe --wait --collect --service-type=exec \
-        ${lib.escapeShellArgs propertyFlags} \
+        ${lib.escapeShellArgs (config.weblounge.runProperties sharedProperties)} \
         ${concierge} "$@"
     '';
   };
