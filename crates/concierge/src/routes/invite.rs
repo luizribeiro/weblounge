@@ -196,7 +196,7 @@ async fn create_account(
     }
     let member = NewMember {
         account: account.nick.as_str(),
-        email: Some(account.email.as_str()),
+        email: account.email.as_str(),
         news_opt_in: account.news,
         invited_by: claim.created_by.as_deref(),
         joined_at: now,

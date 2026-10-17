@@ -105,7 +105,7 @@ impl Fixture {
     async fn insert_member(&self, account: &str, invited_by: Option<&str>) {
         let member = NewMember {
             account,
-            email: Some("someone@example.org"),
+            email: "someone@example.org",
             news_opt_in: false,
             invited_by,
             joined_at: 1_760_000_000,

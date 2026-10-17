@@ -21,7 +21,7 @@ pub fn now() -> i64 {
 pub struct NewMember<'a> {
     /// Ergo's canonical spelling of the account name.
     pub account: &'a str,
-    pub email: Option<&'a str>,
+    pub email: &'a str,
     pub news_opt_in: bool,
     /// `None` for a root of the invite tree.
     pub invited_by: Option<&'a str>,
@@ -1298,7 +1298,7 @@ pub(crate) mod tests {
     fn newcomer(account: &str, joined_at: i64) -> NewMember<'_> {
         NewMember {
             account,
-            email: Some("bob@example.org"),
+            email: "bob@example.org",
             news_opt_in: true,
             invited_by: Some("alice"),
             joined_at,
