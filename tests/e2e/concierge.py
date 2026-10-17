@@ -74,6 +74,15 @@ with subtest("concierge-admin runs concierge as the service does, with its state
     ), (service_uid, status)
     credenza.fail(concierge_admin_command("no-such-command"))
 
+with subtest("concierge-migrate brings the database up to date before concierge opens it"):
+    migrated = credenza.succeed("journalctl -o cat -u concierge-migrate")
+    assert "/var/lib/concierge/concierge.db is at migration 20261021120000" in migrated, migrated
+    credenza.succeed("systemctl stop concierge-migrate")
+    credenza.fail("systemctl is-active concierge")
+    credenza.succeed("systemctl start concierge")
+    credenza.succeed("systemctl is-active concierge-migrate")
+    credenza.wait_for_open_port(8080)
+
 with subtest("concierge's database lives in its state directory, private to the service"):
     modes = credenza.succeed(
         "stat -L -c %a /var/lib/private /var/lib/concierge /var/lib/concierge/concierge.db"

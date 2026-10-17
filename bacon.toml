@@ -1,6 +1,10 @@
 # `just concierge dev` runs this job; it sets the environment concierge reads.
 [jobs.serve]
-command = ["cargo", "run", "--color", "always", "--package", "concierge", "--", "serve"]
+# It migrates first, as concierge-migrate.service does on the server.
+command = [
+  "sh", "-c",
+  "cargo run --color always --package concierge -- migrate && exec cargo run --color always --package concierge -- serve",
+]
 need_stdout = true
 allow_warnings = true
 background = false

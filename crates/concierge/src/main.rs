@@ -1,11 +1,11 @@
 use clap::Parser;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::Path};
 
 use concierge::{
     admin::{self, Command},
     app::{self, App},
     assets::Assets,
-    config::{Config, MailerConfig},
+    config::{self, Config, MailerConfig},
     db::{self, Db},
     mailer::{self, Mailer},
     oauth::Webchat,
@@ -17,12 +17,20 @@ use tokio::net::TcpListener;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     match Command::parse() {
+        Command::Migrate => migrate(&config::database_from_env()?).await,
         Command::Serve => serve(Config::from_env()?).await,
         Command::Mailer => send_mail(MailerConfig::from_env()?).await,
         Command::Admin(command) => admin::run(command, &Config::from_env()?)
             .await
             .map(|output| print!("{output}")),
     }
+}
+
+async fn migrate(path: &Path) -> anyhow::Result<()> {
+    let db = Db::migrate(path).await?;
+    let version = db.migration_version().await?.unwrap_or_default();
+    eprintln!("{} is at migration {version}", path.display());
+    Ok(())
 }
 
 async fn send_mail(config: MailerConfig) -> anyhow::Result<()> {

@@ -18,6 +18,22 @@ let
   sharedProperties = removeAttrs config.systemd.services.concierge.serviceConfig
     (lib.attrNames serviceOnly);
 
+  # Every unit that opens the database runs as concierge, with its state.
+  stateAccess = {
+    User = "concierge";
+    DynamicUser = true;
+    StateDirectory = "concierge";
+    StateDirectoryMode = "0700";
+  };
+
+  # SQLite doesn't keep two processes from migrating at once, so one unit
+  # migrates before any other opens the database.
+  databaseUnit = {
+    requires = [ "concierge-migrate.service" ];
+    after = [ "concierge-migrate.service" ];
+    serviceConfig = stateAccess;
+  };
+
   systemdValue = value: if lib.isBool value then lib.boolToYesNo value else toString value;
 
   propertyFlags = lib.concatLists (lib.mapAttrsToList
@@ -85,28 +101,38 @@ in
 
     weblounge.sqliteVacuum.concierge = "/var/lib/concierge/concierge.db";
 
-    systemd.services.concierge = {
-      description = "Concierge, the members' site";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
-      serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // serviceOnly // {
-        User = "concierge";
-        DynamicUser = true;
-        StateDirectory = "concierge";
-        StateDirectoryMode = "0700";
-        Environment = [
-          "CONCIERGE_LISTEN=${cfg.listen}"
-          "CONCIERGE_PUBLIC_URL=${publicUrl}"
-          "CONCIERGE_JOIN_URL=${config.weblounge.origin joinHostName}"
-          "CONCIERGE_WEBCHAT_URL=${config.weblounge.origin config.weblounge.ergo.serverName}"
-          "CONCIERGE_IRC_SERVER=${config.weblounge.ergo.address}"
-          "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
-          "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"
-          "CONCIERGE_ALWAYS_ON_DEFAULT=${multiclient.always-on}"
-          "CONCIERGE_AUTO_AWAY_DEFAULT=${multiclient.auto-away}"
-        ];
+    systemd.services.concierge-migrate = {
+      description = "Bring concierge's database up to date";
+      serviceConfig = config.weblounge.sandbox // stateAccess // {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${concierge} migrate";
+        PrivateNetwork = true;
+        RestrictAddressFamilies = "none";
       };
     };
+
+    systemd.services.concierge = lib.mkMerge [
+      databaseUnit
+      {
+        description = "Concierge, the members' site";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "network.target" ];
+        serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // serviceOnly // {
+          Environment = [
+            "CONCIERGE_LISTEN=${cfg.listen}"
+            "CONCIERGE_PUBLIC_URL=${publicUrl}"
+            "CONCIERGE_JOIN_URL=${config.weblounge.origin joinHostName}"
+            "CONCIERGE_WEBCHAT_URL=${config.weblounge.origin config.weblounge.ergo.serverName}"
+            "CONCIERGE_IRC_SERVER=${config.weblounge.ergo.address}"
+            "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
+            "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"
+            "CONCIERGE_ALWAYS_ON_DEFAULT=${multiclient.always-on}"
+            "CONCIERGE_AUTO_AWAY_DEFAULT=${multiclient.auto-away}"
+          ];
+        };
+      }
+    ];
 
     environment.systemPackages = [ admin ];
 

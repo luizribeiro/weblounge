@@ -19,6 +19,8 @@ use crate::{
 /// The members' site of weblounge.org, and the admin commands behind it.
 #[derive(Parser)]
 pub enum Command {
+    /// Bring the database in STATE_DIRECTORY up to this build's schema.
+    Migrate,
     /// Serve the site on CONCIERGE_LISTEN.
     Serve,
     /// Send the mail concierge queues, through CONCIERGE_SMTP_HOST.

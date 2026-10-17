@@ -6,6 +6,7 @@ mod invite;
 mod mail;
 mod mailer;
 mod member;
+mod migrate;
 mod status;
 
 use std::{fs, path::Path};
@@ -55,6 +56,7 @@ impl Fixture {
                 auto_away: true,
             },
         };
+        Db::migrate(&config.database_path()).await.unwrap();
         Self {
             config,
             ergo,

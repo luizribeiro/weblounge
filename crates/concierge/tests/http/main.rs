@@ -65,7 +65,9 @@ impl Site {
     async fn start_with(change: impl FnOnce(&mut App)) -> Self {
         let fake = FakeErgo::start().await;
         let state = tempfile::tempdir().unwrap();
-        let db = Db::open(&state.path().join("concierge.db")).await.unwrap();
+        let db = Db::migrate(&state.path().join("concierge.db"))
+            .await
+            .unwrap();
         let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/assets");
         let mut app = App {
             assets: Assets::load(&fixtures).unwrap(),

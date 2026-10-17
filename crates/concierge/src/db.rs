@@ -238,12 +238,40 @@ pub struct Db {
 }
 
 impl Db {
-    /// Opens the database at `path`, creating it if needed, and applies any
-    /// migrations it lacks.
+    /// Opens the database at `path`, which [`Db::migrate`] must have
+    /// brought up to this build's schema.
     pub async fn open(path: &Path) -> anyhow::Result<Self> {
+        let db = Self::connect(path, false).await?;
+        let version = db
+            .migration_version()
+            .await
+            .with_context(|| format!("can't read the migrations of {}", path.display()))?;
+        let latest = latest_migration();
+        anyhow::ensure!(
+            version == Some(latest),
+            "the database {} is at migration {}, not {latest}; `concierge migrate` brings it up to date",
+            path.display(),
+            version.map_or_else(|| "none".to_owned(), |version| version.to_string()),
+        );
+        Ok(db)
+    }
+
+    /// Opens the database at `path`, creating it if needed, and applies any
+    /// migrations it lacks. SQLite doesn't keep two processes from
+    /// migrating at once, so only `concierge migrate` calls this, before
+    /// the services start.
+    pub async fn migrate(path: &Path) -> anyhow::Result<Self> {
+        let db = Self::connect(path, true).await?;
+        migrate(&db.pool)
+            .await
+            .with_context(|| format!("can't migrate the database {}", path.display()))?;
+        Ok(db)
+    }
+
+    async fn connect(path: &Path, create: bool) -> anyhow::Result<Self> {
         let options = SqliteConnectOptions::new()
             .filename(path)
-            .create_if_missing(true)
+            .create_if_missing(create)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)
             .foreign_keys(true)
@@ -253,9 +281,6 @@ impl Db {
             .connect_with(options)
             .await
             .with_context(|| format!("can't open the database {}", path.display()))?;
-        migrate(&pool)
-            .await
-            .with_context(|| format!("can't migrate the database {}", path.display()))?;
         Ok(Self { pool })
     }
 
@@ -889,6 +914,15 @@ async fn insert_invite(
     .map(drop)
 }
 
+/// The newest migration this build knows.
+fn latest_migration() -> i64 {
+    MIGRATOR
+        .iter()
+        .map(|migration| migration.version)
+        .max()
+        .unwrap_or_default()
+}
+
 /// Applies the migrations `pool`'s database lacks with foreign keys off,
 /// which SQLite needs for rebuilding a table others refer to, and then
 /// checks that every reference still holds.
@@ -973,7 +1007,7 @@ pub(crate) mod tests {
 
     pub async fn temp_db() -> (Db, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
-        let db = Db::open(&dir.path().join("concierge.db")).await.unwrap();
+        let db = Db::migrate(&dir.path().join("concierge.db")).await.unwrap();
         (db, dir)
     }
 
@@ -981,24 +1015,44 @@ pub(crate) mod tests {
         sqlx::query(sql).execute(&db.pool).await.map(drop)
     }
 
-    fn latest_migration() -> i64 {
-        MIGRATOR
-            .iter()
-            .map(|migration| migration.version)
-            .max()
-            .unwrap()
-    }
-
     #[tokio::test]
     async fn applies_every_migration_once() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("concierge.db");
-        Db::open(&path).await.unwrap();
+        Db::migrate(&path).await.unwrap();
+        Db::migrate(&path).await.unwrap();
         let reopened = Db::open(&path).await.unwrap();
         assert_eq!(
             reopened.migration_version().await.unwrap(),
             Some(latest_migration())
         );
+    }
+
+    #[tokio::test]
+    async fn opening_needs_a_database_migrated_by_this_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        let error = Db::open(&path).await.err().unwrap();
+        assert!(
+            format!("{error:#}").contains("can't open the database"),
+            "{error:#}"
+        );
+        assert!(!path.exists());
+
+        written_by_version(&path, 20261020120000, "").await;
+        let error = Db::open(&path).await.err().unwrap();
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "the database {} is at migration 20261020120000, not {}; \
+                 `concierge migrate` brings it up to date",
+                path.display(),
+                latest_migration(),
+            )
+        );
+        Db::migrate(&path).await.unwrap();
+        Db::open(&path).await.unwrap();
     }
 
     /// Applies the migrations up to `version` to a new database at `path`
@@ -1041,7 +1095,7 @@ pub(crate) mod tests {
         )
         .await;
 
-        let db = Db::open(&path).await.unwrap();
+        let db = Db::migrate(&path).await.unwrap();
 
         assert_eq!(
             db.session(b"\x00", 10)
@@ -1086,7 +1140,7 @@ pub(crate) mod tests {
         )
         .await;
 
-        let db = Db::open(&path).await.unwrap();
+        let db = Db::migrate(&path).await.unwrap();
 
         let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
         assert_eq!(invite.created_by.as_deref(), Some("alice"));
@@ -1121,8 +1175,8 @@ pub(crate) mod tests {
             .unwrap();
         pool.close().await;
 
-        Db::open(&path).await.unwrap();
-        let db = Db::open(&path).await.unwrap();
+        Db::migrate(&path).await.unwrap();
+        let db = Db::migrate(&path).await.unwrap();
 
         let kept: Vec<Vec<u8>> = sqlx::query_scalar("SELECT code_hash FROM invites ORDER BY rowid")
             .fetch_all(&db.pool)
@@ -1132,7 +1186,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn a_database_whose_references_dont_hold_doesnt_open() {
+    async fn a_database_whose_references_dont_hold_fails_to_migrate() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("concierge.db");
         written_by_version(
@@ -1143,7 +1197,7 @@ pub(crate) mod tests {
         )
         .await;
 
-        let error = Db::open(&path).await.err().unwrap();
+        let error = Db::migrate(&path).await.err().unwrap();
 
         assert!(
             format!("{error:#}").contains("1 rows refer to rows that aren't there"),

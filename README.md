@@ -63,7 +63,9 @@ rustfmt.
 Concierge keeps its data in SQLite through sqlx, which checks every query
 at compile time against the metadata in `crates/concierge/.sqlx`. After
 changing a query or adding a migration to `crates/concierge/migrations`,
-run `just concierge prepare` and commit what it writes.
+run `just concierge prepare` and commit what it writes. On the server,
+`concierge-migrate.service` applies new migrations before anything else
+opens the database; `just concierge dev` migrates as it starts.
 
 ## The web client
 

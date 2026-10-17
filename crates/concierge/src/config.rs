@@ -276,6 +276,13 @@ impl MailerConfig {
     }
 }
 
+/// The database in `STATE_DIRECTORY`, which is all `concierge migrate`
+/// needs.
+pub fn database_from_env() -> Result<PathBuf, ConfigError> {
+    let state_dir = required(|name| std::env::var(name).ok(), "STATE_DIRECTORY")?;
+    Ok(database_in(Path::new(&state_dir)))
+}
+
 fn required(
     var: impl Fn(&str) -> Option<String>,
     name: &'static str,
