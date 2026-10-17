@@ -170,6 +170,8 @@ machine. They print plain lines a script can read:
 | `member reset-password <account>`               | Sets a new generated password, ends sessions, prints it once     |
 | `member delete <account>`                       | Locks a member out, removes data and bots; their place stays     |
 | `member reconcile`                              | Lists accounts Ergo and concierge disagree on, bots included     |
+| `member send-verification <account>`            | Mails a member a new link to confirm their email                 |
+| `member send-verification --unverified`         | Mails one to every unconfirmed member never sent one, 60 a run   |
 | `bot create <owner> <name> [--note …]`          | Registers a member's bot, prints its generated password once     |
 | `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
 | `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |
@@ -178,6 +180,12 @@ machine. They print plain lines a script can read:
 
 Ergo's API can't delete accounts, so after `member delete` or `bot delete`
 an oper still runs `/NS ERASE <account>`.
+
+`member send-verification` is for the members who joined before emails
+were confirmed, and goes once they all have. Members have a week from
+their first link to confirm; `concierge-remind.timer` runs `concierge
+remind` hourly, which mails the one reminder, with a fresh link, from the
+fifth day.
 
 ## DNS
 
