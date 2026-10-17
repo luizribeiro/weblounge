@@ -12,8 +12,8 @@ def main():
     nick, password = sys.argv[1:]
     with signed_in(nick, password) as page:
         page.goto(f"{MEMBERS}/account")
-        email_save = page.locator('form[action="/settings"] button[type=submit]')
-        irc_save = page.locator('form[action="/irc-settings"] button[type=submit]')
+        email_save = page.locator('form[action="/settings"] > button[type=submit]')
+        irc_save = page.locator('form[action="/irc-settings"] > button[type=submit]')
         email = page.locator("#email")
         always_on = page.locator('input[name="always_on"]')
         saved_email = email.input_value()

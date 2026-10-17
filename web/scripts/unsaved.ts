@@ -10,7 +10,10 @@ function differsFromLoaded(form: HTMLFormElement): boolean {
 }
 
 function saveOnlyWhenChanged(form: HTMLFormElement) {
-  const submit = form.querySelector<HTMLButtonElement>("button[type=submit]");
+  const submit = [...form.elements].find(
+    (element): element is HTMLButtonElement =>
+      element instanceof HTMLButtonElement && element.type === "submit",
+  );
   if (!submit) {
     return;
   }
