@@ -78,3 +78,13 @@ with subtest("a deploy that restarts ergo and bender together starts bender once
     credenza.succeed("systemctl restart ergochat.service weblounge-bot-bender.service")
     credenza.wait_for_unit("weblounge-bot-bender.service")
     assert credenza.succeed("systemctl show -P NRestarts weblounge-bot-bender").strip() == restarts
+
+with subtest("going back to secrets on disk, and deploying them to RAM again, keeps bender and concierge working"):
+    for system in ["/run/booted-system/specialisation/secrets-on-disk", "/run/booted-system"]:
+        credenza.succeed(f"{system}/bin/switch-to-configuration test")
+        credenza.wait_for_unit("weblounge-bot-bender.service")
+        credenza.wait_for_open_port(8089)
+        assert "ergo: http://127.0.0.1:8089/ answers" in concierge_admin("status"), system
+        wait_for_bender_to_answer()
+        broken = credenza.succeed("systemctl list-units --no-legend --plain --state=failed,auto-restart")
+        assert broken == "", (system, broken)
