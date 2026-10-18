@@ -98,6 +98,7 @@ in
           unregistered-channels = true;
           direct-messages = "disabled";
         };
+        restrictions.expire-time = "2w";
         retention.allow-individual-delete = true;
       };
       datastore.sqlite.enabled = true;

@@ -127,10 +127,15 @@ def lounge_history():
     return irc("HISTORY #lounge 50", **heidi)
 
 
-with subtest("messages: channel history survives a restart"):
-    irc(f"PRIVMSG #lounge :{said_in_channel}", f"PRIVMSG ivan :{said_in_private}", **heidi)
+def restart_ergo(days_later: int = 0) -> None:
+    credenza.succeed(f"date -s '+{days_later} days'")
     credenza.succeed("systemctl restart ergochat")
     credenza.wait_for_open_port(6697)
+
+
+with subtest("messages: channel history survives a restart"):
+    irc(f"PRIVMSG #lounge :{said_in_channel}", f"PRIVMSG ivan :{said_in_private}", **heidi)
+    restart_ergo()
     assert said_in_channel in lounge_history()
 
 with subtest("messages: direct messages never reach the disk"):
@@ -138,12 +143,12 @@ with subtest("messages: direct messages never reach the disk"):
     assert found == [], found
 
 # Moves the clock, so it goes last.
-with subtest("messages: a week on, channel messages leave the disk, and newer ones stay"):
+with subtest("messages: channel messages stay two weeks, then leave the disk, and newer ones stay"):
     assert files_containing(said_in_channel) != []
-    credenza.succeed("date -s '+8 days'")
-    credenza.succeed("systemctl restart ergochat")
-    credenza.wait_for_open_port(6697)
-    said_since = "the-canary-sings-a-week-later"
+    restart_ergo(13)
+    assert said_in_channel in lounge_history()
+    restart_ergo(2)
+    said_since = "the-canary-sings-two-weeks-later"
     irc(f"PRIVMSG #lounge :{said_since}", **heidi)
     credenza.wait_until_succeeds(
         f"systemctl start ergochat-vacuum && ! grep -rqaF {shlex.quote(said_in_channel)} /var/lib/private/ergo",
