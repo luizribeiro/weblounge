@@ -109,6 +109,17 @@ with subtest("the hourly vacuums of both databases wait for concierge-migrate"):
         after = credenza.succeed(f"systemctl show -P After {unit}").split()
         assert "concierge-migrate.service" in after, (unit, after)
 
+with subtest("a vacuum leaves a missing database missing, and warns that it is"):
+    credenza.succeed("systemctl stop concierge concierge-mailer")
+    credenza.succeed("mkdir /root/outbox && mv /var/lib/concierge-outbox/outbox.db* /root/outbox/")
+    credenza.succeed("systemctl start concierge-mailer-vacuum")
+    credenza.succeed("test ! -e /var/lib/concierge-outbox/outbox.db")
+    warnings = credenza.succeed("journalctl -o cat -p warning -u concierge-mailer-vacuum")
+    assert "/var/lib/concierge-outbox/outbox.db is missing" in warnings, warnings
+    credenza.succeed("mv /root/outbox/* /var/lib/concierge-outbox/ && rmdir /root/outbox")
+    credenza.succeed("systemctl start concierge concierge-mailer")
+    credenza.wait_for_open_port(8080)
+
 with subtest("concierge's database lives in its state directory, private to the service"):
     modes = credenza.succeed(
         "stat -L -c %a /var/lib/private /var/lib/concierge /var/lib/concierge/concierge.db"

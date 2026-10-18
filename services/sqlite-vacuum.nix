@@ -19,8 +19,12 @@ let
         PrivateNetwork = true;
         RestrictAddressFamilies = "none";
         User = owner.User or service;
+        # sqlite3 would create a missing database as this unit's user, with a
+        # mode its owner may not open. One that doesn't exist holds no
+        # deleted data, so there's nothing to fail for.
         ExecStart = pkgs.writeShellScript "${service}-vacuum" ''
-          checkpoint=$(${lib.getExe pkgs.sqlite} -cmd '.timeout 10000' ${database} \
+          [[ -e ${database} ]] || { echo "<4>${database} is missing, so there is nothing to vacuum"; exit 0; }
+          checkpoint=$(${lib.getExe pkgs.sqlite} -cmd '.timeout 10000' 'file:${database}?mode=rw' \
             'VACUUM' 'PRAGMA wal_checkpoint(TRUNCATE)') || exit
           [[ $checkpoint == 0\|* ]] || { echo "the write-ahead log was busy: $checkpoint" >&2; exit 1; }
         '';
