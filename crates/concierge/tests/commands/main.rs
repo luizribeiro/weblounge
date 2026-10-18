@@ -15,10 +15,10 @@ use clap::Parser;
 use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
-    db::{Db, NewMember, NewSession},
+    db::{self, Db, NewMember, NewSession},
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
-use outbox::Outbox;
+use outbox::{Outbox, QueuedMessage, testing::TestKey};
 use tempfile::TempDir;
 
 /// The password [`Fixture::register`] gives accounts.
@@ -27,6 +27,8 @@ const OLD_PASSWORD: &str = "correct-horse-battery";
 struct Fixture {
     config: Config,
     ergo: FakeErgo,
+    /// The key the mailer published, which opens the mail sealed to it.
+    mailer_key: TestKey,
     _state: TempDir,
     _outbox: TempDir,
     _credentials: TempDir,
@@ -60,10 +62,12 @@ impl Fixture {
             },
         };
         Db::migrate(&config.database_path()).await.unwrap();
-        Outbox::migrate(&config.outbox_path).await.unwrap();
+        let migrated = Outbox::migrate(&config.outbox_path).await.unwrap();
+        let mailer_key = TestKey::publish(&migrated).await;
         Self {
             config,
             ergo,
+            mailer_key,
             _state: state,
             _outbox: outbox,
             _credentials: credentials,
@@ -85,6 +89,12 @@ impl Fixture {
 
     async fn outbox(&self) -> Outbox {
         Outbox::open(&self.config.outbox_path).await.unwrap()
+    }
+
+    /// The mail waiting in the outbox, oldest first, opened.
+    async fn mail(&self) -> Vec<QueuedMessage> {
+        let due = self.outbox().await.due(db::now()).await.unwrap();
+        self.mailer_key.open(due)
     }
 
     fn state_dir(&self) -> &Path {

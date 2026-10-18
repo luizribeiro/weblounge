@@ -117,6 +117,23 @@ async fn signing_up_works_even_when_the_link_cannot_be_queued() {
     let site = with_invite_from_alice().await;
     execute(&site.state.path().join("outbox.db"), "DROP TABLE outbox").await;
 
+    signs_bob_up_without_a_link(&site).await;
+}
+
+#[tokio::test]
+async fn signing_up_while_the_mailer_is_down_issues_no_link() {
+    let site = with_invite_from_alice().await;
+    site.outbox.withdraw_key().await.unwrap();
+
+    signs_bob_up_without_a_link(&site).await;
+
+    let bob = site.db.member("bob").await.unwrap().unwrap();
+    assert_eq!(bob.verification_first_sent_at, None);
+    assert!(site.mail().await.is_empty());
+}
+
+/// Signs Bob up, and checks he's in but told to send himself a link.
+async fn signs_bob_up_without_a_link(site: &Site) {
     let response = site.post(INVITE, &bob(), None).await;
 
     assert_eq!(response.status(), 200);

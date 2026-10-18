@@ -61,6 +61,29 @@ async fn mails_the_reminders_due_once_and_logs_only_how_many() {
     assert!(alice.verification_reminded_at.is_some());
 }
 
+#[tokio::test]
+async fn reminds_nobody_while_the_mailer_is_down_and_says_so() {
+    let fixture = Fixture::start().await;
+    let db = fixture.db().await;
+    fixture.insert_member("alice", None).await;
+    let mailed_at = db::now() - REMINDER_AFTER;
+    db.issue_verification_code("alice", mailed_at)
+        .await
+        .unwrap();
+    fixture.outbox().await.withdraw_key().await.unwrap();
+
+    let output = remind(&fixture);
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(
+        stderr,
+        "Error: the mailer has published no key to seal mail to\n"
+    );
+    let alice = db.member("alice").await.unwrap().unwrap();
+    assert_eq!(alice.verification_reminded_at, None);
+}
+
 #[test]
 fn needs_the_public_url_for_its_links() {
     let output = Command::new(env!("CARGO_BIN_EXE_concierge"))

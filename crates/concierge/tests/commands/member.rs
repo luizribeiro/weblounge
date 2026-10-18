@@ -320,7 +320,6 @@ mod reconcile {
 mod send_verification {
     use super::*;
     use concierge::verification_mail::{PER_RUN, SUBJECT};
-    use outbox::QueuedMessage;
 
     /// alice, who joined before emails were confirmed, bob, who was sent a
     /// link, and carol, who confirmed hers.
@@ -338,10 +337,6 @@ mod send_verification {
         fixture
     }
 
-    async fn queued(fixture: &Fixture) -> Vec<QueuedMessage> {
-        fixture.outbox().await.due(db::now()).await.unwrap()
-    }
-
     #[tokio::test]
     async fn unverified_mails_a_link_to_whoever_never_had_one() {
         let fixture = with_members().await;
@@ -352,7 +347,7 @@ mod send_verification {
             .unwrap();
 
         assert_eq!(output, "sent alice a link\n");
-        let [message] = &queued(&fixture).await[..] else {
+        let [message] = &fixture.mail().await[..] else {
             panic!("one message");
         };
         assert_eq!(message.subject, SUBJECT);
@@ -369,7 +364,7 @@ mod send_verification {
             .await
             .unwrap();
         assert_eq!(again, "every unconfirmed member was sent a link already\n");
-        assert_eq!(queued(&fixture).await.len(), 1);
+        assert_eq!(fixture.mail().await.len(), 1);
     }
 
     #[tokio::test]
@@ -382,7 +377,7 @@ mod send_verification {
             .unwrap();
 
         assert_eq!(output, "sent bob a link\n");
-        let queued = queued(&fixture).await;
+        let queued = fixture.mail().await;
         assert_eq!(queued.len(), 1);
         assert!(
             queued[0].text().starts_with("Hi bob,\n"),
@@ -401,7 +396,7 @@ mod send_verification {
             .unwrap();
 
         assert_eq!(output, "carol confirmed their email already\n");
-        assert!(queued(&fixture).await.is_empty());
+        assert!(fixture.mail().await.is_empty());
     }
 
     #[tokio::test]
@@ -418,7 +413,7 @@ mod send_verification {
         ] {
             assert!(fixture.run(args).await.is_err(), "{args:?}");
         }
-        assert!(queued(&fixture).await.is_empty());
+        assert!(fixture.mail().await.is_empty());
     }
 
     #[tokio::test]
@@ -437,7 +432,7 @@ mod send_verification {
         assert_eq!(lines.len(), PER_RUN + 1, "{output}");
         assert_eq!(lines[0], "sent m000 a link");
         assert_eq!(lines[PER_RUN], "2 more to send: run this again in an hour");
-        assert_eq!(queued(&fixture).await.len(), PER_RUN);
+        assert_eq!(fixture.mail().await.len(), PER_RUN);
         let rest = fixture
             .run(&["member", "send-verification", "--unverified"])
             .await

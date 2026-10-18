@@ -72,6 +72,14 @@ the server, `concierge-migrate.service` applies new migrations to both
 before anything else opens them, so the mailer never migrates; `just
 concierge dev` migrates as it starts.
 
+Mail that carries a secret, such as a verification link, goes into the
+outbox sealed with [age](https://age-encryption.org) to a key the mailer
+generates as it starts, keeps in memory only and withdraws as it stops,
+so a copy of the disk never holds the link. Sealed mail still waiting
+when the mailer stops is lost, and members ask for another. While no
+mailer runs, as in `just concierge dev`, concierge sends no such mail
+and says to try again.
+
 ## The web client
 
 `https://irc.weblounge.org` serves [gamja](https://codeberg.org/emersion/gamja)

@@ -47,6 +47,7 @@ async fn reports_an_ergo_that_does_not_answer() {
         ergo,
         _state,
         _outbox,
+        mailer_key: _,
         _credentials,
     } = Fixture::start().await;
     ergo.stop().await;

@@ -42,7 +42,7 @@ use concierge::{
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
 use http_body_util::BodyExt;
-use outbox::{Outbox, QueuedMessage};
+use outbox::{Outbox, QueuedMessage, testing::TestKey};
 use tempfile::TempDir;
 use tower::ServiceExt;
 
@@ -59,6 +59,8 @@ struct Site {
     router: Router,
     db: Db,
     outbox: Outbox,
+    /// The key the mailer published, which opens the mail sealed to it.
+    mailer_key: TestKey,
     ergo: FakeErgo,
     state: TempDir,
 }
@@ -79,6 +81,7 @@ impl Site {
         let outbox = Outbox::migrate(&state.path().join("outbox.db"))
             .await
             .unwrap();
+        let mailer_key = TestKey::publish(&outbox).await;
         let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/assets");
         let mut app = App {
             assets: Assets::load(&fixtures).unwrap(),
@@ -108,6 +111,7 @@ impl Site {
             router: app::router(app),
             db,
             outbox,
+            mailer_key,
             ergo: fake,
             state,
         }
@@ -212,9 +216,10 @@ impl Site {
         value
     }
 
-    /// The mail waiting in the outbox, oldest first.
+    /// The mail waiting in the outbox, oldest first, opened.
     async fn mail(&self) -> Vec<QueuedMessage> {
-        self.outbox.due(db::now()).await.unwrap()
+        let due = self.outbox.due(db::now()).await.unwrap();
+        self.mailer_key.open(due)
     }
 
     fn database_path(&self) -> std::path::PathBuf {

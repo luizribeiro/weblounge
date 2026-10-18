@@ -28,6 +28,8 @@ verification_subject = "Confirm your email for weblounge.org"
 reminder_subject = "Reminder: confirm your email for weblounge.org"
 verify_link = f"https://{members}/verify#"
 key_query = sqlite_command(outbox, "SELECT public_key FROM mailer_key")
+outbox_directory = "/var/lib/concierge-outbox"
+judy_password = "harbor-lantern-41"
 
 
 def queue_test_message(address: str) -> str:
@@ -37,6 +39,17 @@ def queue_test_message(address: str) -> str:
 
 def wait_for_log(line: str) -> None:
     credenza.wait_until_succeeds(f"{mailer_log} | grep -qxF {shlex.quote(line)}", timeout=30)
+
+
+def wait_for_failed_attempt(queued: str) -> None:
+    """Waits until the mailer has failed to send message `queued` once."""
+    failed = f"^Sending message {queued} failed .* on attempt 1$"
+    credenza.wait_until_succeeds(f"{mailer_log} | grep -q {shlex.quote(failed)}", timeout=30)
+
+
+def queued_id() -> str:
+    """The id of the one message in the outbox."""
+    return outbox_sql("SELECT id FROM outbox").strip()
 
 
 def outbox_size() -> int:
@@ -94,8 +107,7 @@ with subtest("an admin's test message reaches the mail server from noreply@, as 
 with subtest("mail queued while the mail server is down waits, and goes out once it's back"):
     mail.succeed("systemctl stop mailpit-test")
     queued = queue_test_message("bob@example.org")
-    failed = f"^Sending message {queued} failed .* on attempt 1$"
-    credenza.wait_until_succeeds(f"{mailer_log} | grep -q {shlex.quote(failed)}", timeout=30)
+    wait_for_failed_attempt(queued)
     assert outbox_size() == 1
     mail.succeed("systemctl start mailpit-test")
     mail.wait_for_open_port(465)
@@ -104,6 +116,51 @@ with subtest("mail queued while the mail server is down waits, and goes out once
     wait_for_log(f"Sent message {queued}")
     assert outbox_size() == 0
     assert len(mails_to("bob@example.org")) == 1
+
+with subtest("a verification link waits sealed while the mail server is down, and no copy of the disk holds it"):
+    mail.succeed("systemctl stop mailpit-test")
+    add_member("judy", judy_password)
+    queued = queued_id()
+    wait_for_failed_attempt(queued)
+    row = "SELECT recipient, body IS NULL, sealed_to = (SELECT public_key FROM mailer_key) FROM outbox"
+    assert outbox_sql(row) == "judy@example.org|1|1\n"
+    credenza.succeed(f"mkdir /root/snapshot && cp {outbox}* /root/snapshot/")
+    mail.succeed("systemctl start mailpit-test")
+    mail.wait_for_open_port(465)
+    code = invite_code(link_in(wait_for_mail("judy@example.org", verification_subject, timeout=120), verify_link))
+    wait_for_log(f"Sent message {queued}")
+    credenza.succeed("sync && echo 3 > /proc/sys/vm/drop_caches")
+    disk = credenza.succeed("findmnt -no SOURCE /").strip()
+    assert disk.startswith("/dev/"), disk
+    credenza.succeed("grep -rqaF judy@example.org /root/snapshot")
+    credenza.succeed(f"grep -qaF judy@example.org {disk}")
+    credenza.fail(f"grep -rqaF {code} /root/snapshot {outbox_directory}")
+    credenza.fail(f"grep -qaF {code} {disk}")
+
+with subtest("restarting the mailer deletes the sealed link it never sent, and a new one goes out"):
+    clear_mail()
+    mail.succeed("systemctl stop mailpit-test")
+    assert concierge_admin("member", "send-verification", "judy") == "sent judy a link\n"
+    wait_for_failed_attempt(queued_id())
+    credenza.succeed("systemctl restart concierge-mailer")
+    wait_for_log("Withdrew the mailer's key; deleted 1 messages sealed to it, unsent")
+    assert outbox_size() == 0
+    mail.succeed("systemctl start mailpit-test")
+    mail.wait_for_open_port(465)
+    published_key()
+    assert concierge_admin("member", "send-verification", "judy") == "sent judy a link\n"
+    wait_for_mail("judy@example.org", verification_subject)
+    assert len(mails_to("judy@example.org")) == 1
+
+with subtest("while the mailer is down, a new address gets no link, and the page says to try again"):
+    judy = Browser("judy")
+    judy.sign_in("judy", judy_password)
+    credenza.succeed("systemctl stop concierge-mailer")
+    page = judy.post("/settings", "email=judy@example.net", flags=["-w", "\n%{http_code}"])
+    assert page.endswith("\n503") and "Couldn&#39;t send a link just now. Try again in a minute." in page, page
+    credenza.succeed("systemctl start concierge-mailer")
+    published_key()
+    assert outbox_size() == 0
 
 with subtest("concierge remind runs hourly from a timer that catches up on missed runs"):
     credenza.succeed("systemctl is-active concierge-remind.timer")

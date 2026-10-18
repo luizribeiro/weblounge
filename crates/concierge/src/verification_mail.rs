@@ -1,8 +1,10 @@
 //! The emails that carry a member's verification link. Their subjects are
-//! the same for everyone, so nothing a member chose reaches a header.
+//! the same for everyone, so nothing a member chose reaches a header, and
+//! they're queued sealed to the mailer's key, so the link never reaches
+//! the disk.
 
 use askama::Template;
-use outbox::{Message, Outbox, Subject};
+use outbox::{Message, NoKey, Outbox, Subject};
 
 use crate::{
     db::{Db, IssuedCode},
@@ -83,9 +85,9 @@ pub fn message(
 }
 
 /// Issues `account` a new link, replacing their last, and queues the
-/// email of `kind` that carries it; answers whether they had an address
-/// to verify. Issuing starts the grace period, so the email goes out
-/// right after.
+/// email of `kind` that carries it, sealed; answers whether they had an
+/// address to verify. Issuing starts the grace period, so the email goes
+/// out right after. Fails with [`NoKey`] while the mailer is down.
 pub async fn send(
     db: &Db,
     outbox: &Outbox,
@@ -94,11 +96,16 @@ pub async fn send(
     kind: Kind,
     now: i64,
 ) -> anyhow::Result<bool> {
+    // Checked before issuing, so a mailer that's down doesn't cost the
+    // member the link they have.
+    if outbox.published_key().await?.is_none() {
+        return Err(NoKey.into());
+    }
     let Some(issued) = db.issue_verification_code(account, now).await? else {
         return Ok(false);
     };
     outbox
-        .queue(&message(&issued, public_url, kind, now)?, now)
+        .queue_sealed(&message(&issued, public_url, kind, now)?, now)
         .await?;
     // Noted once queued: a failure in between leaves a reminder that may
     // go out twice, two days apart, rather than one that never does.
@@ -148,6 +155,7 @@ pub async fn remind(db: &Db, outbox: &Outbox, public_url: &str, now: i64) -> any
 mod tests {
     use super::*;
     use crate::{db, nick};
+    use outbox::{Body, testing::TestKey};
 
     const PUBLIC_URL: &str = "https://members.weblounge.org";
     const SENT: i64 = 1_760_000_000;
@@ -251,16 +259,24 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn sending_queues_the_link_to_a_code_on_file() {
-        let (db, _db_dir) = db::tests::temp_db().await;
-        let (outbox, _outbox_dir) = outbox::testing::temp_outbox().await;
+    /// A database with Bob in it, and an outbox the mailer published
+    /// `key` in.
+    async fn with_bob() -> (Db, Outbox, TestKey, [tempfile::TempDir; 2]) {
+        let (db, db_dir) = db::tests::temp_db().await;
+        let (outbox, outbox_dir) = outbox::testing::temp_outbox().await;
+        let key = TestKey::publish(&outbox).await;
         db::tests::execute(
             &db,
             "INSERT INTO members (account, email, joined_at) VALUES ('Bob', 'bob@example.org', 0)",
         )
         .await
         .unwrap();
+        (db, outbox, key, [db_dir, outbox_dir])
+    }
+
+    #[tokio::test]
+    async fn sending_queues_the_link_to_a_code_on_file_sealed() {
+        let (db, outbox, key, _dirs) = with_bob().await;
 
         assert!(
             send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT)
@@ -268,7 +284,9 @@ mod tests {
                 .unwrap()
         );
 
-        let [queued] = &outbox.due(SENT).await.unwrap()[..] else {
+        let due = outbox.due(SENT).await.unwrap();
+        assert!(matches!(due[0].body, Body::Sealed { .. }), "{due:?}");
+        let [queued] = &key.open(due)[..] else {
             panic!("one message");
         };
         assert_eq!(queued.recipient, "bob@example.org");
@@ -286,16 +304,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn without_the_mailers_key_nothing_is_issued_or_queued() {
+        let (db, outbox, _key, _dirs) = with_bob().await;
+        outbox.withdraw_key().await.unwrap();
+
+        let error = send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.downcast_ref(), Some(&NoKey));
+        assert!(outbox.due(SENT).await.unwrap().is_empty());
+        let bob = db.member("bob").await.unwrap().unwrap();
+        assert_eq!(bob.verification_first_sent_at, None);
+    }
+
+    #[tokio::test]
     async fn a_verified_member_gets_nothing() {
-        let (db, _db_dir) = db::tests::temp_db().await;
-        let (outbox, _outbox_dir) = outbox::testing::temp_outbox().await;
-        db::tests::execute(
-            &db,
-            "INSERT INTO members (account, email, email_verified_at, joined_at)
-             VALUES ('Bob', 'bob@example.org', 1, 0)",
-        )
-        .await
-        .unwrap();
+        let (db, outbox, _key, _dirs) = with_bob().await;
+        db::tests::execute(&db, "UPDATE members SET email_verified_at = 1")
+            .await
+            .unwrap();
 
         assert!(
             !send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT)
@@ -314,6 +342,7 @@ mod tests {
         async fn with_members(accounts: &[&str]) -> (Db, Outbox, [tempfile::TempDir; 2]) {
             let (db, db_dir) = db::tests::temp_db().await;
             let (outbox, outbox_dir) = outbox::testing::temp_outbox().await;
+            TestKey::publish(&outbox).await;
             for account in accounts {
                 db::tests::execute(
                     &db,

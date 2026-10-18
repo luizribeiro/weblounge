@@ -365,6 +365,30 @@ async fn a_link_that_cannot_be_queued_says_to_try_again_and_costs_no_wait() {
 }
 
 #[tokio::test]
+async fn while_the_mailer_is_down_a_link_waits_and_the_last_one_keeps_working() {
+    let (site, cookie, old) = with_a_code_mailed().await;
+    site.outbox.withdraw_key().await.unwrap();
+
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 503);
+    let page = body_text(response).await;
+    assert_eq!(
+        email_notices(&page),
+        ["Couldn&#39;t send a link just now. Try again in a minute."]
+    );
+    let on_file = site.db.verification_code(&old).await.unwrap().unwrap();
+    assert_eq!(on_file.status(db::now()), verification_rules::Status::Live);
+    site.outbox
+        .publish_key(&site.mailer_key.public())
+        .await
+        .unwrap();
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+    assert_eq!(location(&response), "/account?sent#email-and-news");
+    assert_eq!(site.mail().await.len(), 1);
+}
+
+#[tokio::test]
 async fn guests_and_other_sites_cannot_ask_for_links() {
     let (site, cookie, _) = with_a_code_mailed().await;
     let response = site.post(RESEND, &[], None).await;
