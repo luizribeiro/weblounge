@@ -61,13 +61,16 @@ start over. `cargo test` runs the tests; `just check` adds clippy and
 rustfmt.
 
 Concierge keeps its data in SQLite through sqlx, which checks every query
-at compile time against the metadata in `.sqlx`. The outbox, the mail
-concierge queues for its mailer, is a database of its own, owned by
-`crates/outbox`. After changing a query or adding a migration to either
-crate's `migrations`, run `just concierge prepare` and commit what it
-writes. On the server, `concierge-migrate.service` applies new migrations
-to both before anything else opens them; `just concierge dev` migrates as
-it starts.
+at compile time against the metadata in `.sqlx`. Concierge never sends
+mail itself: it queues messages in the outbox, a database of its own
+owned by `crates/outbox`, and `crates/mailer`, a separate binary that
+depends on neither concierge nor its database, sends them over SMTP as
+the `concierge-mailer` unit. `crates/common` holds the little both
+share. After changing a query or adding a migration to either database's
+`migrations`, run `just concierge prepare` and commit what it writes. On
+the server, `concierge-migrate.service` applies new migrations to both
+before anything else opens them, so the mailer never migrates; `just
+concierge dev` migrates as it starts.
 
 ## The web client
 
@@ -230,7 +233,7 @@ in `secrets/vm.yaml` with `secrets/vm-age.key`, committed on purpose.
 | `tests/`     | Flake checks of the Nix code; `tests/e2e/` holds the VM tests     |
 | `services/`  | Opt-in configuration, one file per service a host can run         |
 | `pkgs/`      | Our own packages, exposed to hosts as `pkgs.weblounge.*`          |
-| `crates/`    | Rust code: concierge, and ergo-api, its client for Ergo's API     |
+| `crates/`    | Rust code: concierge, its mailer and outbox, and ergo-api         |
 | `web/`       | Sources of everything the browser loads                           |
 | `templates/` | `nix flake init` templates; `bot` is the template bots start from |
 | `dns/`       | The DNS zone, generated from the hosts, and its dnscontrol config |
