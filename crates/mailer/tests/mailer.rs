@@ -1,43 +1,68 @@
+//! The mailer binary, run against a temporary outbox and credentials.
+
 use std::{
     fs,
     io::{BufRead, BufReader},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::mpsc,
     time::Duration,
 };
 
-use concierge::{config::SMTP_PASSWORD_CREDENTIAL, db, email::Email};
-use outbox::{Message, Subject};
-
-use crate::Fixture;
+use common::{email::Email, now};
+use mailer::config::SMTP_PASSWORD_CREDENTIAL;
+use outbox::{Message, Outbox, Subject};
+use tempfile::TempDir;
 
 const LOG_TIMEOUT: Duration = Duration::from_secs(30);
 
+struct Fixture {
+    outbox_dir: TempDir,
+    credentials_dir: TempDir,
+}
+
+impl Fixture {
+    async fn start() -> Self {
+        let (_, outbox_dir) = outbox::testing::temp_outbox().await;
+        Self {
+            outbox_dir,
+            credentials_dir: tempfile::tempdir().unwrap(),
+        }
+    }
+
+    fn outbox_path(&self) -> PathBuf {
+        self.outbox_dir.path().join("outbox.db")
+    }
+
+    async fn outbox(&self) -> Outbox {
+        Outbox::open(&self.outbox_path()).await.unwrap()
+    }
+}
+
 fn write_smtp_password(fixture: &Fixture) {
     let path = fixture
-        .config
         .credentials_dir
+        .path()
         .join(SMTP_PASSWORD_CREDENTIAL);
     fs::write(path, "correct horse battery staple\n").unwrap();
 }
 
-/// `concierge mailer <args>` with only the mailer's environment, sending
+/// `mailer <args>` with only the mailer's environment, sending
 /// to a port nothing listens on.
 fn mailer_command(fixture: &Fixture, args: &[&str]) -> Command {
     let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = closed.local_addr().unwrap().port().to_string();
     drop(closed);
-    let mut command = Command::new(env!("CARGO_BIN_EXE_concierge"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_mailer"));
     command
-        .arg("mailer")
         .args(args)
         .env_clear()
         .env("CONCIERGE_SMTP_HOST", "127.0.0.1")
         .env("CONCIERGE_SMTP_PORT", port)
         .env("CONCIERGE_SMTP_USERNAME", "noreply@weblounge.org")
         .env("CONCIERGE_MAIL_FROM", "weblounge <noreply@weblounge.org>")
-        .env("CONCIERGE_OUTBOX", &fixture.config.outbox_path)
-        .env("CREDENTIALS_DIRECTORY", &fixture.config.credentials_dir);
+        .env("CONCIERGE_OUTBOX", fixture.outbox_path())
+        .env("CREDENTIALS_DIRECTORY", fixture.credentials_dir.path());
     command
 }
 
@@ -77,12 +102,7 @@ async fn retries_mail_it_cannot_send_and_logs_no_address() {
         subject: Subject::parse("Verify your email for weblounge").unwrap(),
         body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa\n".into(),
     };
-    fixture
-        .outbox()
-        .await
-        .queue(&message, db::now())
-        .await
-        .unwrap();
+    fixture.outbox().await.queue(&message, now()).await.unwrap();
     write_smtp_password(&fixture);
     let mut mailer = start_mailer(&fixture);
 
@@ -102,7 +122,7 @@ async fn retries_mail_it_cannot_send_and_logs_no_address() {
     for private in ["alice", "Verify", "q7Hx2mZp9vLcT4wRfBa"] {
         assert!(!log.contains(private), "{log}");
     }
-    let due = fixture.outbox().await.due(db::now() + 60).await.unwrap();
+    let due = fixture.outbox().await.due(now() + 60).await.unwrap();
     assert_eq!(due[0].attempts, 1);
 }
 
@@ -130,7 +150,7 @@ async fn checking_names_the_server_it_cannot_log_in_to_and_sends_nothing() {
         body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa\n".into(),
     };
     let outbox = fixture.outbox().await;
-    outbox.queue(&message, db::now()).await.unwrap();
+    outbox.queue(&message, now()).await.unwrap();
     write_smtp_password(&fixture);
 
     let output = mailer_command(&fixture, &["--check"]).output().unwrap();
@@ -145,5 +165,5 @@ async fn checking_names_the_server_it_cannot_log_in_to_and_sends_nothing() {
         stderr.contains(" as noreply@weblounge.org: Connection error: "),
         "{stderr}"
     );
-    assert_eq!(outbox.due(db::now()).await.unwrap()[0].attempts, 0);
+    assert_eq!(outbox.due(now()).await.unwrap()[0].attempts, 0);
 }

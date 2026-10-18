@@ -8,11 +8,11 @@ let
   mailer = config.systemd.services.concierge-mailer;
 
   serviceOnly = {
-    ExecStart = "${lib.getExe pkgs.weblounge.concierge} mailer";
+    ExecStart = lib.getExe pkgs.weblounge.mailer;
     Restart = "on-failure";
   };
 
-  # `concierge mailer --check`, confined, configured and credentialed as
+  # `mailer --check`, confined, configured and credentialed as
   # the mailer is, so it fails wherever the mailer would.
   check = pkgs.writeShellScript "concierge-mailer-check" ''
     exec ${config.security.wrapperDir}/sudo ${config.systemd.package}/bin/systemd-run \

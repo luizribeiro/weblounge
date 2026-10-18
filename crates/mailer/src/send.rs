@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use common::{now, random, recent::Quota};
+use common::{email::Email, now, random, recent::Quota};
 use lettre::{
     Address, AsyncSmtpTransport, AsyncTransport, Tokio1Executor,
     message::{Mailbox, SinglePart},
@@ -21,7 +21,7 @@ use lettre::{
 };
 use outbox::{Outbox, QueuedMessage, Subject};
 
-use crate::{config::MailerConfig, email::Email};
+use crate::config::MailerConfig;
 
 /// How long the outbox sits unchecked. Concierge can't wake the mailer, and
 /// a member waiting for a verification email notices more than a few

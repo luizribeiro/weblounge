@@ -5,9 +5,8 @@ use concierge::{
     admin::{self, Command},
     app::{self, App},
     assets::Assets,
-    config::{Config, Databases, MailerConfig, RemindConfig},
+    config::{Config, Databases, RemindConfig},
     db::{self, Db},
-    mailer::{self, Mailer},
     oauth::Webchat,
     rate_limit::{
         AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
@@ -24,10 +23,6 @@ async fn main() -> anyhow::Result<()> {
         Command::Migrate => migrate(&Databases::from_env()?).await,
         Command::Serve => serve(Config::from_env()?).await,
         Command::Remind => remind(&RemindConfig::from_env()?).await,
-        Command::Mailer { check: true } => mailer::check(&MailerConfig::from_env()?)
-            .await
-            .map(|output| print!("{output}")),
-        Command::Mailer { check: false } => send_mail(MailerConfig::from_env()?).await,
         Command::Admin(command) => admin::run(command, &Config::from_env()?)
             .await
             .map(|output| print!("{output}")),
@@ -60,16 +55,6 @@ async fn remind(config: &RemindConfig) -> anyhow::Result<()> {
         eprintln!("{} more are due; the next run mails them", batch.left);
     }
     Ok(())
-}
-
-async fn send_mail(config: MailerConfig) -> anyhow::Result<()> {
-    let outbox = Outbox::open(&config.outbox_path).await?;
-    let mailer = Mailer::new(outbox, mailer::smtp(&config)?, config.from.clone());
-    eprintln!(
-        "Sending mail through {}:{}",
-        config.smtp_host, config.smtp_port
-    );
-    mailer.run().await
 }
 
 async fn serve(config: Config) -> anyhow::Result<()> {

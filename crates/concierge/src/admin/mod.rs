@@ -29,12 +29,6 @@ pub enum Command {
     /// CONCIERGE_PUBLIC_URL, to every member whose one reminder is due, a
     /// batch at a time.
     Remind,
-    /// Send the mail concierge queues, through CONCIERGE_SMTP_HOST.
-    Mailer {
-        /// Log in to the SMTP server and leave, sending nothing.
-        #[arg(long)]
-        check: bool,
-    },
     #[command(flatten)]
     Admin(AdminCommand),
 }
