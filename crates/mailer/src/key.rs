@@ -16,6 +16,11 @@ impl Key {
     pub fn public(&self) -> PublicKey {
         self.0.to_public()
     }
+
+    /// What `ciphertext` says, if it was sealed to this key.
+    pub fn open(&self, ciphertext: &[u8]) -> Option<String> {
+        String::from_utf8(age::decrypt(&self.0, ciphertext).ok()?).ok()
+    }
 }
 
 #[cfg(test)]
@@ -27,5 +32,15 @@ mod tests {
         let [first, second] = [(); 2].map(|()| Key::generate().public());
         assert_ne!(first, second);
         assert!(first.to_string().starts_with("age1"), "{first}");
+    }
+
+    #[test]
+    fn opens_only_what_was_sealed_to_it() {
+        let (key, other) = (Key::generate(), Key::generate());
+        let sealed = age::encrypt(&key.public(), "Hi Zoë".as_bytes()).unwrap();
+
+        assert_eq!(key.open(&sealed).as_deref(), Some("Hi Zoë"));
+        assert_eq!(other.open(&sealed), None);
+        assert_eq!(key.open(b"Hi Zoe"), None);
     }
 }

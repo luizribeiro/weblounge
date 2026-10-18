@@ -19,7 +19,7 @@ use lettre::{
         response::{Category, Code, Severity},
     },
 };
-use outbox::{Body, Outbox, QueuedMessage, Subject};
+use outbox::{Body, Deletion, Outbox, QueuedMessage, Subject};
 
 use crate::{config::MailerConfig, key::Key};
 
@@ -124,6 +124,8 @@ pub struct Round {
     /// Rows that no longer make a message, deleted.
     pub unreadable: usize,
     pub given_up: u64,
+    /// Sealed to an earlier mailer's key, and deleted unsent.
+    pub sealed_to_others: u64,
     /// Due, but over the hourly quota.
     pub waiting: usize,
 }
@@ -148,9 +150,12 @@ impl<T: Transport> Mailer<T> {
         }
     }
 
-    /// Makes this mailer's key the one concierge seals mail to.
-    pub async fn publish_key(&self) -> anyhow::Result<()> {
-        Ok(self.outbox.publish_key(&self.key.public()).await?)
+    /// Makes this mailer's key the one concierge seals mail to, deleting
+    /// what was sealed to another.
+    pub async fn publish_key(&self) -> anyhow::Result<Deletion> {
+        let deletion = self.outbox.publish_key(&self.key.public()).await?;
+        log_sealed_to_others(deletion.messages);
+        Ok(deletion)
     }
 
     /// Sends the outbox, round after round, until the outbox fails.
@@ -161,16 +166,21 @@ impl<T: Transport> Mailer<T> {
         }
     }
 
-    /// Deletes the messages given up on, then tries each one due at `now`
-    /// while the quota lasts.
+    /// Deletes the messages given up on and those no key of this mailer's
+    /// opens, then tries each one due at `now` while the quota lasts.
     pub async fn round(&self, now: i64, instant: Instant) -> anyhow::Result<Round> {
         let mut round = Round {
             given_up: self.outbox.delete_given_up(now).await?.messages,
+            sealed_to_others: (self.outbox)
+                .delete_sealed_to_others(&self.key.public())
+                .await?
+                .messages,
             ..Round::default()
         };
         if round.given_up > 0 {
             eprintln!("Gave up on {} messages and deleted them", round.given_up);
         }
+        log_sealed_to_others(round.sealed_to_others);
         let due = self.outbox.due(now).await?;
         for (index, queued) in due.iter().enumerate() {
             let id = queued.id;
@@ -213,10 +223,11 @@ impl<T: Transport> Mailer<T> {
     }
 
     /// The message `queued` makes, if its recipient and subject still
-    /// parse, and its body is plain.
+    /// parse, and its body is plain or opens with this mailer's key.
     fn message(&self, queued: &QueuedMessage) -> Option<lettre::Message> {
-        let Body::Plain(body) = &queued.body else {
-            return None;
+        let body = match &queued.body {
+            Body::Plain(text) => text.clone(),
+            Body::Sealed { ciphertext, .. } => self.key.open(ciphertext)?,
         };
         let to: Address = Email::parse(&queued.recipient)
             .ok()?
@@ -229,7 +240,7 @@ impl<T: Transport> Mailer<T> {
             .from(self.from.clone())
             .to(Mailbox::new(None, to))
             .subject(subject.as_str())
-            .singlepart(SinglePart::plain(body.clone()))
+            .singlepart(SinglePart::plain(body))
             .ok()
     }
 
@@ -238,6 +249,12 @@ impl<T: Transport> Mailer<T> {
     fn message_id(&self) -> String {
         let unique = random::string(random::URL_SAFE, MESSAGE_ID_LENGTH);
         format!("<{unique}@{}>", self.from.email.domain())
+    }
+}
+
+fn log_sealed_to_others(messages: u64) {
+    if messages > 0 {
+        eprintln!("Deleted {messages} messages sealed to an earlier mailer's key, unsent");
     }
 }
 
@@ -251,7 +268,7 @@ mod tests {
     use crate::config::SMTP_PASSWORD_CREDENTIAL;
     use outbox::{
         GIVE_UP_AFTER,
-        testing::{QUEUED, VERIFY_SUBJECT, execute, with_outbox},
+        testing::{QUEUED, TestKey, VERIFY_SUBJECT, execute, message, with_outbox},
     };
 
     /// An SMTP server that takes everything but what it's told to refuse.
@@ -341,6 +358,49 @@ mod tests {
 
         let published = mailer.outbox.published_key().await.unwrap();
         assert_eq!(published, Some(mailer.key.public()));
+    }
+
+    /// Queues carol's verification email, sealed to the key published.
+    async fn queue_carols(mailer: &Mailer<FakeServer>) {
+        let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
+        mailer.outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn opens_and_sends_what_was_sealed_to_its_key() {
+        let (mailer, _dir) = mailer(FakeServer::default()).await;
+        mailer.publish_key().await.unwrap();
+        queue_carols(&mailer).await;
+
+        let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
+
+        assert_eq!((round.sent, round.unreadable), (3, 0));
+        let delivered = mailer.transport.delivered.lock().unwrap();
+        assert_eq!(recipient(&delivered[1]), "carol@example.org");
+        let formatted = String::from_utf8(delivered[1].formatted()).unwrap();
+        assert!(
+            formatted.contains("verify#q7Hx2mZp9vLcT4wRfBa"),
+            "{formatted}"
+        );
+    }
+
+    #[tokio::test]
+    async fn deletes_what_was_sealed_to_an_earlier_mailer_unsent() {
+        let (mailer, _dir) = mailer(FakeServer::default()).await;
+        TestKey::publish(&mailer.outbox).await;
+        queue_carols(&mailer).await;
+
+        let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
+
+        assert_eq!((round.sealed_to_others, round.sent), (1, 2));
+        assert_eq!(
+            mailer.transport.recipients(),
+            ["alice@example.org", "bob@example.org"]
+        );
+        TestKey::publish(&mailer.outbox).await;
+        queue_carols(&mailer).await;
+        assert_eq!(mailer.publish_key().await.unwrap().messages, 1);
+        assert!(due(&mailer, QUEUED + 60).await.is_empty());
     }
 
     #[tokio::test]
@@ -465,19 +525,25 @@ mod tests {
     #[tokio::test]
     async fn deletes_rows_that_no_longer_make_a_message() {
         let (mailer, _dir) = mailer(FakeServer::default()).await;
+        let key = mailer.key.public();
         execute(
             &mailer.outbox,
-            "INSERT INTO outbox (recipient, subject, body, created_at, next_attempt_at)
-             VALUES ('carol', 'Verify', 'Hi', 1760000000, 1760000000),
-                    ('dave@example.org', 'Verify' || char(10) || 'Bcc: x', 'Hi',
-                     1760000000, 1760000000);",
+            &format!(
+                "INSERT INTO outbox (recipient, subject, body, created_at, next_attempt_at)
+                 VALUES ('carol', 'Verify', 'Hi', 1760000000, 1760000000),
+                        ('dave@example.org', 'Verify' || char(10) || 'Bcc: x', 'Hi',
+                         1760000000, 1760000000);
+                 INSERT INTO outbox (recipient, subject, sealed_to, sealed_body, created_at,
+                                     next_attempt_at)
+                 VALUES ('erin@example.org', 'Verify', '{key}', x'00', 1760000000, 1760000000);"
+            ),
         )
         .await
         .unwrap();
 
         let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
 
-        assert_eq!((round.unreadable, round.sent), (2, 2));
+        assert_eq!((round.unreadable, round.sent), (3, 2));
         assert!(due(&mailer, QUEUED + 60).await.is_empty());
     }
 

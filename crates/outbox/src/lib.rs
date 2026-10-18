@@ -11,7 +11,7 @@ use std::{fmt, path::Path};
 
 use anyhow::Context;
 use common::{email::Email, sqlite};
-use sqlx::{SqliteExecutor, SqlitePool, migrate::Migrator};
+use sqlx::{SqliteExecutor, SqlitePool, migrate::Migrator, sqlite::SqliteQueryResult};
 
 /// The public half of the mailer's key, which mail is sealed to.
 pub use age::x25519::Recipient as PublicKey;
@@ -193,17 +193,31 @@ impl Outbox {
         sqlite::migration_version(&self.pool).await
     }
 
-    /// Makes `key` the one concierge seals mail to, in place of any other.
-    pub async fn publish_key(&self, key: &PublicKey) -> sqlx::Result<()> {
+    /// Makes `key` the one concierge seals mail to, in place of any other,
+    /// and deletes what was sealed to another: whoever held that key is
+    /// gone, and nobody can open it now. Sealing reads the key in the same
+    /// transaction it queues in, so nothing sealed to the old key can be
+    /// queued after this.
+    pub async fn publish_key(&self, key: &PublicKey) -> sqlx::Result<Deletion> {
         let key = key.to_string();
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         sqlx::query!(
             "INSERT INTO mailer_key (only, public_key) VALUES (1, ?)
              ON CONFLICT (only) DO UPDATE SET public_key = excluded.public_key",
             key,
         )
-        .execute(&self.pool)
-        .await
-        .map(drop)
+        .execute(&mut *transaction)
+        .await?;
+        let deleted = delete_sealed_to_others(&mut *transaction, &key).await?;
+        transaction.commit().await?;
+        Ok(self.erase(deleted.rows_affected()).await)
+    }
+
+    /// Deletes the messages sealed to any key but `key`, which nobody can
+    /// open any more.
+    pub async fn delete_sealed_to_others(&self, key: &PublicKey) -> sqlx::Result<Deletion> {
+        let deleted = delete_sealed_to_others(&self.pool, &key.to_string()).await?;
+        Ok(self.erase(deleted.rows_affected()).await)
     }
 
     /// The key the mailer published, if any.
@@ -329,6 +343,18 @@ async fn insert(
     .execute(executor)
     .await
     .map(|inserted| inserted.last_insert_rowid())
+}
+
+async fn delete_sealed_to_others(
+    executor: impl SqliteExecutor<'_>,
+    key: &str,
+) -> sqlx::Result<SqliteQueryResult> {
+    sqlx::query!(
+        "DELETE FROM outbox WHERE sealed_to IS NOT NULL AND sealed_to != ?",
+        key,
+    )
+    .execute(executor)
+    .await
 }
 
 async fn published_key(executor: impl SqliteExecutor<'_>) -> sqlx::Result<Option<PublicKey>> {
@@ -545,6 +571,42 @@ mod tests {
         assert_eq!(error.downcast_ref(), Some(&NoKey));
         assert!(outbox.due(QUEUED).await.unwrap().is_empty());
         assert!(!files_contain(&dir, CODE));
+    }
+
+    #[tokio::test]
+    async fn a_new_key_deletes_what_was_sealed_to_the_old_but_not_plain_mail() {
+        let (outbox, _dir) = with_outbox().await;
+        let old = TestKey::publish(&outbox).await;
+        let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
+        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        let new = TestKey::generate().public();
+
+        let deletion = outbox.publish_key(&new).await.unwrap();
+
+        assert_eq!(
+            deletion,
+            Deletion {
+                messages: 1,
+                off_the_disk: true,
+            }
+        );
+        let due = outbox.due(QUEUED + 60).await.unwrap();
+        assert_eq!(recipients(&due), ["alice@example.org", "bob@example.org"]);
+        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        assert_eq!(
+            outbox
+                .delete_sealed_to_others(&old.public())
+                .await
+                .unwrap()
+                .messages,
+            1
+        );
+        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        assert_eq!(
+            outbox.delete_sealed_to_others(&new).await.unwrap().messages,
+            0
+        );
+        assert_eq!(outbox.due(QUEUED + 60).await.unwrap().len(), 3);
     }
 
     #[tokio::test]
