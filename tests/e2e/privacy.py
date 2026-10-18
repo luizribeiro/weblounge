@@ -1,6 +1,6 @@
 # One subtest per promise on concierge's privacy page, under its headings.
 # "Not in the logs" is checked after every VM test, in lib/epilogue.py.
-import shlex
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -11,10 +11,12 @@ if TYPE_CHECKING:
         concierge_admin,
         concierge_sql,
         files_containing,
+        https,
         irc,
         irc_command,
         members,
         outcome,
+        patterns,
         register,
         wait_for_empty_outbox,
         wait_for_mail,
@@ -117,10 +119,15 @@ with subtest("leaving: an admin deletes the account, its email leaves the disk, 
 
 heidi: Account = {"account": "heidi", "password": "quarry-lantern-36"}
 ivan: Account = {"account": "ivan", "password": "saffron-kettle-12"}
-register(**heidi)
-register(**ivan)
-irc(**ivan)
-said_in_channel, said_in_private = "the-canary-sings-in-the-lounge", "the-canary-whispers-to-ivan"
+judy: Account = {"account": "judy", "password": "lichen-trumpet-47"}
+ken: Account = {"account": "ken", "password": "marble-fennel-83"}
+for member in [heidi, ivan, judy, ken]:
+    register(**member)
+    irc(**member)
+said_in_channel = "the-canary-sings-in-the-lounge"
+said_to_ivan = "the-canary-whispers-to-ivan"
+said_to_judy = "the-canary-whispers-to-judy"
+said_between_opted_out = "the-canary-whispers-off-the-record"
 
 
 def lounge_history():
@@ -133,31 +140,46 @@ def restart_ergo(days_later: int = 0) -> None:
     credenza.wait_for_open_port(6697)
 
 
-with subtest("messages: channel history survives a restart"):
-    irc(f"PRIVMSG #lounge :{said_in_channel}", f"PRIVMSG ivan :{said_in_private}", **heidi)
+with subtest("messages: channel and direct messages survive a restart"):
+    turn_off_dm_storage = re.findall(r"<code>/msg NickServ (.+?)</code>", https(members, "/privacy"))
+    assert len(turn_off_dm_storage) == 1, turn_off_dm_storage
+    for member in [judy, ken]:
+        reply = irc(f"PRIVMSG NickServ :{turn_off_dm_storage[0]}", **member)
+        assert "your direct message history setting is: ephemeral" in reply, reply
+    irc(
+        f"PRIVMSG #lounge :{said_in_channel}", f"PRIVMSG ivan :{said_to_ivan}", f"PRIVMSG judy :{said_to_judy}", **heidi
+    )
+    irc(f"PRIVMSG judy :{said_between_opted_out}", **ken)
+    assert said_between_opted_out in irc("HISTORY ken 50", **judy)
     restart_ergo()
     assert said_in_channel in lounge_history()
+    assert said_to_ivan in irc("HISTORY heidi 50", **ivan)
 
-with subtest("messages: direct messages never reach the disk"):
-    found = files_containing(said_in_private)
+with subtest("messages: members who turned off storing DMs keep their conversations off the disk"):
+    found = files_containing(said_between_opted_out)
     assert found == [], found
 
+with subtest("messages: a DM is stored while either side stores DMs"):
+    assert files_containing(said_to_judy) != []
+
 # Moves the clock, so it goes last.
-with subtest("messages: channel messages stay two weeks, then leave the disk, and newer ones stay"):
-    assert files_containing(said_in_channel) != []
+with subtest("messages: channel and direct messages stay two weeks, then leave the disk, and newer ones stay"):
+    stored = [said_in_channel, said_to_ivan, said_to_judy]
+    assert all(files_containing(said) for said in stored)
     restart_ergo(13)
     assert said_in_channel in lounge_history()
+    assert said_to_ivan in irc("HISTORY heidi 50", **ivan)
     restart_ergo(2)
     said_since = "the-canary-sings-two-weeks-later"
     irc(f"PRIVMSG #lounge :{said_since}", **heidi)
     credenza.wait_until_succeeds(
-        f"systemctl start ergochat-vacuum && ! grep -rqaF {shlex.quote(said_in_channel)} /var/lib/private/ergo",
-        timeout=60,
+        f"systemctl start ergochat-vacuum && ! grep -rqaF {patterns(stored)} /var/lib/private/ergo", timeout=60
     )
-    found = files_containing(said_in_channel)
+    found = files_containing(*stored)
     assert found == [], found
     history = lounge_history()
     assert said_in_channel not in history and said_since in history, history
+    assert said_to_ivan not in irc("HISTORY heidi 50", **ivan)
     assert files_containing(said_since) != []
     owners = credenza.succeed("stat -c %u /var/lib/private/ergo /var/lib/private/ergo/ergo_history.db*").split()
     assert len(set(owners)) == 1, owners

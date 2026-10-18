@@ -96,7 +96,7 @@ in
         persistent = {
           enabled = true;
           unregistered-channels = true;
-          direct-messages = "disabled";
+          direct-messages = "opt-out";
         };
         restrictions.expire-time = "2w";
         retention.allow-individual-delete = true;
