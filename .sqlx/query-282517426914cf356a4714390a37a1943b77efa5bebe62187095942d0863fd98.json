@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, recipient, subject, body, created_at, attempts FROM outbox\n             WHERE next_attempt_at <= ? AND created_at >= ?\n             ORDER BY created_at, id",
+  "query": "SELECT id, recipient, subject, body, sealed_to, sealed_body, created_at, attempts\n             FROM outbox\n             WHERE next_attempt_at <= ? AND created_at >= ?\n             ORDER BY created_at, id",
   "describe": {
     "columns": [
       {
@@ -24,13 +24,23 @@
         "type_info": "Text"
       },
       {
-        "name": "created_at",
+        "name": "sealed_to",
         "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "sealed_body",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
         "type_info": "Integer"
       },
       {
         "name": "attempts",
-        "ordinal": 5,
+        "ordinal": 7,
         "type_info": "Integer"
       }
     ],
@@ -41,10 +51,12 @@
       false,
       false,
       false,
-      false,
+      true,
+      true,
+      true,
       false,
       false
     ]
   },
-  "hash": "9c4bf9093b50d37f9ec7012e3e6e4ddcaf81a9125fab2966c9cb0b9f22d825b5"
+  "hash": "282517426914cf356a4714390a37a1943b77efa5bebe62187095942d0863fd98"
 }

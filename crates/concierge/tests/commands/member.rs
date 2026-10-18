@@ -128,7 +128,7 @@ mod delete {
         fixture.run(&["member", "delete", "alice"]).await.unwrap();
 
         let due = outbox.due(db::now()).await.unwrap();
-        let bodies: Vec<_> = due.iter().map(|message| message.body.as_str()).collect();
+        let bodies: Vec<_> = due.iter().map(|message| message.text()).collect();
         assert_eq!(bodies, ["Hi bob, open the link to verify.\n"]);
     }
 
@@ -356,7 +356,11 @@ mod send_verification {
             panic!("one message");
         };
         assert_eq!(message.subject, SUBJECT);
-        assert!(message.body.starts_with("Hi alice,\n"), "{}", message.body);
+        assert!(
+            message.text().starts_with("Hi alice,\n"),
+            "{}",
+            message.text()
+        );
         let alice = fixture.db().await.member("alice").await.unwrap().unwrap();
         assert!(alice.verification_first_sent_at.is_some());
 
@@ -381,9 +385,9 @@ mod send_verification {
         let queued = queued(&fixture).await;
         assert_eq!(queued.len(), 1);
         assert!(
-            queued[0].body.starts_with("Hi bob,\n"),
+            queued[0].text().starts_with("Hi bob,\n"),
             "{}",
-            queued[0].body
+            queued[0].text()
         );
     }
 

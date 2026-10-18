@@ -19,7 +19,7 @@ use lettre::{
         response::{Category, Code, Severity},
     },
 };
-use outbox::{Outbox, QueuedMessage, Subject};
+use outbox::{Body, Outbox, QueuedMessage, Subject};
 
 use crate::{config::MailerConfig, key::Key};
 
@@ -213,8 +213,11 @@ impl<T: Transport> Mailer<T> {
     }
 
     /// The message `queued` makes, if its recipient and subject still
-    /// parse.
+    /// parse, and its body is plain.
     fn message(&self, queued: &QueuedMessage) -> Option<lettre::Message> {
+        let Body::Plain(body) = &queued.body else {
+            return None;
+        };
         let to: Address = Email::parse(&queued.recipient)
             .ok()?
             .as_str()
@@ -226,7 +229,7 @@ impl<T: Transport> Mailer<T> {
             .from(self.from.clone())
             .to(Mailbox::new(None, to))
             .subject(subject.as_str())
-            .singlepart(SinglePart::plain(queued.body.clone()))
+            .singlepart(SinglePart::plain(body.clone()))
             .ok()
     }
 

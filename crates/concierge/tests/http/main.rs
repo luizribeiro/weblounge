@@ -316,10 +316,10 @@ fn location(response: &Response) -> &str {
 fn verification_link(message: &QueuedMessage) -> (&str, &str) {
     let prefix = format!("{PUBLIC_URL}/verify#");
     let link = message
-        .body
+        .text()
         .lines()
         .find(|line| line.starts_with(&prefix))
-        .unwrap_or_else(|| panic!("a verification link in {}", message.body));
+        .unwrap_or_else(|| panic!("a verification link in {}", message.text()));
     (link, &link[prefix.len()..])
 }
 

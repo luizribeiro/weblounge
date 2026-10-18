@@ -1,7 +1,9 @@
 //! What concierge leaves in the outbox for concierge-mailer, and when the
 //! mailer tries a message again after failing to send it. The outbox is a
 //! database of its own, so the mailer opens nothing else of concierge's;
-//! the mailer publishes its public key in it too.
+//! the mailer publishes its public key in it too. Concierge seals the
+//! messages that carry a secret to that key, and only the mailer opens
+//! them.
 //!
 //! Times are Unix seconds.
 
@@ -71,7 +73,7 @@ impl Subject {
     }
 }
 
-/// A plain-text message to queue.
+/// A plain-text message to queue, as it is or sealed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message {
     /// The member it's for, if any, whose removal deletes it.
@@ -81,17 +83,73 @@ pub struct Message {
     pub body: String,
 }
 
+/// What a queued message says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Body {
+    Plain(String),
+    /// age ciphertext, which only the mailer that published `to` opens.
+    Sealed {
+        to: String,
+        ciphertext: Vec<u8>,
+    },
+}
+
 /// A message waiting in the outbox.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueuedMessage {
     pub id: i64,
     pub recipient: String,
     pub subject: String,
-    pub body: String,
+    pub body: Body,
     pub created_at: i64,
     /// How many times sending it failed.
     pub attempts: i64,
 }
+
+/// An outbox row, whose CHECKs make it plain or sealed.
+struct Row {
+    id: i64,
+    recipient: String,
+    subject: String,
+    body: Option<String>,
+    sealed_to: Option<String>,
+    sealed_body: Option<Vec<u8>>,
+    created_at: i64,
+    attempts: i64,
+}
+
+impl From<Row> for QueuedMessage {
+    fn from(row: Row) -> Self {
+        let body = match row.body {
+            Some(text) => Body::Plain(text),
+            None => Body::Sealed {
+                to: row.sealed_to.unwrap_or_default(),
+                ciphertext: row.sealed_body.unwrap_or_default(),
+            },
+        };
+        Self {
+            id: row.id,
+            recipient: row.recipient,
+            subject: row.subject,
+            body,
+            created_at: row.created_at,
+            attempts: row.attempts,
+        }
+    }
+}
+
+/// Why a message wasn't sealed: the mailer isn't running, or hasn't
+/// published its key yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoKey;
+
+impl fmt::Display for NoKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("the mailer has published no key to seal mail to")
+    }
+}
+
+impl std::error::Error for NoKey {}
 
 /// What deleting messages from the outbox did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,36 +214,41 @@ impl Outbox {
     /// Leaves `message` for the mailer to send as soon as it can, and
     /// answers its id, which the mailer logs it by.
     pub async fn queue(&self, message: &Message, now: i64) -> sqlx::Result<i64> {
-        let (recipient, subject) = (message.to.as_str(), message.subject.as_str());
-        sqlx::query!(
-            "INSERT INTO outbox (account, recipient, subject, body, created_at, next_attempt_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
-            message.account,
-            recipient,
-            subject,
-            message.body,
-            now,
-            now,
-        )
-        .execute(&self.pool)
-        .await
-        .map(|inserted| inserted.last_insert_rowid())
+        let body = Body::Plain(message.body.clone());
+        insert(&self.pool, message, &body, now).await
+    }
+
+    /// [`queue`](Self::queue)s `message` sealed to the mailer's key, so the
+    /// disk never holds what it says. Fails with [`NoKey`] while the mailer
+    /// has published none, rather than leave the message as it is.
+    pub async fn queue_sealed(&self, message: &Message, now: i64) -> anyhow::Result<i64> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let key = published_key(&mut *transaction).await?.ok_or(NoKey)?;
+        let body = Body::Sealed {
+            to: key.to_string(),
+            ciphertext: age::encrypt(&key, message.body.as_bytes())?,
+        };
+        let id = insert(&mut *transaction, message, &body, now).await?;
+        transaction.commit().await?;
+        Ok(id)
     }
 
     /// The messages due to be tried at `now` that the mailer hasn't given
     /// up on, oldest first.
     pub async fn due(&self, now: i64) -> sqlx::Result<Vec<QueuedMessage>> {
         let given_up_before = given_up_before(now);
-        sqlx::query_as!(
-            QueuedMessage,
-            "SELECT id, recipient, subject, body, created_at, attempts FROM outbox
+        let rows = sqlx::query_as!(
+            Row,
+            "SELECT id, recipient, subject, body, sealed_to, sealed_body, created_at, attempts
+             FROM outbox
              WHERE next_attempt_at <= ? AND created_at >= ?
              ORDER BY created_at, id",
             now,
             given_up_before,
         )
         .fetch_all(&self.pool)
-        .await
+        .await?;
+        Ok(rows.into_iter().map(QueuedMessage::from).collect())
     }
 
     /// Notes that sending `message` failed at `now`, putting it off.
@@ -239,6 +302,35 @@ impl Outbox {
     }
 }
 
+async fn insert(
+    executor: impl SqliteExecutor<'_>,
+    message: &Message,
+    body: &Body,
+    now: i64,
+) -> sqlx::Result<i64> {
+    let (recipient, subject) = (message.to.as_str(), message.subject.as_str());
+    let (text, sealed_to, sealed_body) = match body {
+        Body::Plain(text) => (Some(text), None, None),
+        Body::Sealed { to, ciphertext } => (None, Some(to), Some(ciphertext)),
+    };
+    sqlx::query!(
+        "INSERT INTO outbox
+             (account, recipient, subject, body, sealed_to, sealed_body, created_at, next_attempt_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        message.account,
+        recipient,
+        subject,
+        text,
+        sealed_to,
+        sealed_body,
+        now,
+        now,
+    )
+    .execute(executor)
+    .await
+    .map(|inserted| inserted.last_insert_rowid())
+}
+
 async fn published_key(executor: impl SqliteExecutor<'_>) -> sqlx::Result<Option<PublicKey>> {
     let key = sqlx::query_scalar!("SELECT public_key FROM mailer_key")
         .fetch_optional(executor)
@@ -270,7 +362,7 @@ pub mod testing {
         sqlx::query(sql).execute(&outbox.pool).await.map(drop)
     }
 
-    pub(crate) fn message(account: Option<&str>, to: &str, subject: &str) -> Message {
+    pub fn message(account: Option<&str>, to: &str, subject: &str) -> Message {
         Message {
             account: account.map(Into::into),
             to: Email::parse(to).unwrap(),
@@ -281,6 +373,54 @@ pub mod testing {
                  the address you gave weblounge.org. Zoë says hello.\n",
                 account.unwrap_or("there"),
             ),
+        }
+    }
+
+    /// A key published as the mailer's, which tests open what's sealed to
+    /// it with.
+    pub struct TestKey(age::x25519::Identity);
+
+    impl TestKey {
+        pub fn generate() -> Self {
+            Self(age::x25519::Identity::generate())
+        }
+
+        pub async fn publish(outbox: &Outbox) -> Self {
+            let key = Self::generate();
+            outbox.publish_key(&key.public()).await.unwrap();
+            key
+        }
+
+        pub fn public(&self) -> PublicKey {
+            self.0.to_public()
+        }
+
+        /// `messages`, with what's sealed to this key opened.
+        pub fn open(&self, messages: Vec<QueuedMessage>) -> Vec<QueuedMessage> {
+            messages
+                .into_iter()
+                .map(|message| match message.body {
+                    Body::Sealed { ciphertext, .. } => QueuedMessage {
+                        body: Body::Plain(self.open_body(&ciphertext)),
+                        ..message
+                    },
+                    Body::Plain(_) => message,
+                })
+                .collect()
+        }
+
+        fn open_body(&self, ciphertext: &[u8]) -> String {
+            String::from_utf8(age::decrypt(&self.0, ciphertext).unwrap()).unwrap()
+        }
+    }
+
+    impl QueuedMessage {
+        /// What the message says, once it's plain or opened.
+        pub fn text(&self) -> &str {
+            match &self.body {
+                Body::Plain(text) => text,
+                Body::Sealed { .. } => panic!("message {} is sealed", self.id),
+            }
         }
     }
 
@@ -360,13 +500,93 @@ mod tests {
     async fn the_mailers_newest_key_replaces_the_last() {
         let (outbox, _dir) = temp_outbox().await;
         assert_eq!(outbox.published_key().await.unwrap(), None);
-        let [first, second] = [(); 2].map(|()| age::x25519::Identity::generate().to_public());
+        let [first, second] = [(); 2].map(|()| TestKey::generate().public());
 
         outbox.publish_key(&first).await.unwrap();
         assert_eq!(outbox.published_key().await.unwrap().as_ref(), Some(&first));
         outbox.publish_key(&second).await.unwrap();
 
         assert_eq!(outbox.published_key().await.unwrap(), Some(second));
+    }
+
+    const CODE: &[u8] = b"q7Hx2mZp9vLcT4wRfBa";
+
+    #[tokio::test]
+    async fn a_sealed_message_reaches_the_disk_sealed_to_the_published_key() {
+        let (outbox, dir) = temp_outbox().await;
+        let key = TestKey::publish(&outbox).await;
+        let alices = message(Some("alice"), "alice@example.org", VERIFY_SUBJECT);
+
+        outbox.queue_sealed(&alices, QUEUED).await.unwrap();
+
+        let due = outbox.due(QUEUED).await.unwrap();
+        let Body::Sealed { to, .. } = &due[0].body else {
+            panic!("sealed: {due:?}");
+        };
+        assert_eq!(*to, key.public().to_string());
+        assert_eq!(due[0].recipient, "alice@example.org");
+        assert_eq!(key.open(due)[0].text(), alices.body);
+        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(&outbox.pool)
+            .await
+            .unwrap();
+        assert!(!files_contain(&dir, CODE));
+        assert!(!files_contain(&dir, "Zoë".as_bytes()));
+        assert!(files_contain(&dir, b"alice@example.org"));
+    }
+
+    #[tokio::test]
+    async fn nothing_is_sealed_or_queued_before_the_mailer_publishes_a_key() {
+        let (outbox, dir) = temp_outbox().await;
+        let alices = message(Some("alice"), "alice@example.org", VERIFY_SUBJECT);
+
+        let error = outbox.queue_sealed(&alices, QUEUED).await.unwrap_err();
+
+        assert_eq!(error.downcast_ref(), Some(&NoKey));
+        assert!(outbox.due(QUEUED).await.unwrap().is_empty());
+        assert!(!files_contain(&dir, CODE));
+    }
+
+    #[tokio::test]
+    async fn sealing_waits_for_a_key_being_published_and_seals_to_it() {
+        let (outbox, _dir) = temp_outbox().await;
+        TestKey::publish(&outbox).await;
+        let new = TestKey::generate();
+        let mut publishing = outbox.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+        let key = new.public().to_string();
+        sqlx::query("UPDATE mailer_key SET public_key = ?")
+            .bind(&key)
+            .execute(&mut *publishing)
+            .await
+            .unwrap();
+        let alices = message(Some("alice"), "alice@example.org", VERIFY_SUBJECT);
+        let sealing = {
+            let outbox = outbox.clone();
+            tokio::spawn(async move { outbox.queue_sealed(&alices, QUEUED).await })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        publishing.commit().await.unwrap();
+        sealing.await.unwrap().unwrap();
+
+        let due = outbox.due(QUEUED).await.unwrap();
+        assert!(
+            matches!(&due[0].body, Body::Sealed { to, .. } if *to == key),
+            "{due:?}"
+        );
+        assert!(new.open(due)[0].text().starts_with("Hi alice,"));
+    }
+
+    #[tokio::test]
+    async fn an_id_names_one_message_even_once_it_is_deleted() {
+        let (outbox, _dir) = temp_outbox().await;
+        let alices = message(Some("alice"), "alice@example.org", VERIFY_SUBJECT);
+        let first = outbox.queue(&alices, QUEUED).await.unwrap();
+        outbox.delete(first).await.unwrap();
+
+        let second = outbox.queue(&alices, QUEUED).await.unwrap();
+
+        assert!(second > first, "{second} after {first}");
     }
 
     #[tokio::test]
@@ -380,7 +600,7 @@ mod tests {
                 id: due[0].id,
                 recipient: "alice@example.org".into(),
                 subject: "Verify your email for weblounge".into(),
-                body: message(Some("alice"), "alice@example.org", "-").body,
+                body: Body::Plain(message(Some("alice"), "alice@example.org", "-").body),
                 created_at: QUEUED,
                 attempts: 0,
             }

@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(queued.subject, SUBJECT);
         let prefix = format!("{PUBLIC_URL}/verify#");
         let code = queued
-            .body
+            .text()
             .lines()
             .find_map(|line| line.strip_prefix(&prefix))
             .unwrap();

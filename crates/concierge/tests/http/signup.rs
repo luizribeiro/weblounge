@@ -92,7 +92,11 @@ async fn signing_up_mails_a_link_that_verifies_the_new_members_email() {
     };
     assert_eq!(message.recipient, "bob@example.org");
     assert_eq!(message.subject, verification_mail::SUBJECT);
-    assert!(message.body.starts_with("Hi Bob,\n"), "{}", message.body);
+    assert!(
+        message.text().starts_with("Hi Bob,\n"),
+        "{}",
+        message.text()
+    );
     let (link, code) = verification_link(message);
     assert!(!page.contains(code), "{page}");
     let bob = site.db.member("bob").await.unwrap().unwrap();

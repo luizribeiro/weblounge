@@ -21,7 +21,7 @@ mod test {
         assert_eq!(due[0].subject, "A test message from weblounge.org");
         assert!(
             due[0]
-                .body
+                .text()
                 .contains("check that the network's mail goes out")
         );
         let output = fixture.run(&["mail", "test", "luiz@example.org"]).await;
