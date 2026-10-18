@@ -30,6 +30,7 @@ async fn main() -> anyhow::Result<()> {
 async fn send_mail(config: MailerConfig) -> anyhow::Result<()> {
     let outbox = Outbox::open(&config.outbox_path).await?;
     let mailer = Mailer::new(outbox, send::smtp(&config)?, config.from.clone());
+    mailer.publish_key().await?;
     eprintln!(
         "Sending mail through {}:{}",
         config.smtp_host, config.smtp_port

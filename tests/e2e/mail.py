@@ -14,7 +14,9 @@ if TYPE_CHECKING:
         link_in,
         mails_to,
         members,
+        outbox,
         outbox_sql,
+        sqlite_command,
         wait_for_empty_outbox,
         wait_for_mail,
     )
@@ -25,6 +27,7 @@ remind_log = "journalctl -o cat -u concierge-remind"
 verification_subject = "Confirm your email for weblounge.org"
 reminder_subject = "Reminder: confirm your email for weblounge.org"
 verify_link = f"https://{members}/verify#"
+key_query = sqlite_command(outbox, "SELECT public_key FROM mailer_key")
 
 
 def queue_test_message(address: str) -> str:
@@ -51,9 +54,19 @@ def post_code(link: str) -> str:
     return Browser("scanner").post("/verify", f"code={invite_code(link)}", flags=["-w", "\n%{http_code}"])
 
 
+def published_key() -> str:
+    """The key the mailer published, once it has."""
+    return credenza.wait_until_succeeds(f"{key_query} | grep '^age1'", timeout=30).strip()
+
+
 credenza.wait_for_unit("concierge-mailer.service")
 mail.wait_for_unit("mailpit-test.service")
 mail.wait_for_open_port(465)
+
+with subtest("the mailer publishes a new key each time it starts, for concierge to seal mail to"):
+    first = published_key()
+    credenza.succeed("systemctl restart concierge-mailer")
+    credenza.wait_until_succeeds(f"{key_query} | grep '^age1' | grep -qvxF {first}", timeout=30)
 
 with subtest("an admin's test message reaches the mail server from noreply@, as plain text, and leaves the outbox"):
     queued = queue_test_message("alice@example.org")

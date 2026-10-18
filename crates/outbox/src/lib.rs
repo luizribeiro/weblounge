@@ -1,6 +1,7 @@
 //! What concierge leaves in the outbox for concierge-mailer, and when the
 //! mailer tries a message again after failing to send it. The outbox is a
-//! database of its own, so the mailer opens nothing else of concierge's.
+//! database of its own, so the mailer opens nothing else of concierge's;
+//! the mailer publishes its public key in it too.
 //!
 //! Times are Unix seconds.
 
@@ -8,7 +9,10 @@ use std::{fmt, path::Path};
 
 use anyhow::Context;
 use common::{email::Email, sqlite};
-use sqlx::{SqlitePool, migrate::Migrator};
+use sqlx::{SqliteExecutor, SqlitePool, migrate::Migrator};
+
+/// The public half of the mailer's key, which mail is sealed to.
+pub use age::x25519::Recipient as PublicKey;
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 
@@ -131,6 +135,24 @@ impl Outbox {
         sqlite::migration_version(&self.pool).await
     }
 
+    /// Makes `key` the one concierge seals mail to, in place of any other.
+    pub async fn publish_key(&self, key: &PublicKey) -> sqlx::Result<()> {
+        let key = key.to_string();
+        sqlx::query!(
+            "INSERT INTO mailer_key (only, public_key) VALUES (1, ?)
+             ON CONFLICT (only) DO UPDATE SET public_key = excluded.public_key",
+            key,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
+    /// The key the mailer published, if any.
+    pub async fn published_key(&self) -> sqlx::Result<Option<PublicKey>> {
+        published_key(&self.pool).await
+    }
+
     /// Leaves `message` for the mailer to send as soon as it can, and
     /// answers its id, which the mailer logs it by.
     pub async fn queue(&self, message: &Message, now: i64) -> sqlx::Result<i64> {
@@ -215,6 +237,17 @@ impl Outbox {
             off_the_disk: messages == 0 || sqlite::empty_write_ahead_log(&self.pool).await,
         }
     }
+}
+
+async fn published_key(executor: impl SqliteExecutor<'_>) -> sqlx::Result<Option<PublicKey>> {
+    let key = sqlx::query_scalar!("SELECT public_key FROM mailer_key")
+        .fetch_optional(executor)
+        .await?;
+    key.map(|key| {
+        key.parse()
+            .map_err(|error: &str| sqlx::Error::Decode(error.into()))
+    })
+    .transpose()
 }
 
 /// A migrated outbox, and the mail tests queue in it.
@@ -321,6 +354,19 @@ mod tests {
         let outbox = Outbox::open(&path).await.unwrap();
         let latest = sqlite::latest_migration(&MIGRATOR);
         assert_eq!(outbox.migration_version().await.unwrap(), Some(latest));
+    }
+
+    #[tokio::test]
+    async fn the_mailers_newest_key_replaces_the_last() {
+        let (outbox, _dir) = temp_outbox().await;
+        assert_eq!(outbox.published_key().await.unwrap(), None);
+        let [first, second] = [(); 2].map(|()| age::x25519::Identity::generate().to_public());
+
+        outbox.publish_key(&first).await.unwrap();
+        assert_eq!(outbox.published_key().await.unwrap().as_ref(), Some(&first));
+        outbox.publish_key(&second).await.unwrap();
+
+        assert_eq!(outbox.published_key().await.unwrap(), Some(second));
     }
 
     #[tokio::test]

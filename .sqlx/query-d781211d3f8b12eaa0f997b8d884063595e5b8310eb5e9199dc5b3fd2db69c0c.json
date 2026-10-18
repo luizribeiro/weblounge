@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO mailer_key (only, public_key) VALUES (1, ?)\n             ON CONFLICT (only) DO UPDATE SET public_key = excluded.public_key",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d781211d3f8b12eaa0f997b8d884063595e5b8310eb5e9199dc5b3fd2db69c0c"
+}

@@ -21,7 +21,7 @@ use lettre::{
 };
 use outbox::{Outbox, QueuedMessage, Subject};
 
-use crate::config::MailerConfig;
+use crate::{config::MailerConfig, key::Key};
 
 /// How long the outbox sits unchecked. Concierge can't wake the mailer, and
 /// a member waiting for a verification email notices more than a few
@@ -133,16 +133,24 @@ pub struct Mailer<T> {
     pub transport: T,
     pub from: Mailbox,
     pub quota: Quota,
+    pub key: Key,
 }
 
 impl<T: Transport> Mailer<T> {
+    /// A mailer with a key of its own, which it has yet to publish.
     pub fn new(outbox: Outbox, transport: T, from: Mailbox) -> Self {
         Self {
             outbox,
             transport,
             from,
             quota: Quota::new(SENDS_PER_HOUR, HOUR),
+            key: Key::generate(),
         }
+    }
+
+    /// Makes this mailer's key the one concierge seals mail to.
+    pub async fn publish_key(&self) -> anyhow::Result<()> {
+        Ok(self.outbox.publish_key(&self.key.public()).await?)
     }
 
     /// Sends the outbox, round after round, until the outbox fails.
@@ -320,6 +328,16 @@ mod tests {
 
     fn alices(attempts: i64) -> (String, i64) {
         ("alice@example.org".into(), attempts)
+    }
+
+    #[tokio::test]
+    async fn publishes_its_own_key() {
+        let (mailer, _dir) = mailer(FakeServer::default()).await;
+
+        mailer.publish_key().await.unwrap();
+
+        let published = mailer.outbox.published_key().await.unwrap();
+        assert_eq!(published, Some(mailer.key.public()));
     }
 
     #[tokio::test]

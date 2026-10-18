@@ -126,6 +126,25 @@ async fn retries_mail_it_cannot_send_and_logs_no_address() {
     assert_eq!(due[0].attempts, 1);
 }
 
+#[tokio::test]
+async fn publishes_a_new_key_each_time_it_starts() {
+    let fixture = Fixture::start().await;
+    write_smtp_password(&fixture);
+    let mut published = Vec::new();
+    for _ in 0..2 {
+        let mut mailer = start_mailer(&fixture);
+        log_until(&mut mailer, |line| line.starts_with("Sending mail through"));
+        published.push(fixture.outbox().await.published_key().await.unwrap());
+        mailer.kill().unwrap();
+        mailer.wait().unwrap();
+    }
+
+    let [Some(first), Some(second)] = &published[..] else {
+        panic!("a key each time: {published:?}");
+    };
+    assert_ne!(first, second);
+}
+
 /// The owner of `path`, which for a process's files in /proc is the
 /// process's user, unless it's undumpable.
 fn owner(path: &str) -> u32 {

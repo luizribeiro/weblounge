@@ -10,6 +10,7 @@ publish = false
 testing = ["dep:tempfile"]
 
 [dependencies]
+age = "0.11.5"
 anyhow = "1.0.104"
 common = { path = "../common" }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
