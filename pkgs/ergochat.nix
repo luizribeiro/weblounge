@@ -3,7 +3,7 @@
 # without SQLite, which keeps channel history across restarts.
 { ergochat, fetchFromGitHub }:
 
-ergochat.overrideAttrs (finalAttrs: _: {
+ergochat.overrideAttrs (finalAttrs: old: {
   version = "2.19.1";
   src = fetchFromGitHub {
     owner = "ergochat";
@@ -12,4 +12,10 @@ ergochat.overrideAttrs (finalAttrs: _: {
     hash = "sha256-yzGLOpECalSOv1zBpVkyDlHGaHSsQNsAoNa2jgLpsgM=";
   };
   tags = [ "sqlite" ];
+  patches = (old.patches or [ ]) ++ [
+    # Bots get their vhosts from concierge, which only has the API, and
+    # Ergo only sets vhosts through an oper's HS SET. Not offered upstream
+    # yet.
+    ./ergochat-hs-set-api.patch
+  ];
 })

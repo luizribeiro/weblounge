@@ -1,0 +1,100 @@
+diff --git a/docs/API.md b/docs/API.md
+index 2a75ec4..dd562c1 100644
+--- a/docs/API.md
++++ b/docs/API.md
+@@ -66,6 +66,20 @@ The response is a JSON object with fields:
+ 
+ * `defcon`: integer, current (or new) value of the DEFCON setting
+ 
++`/v1/hs/set`
++-----------
++
++This endpoint sets or clears the vhost of an existing account, with the same semantics as `HS SET` and `HS DEL`. The request is a JSON object with fields:
++
++* `accountName`: string, name of the account
++* `vhost`: string, the new vhost, or the empty string to clear it
++
++The response is a JSON object with fields:
++
++* `success`: whether the vhost was set or cleared
++* `errorCode`: string, optional, machine-readable description of the error. Possible values include: `INVALID_REQUEST`, `INVALID_VHOST`, `ACCOUNT_DOES_NOT_EXIST`, `ACCOUNT_UNVERIFIED`, `FEATURE_DISABLED` (vhosts are disabled, or DEFCON restricts them), `UNKNOWN_ERROR`.
++* `error`: string, optional, human-readable description of the failure if `errorCode` is `UNKNOWN_ERROR`
++
+ `/v1/list`
+ ----------
+ 
+diff --git a/irc/api.go b/irc/api.go
+index 2a6dc67..65c2c2a 100644
+--- a/irc/api.go
++++ b/irc/api.go
+@@ -43,6 +43,9 @@ func newAPIHandler(server *Server) http.Handler {
+ 	api.mux.HandleFunc("POST /v1/ns/saget", api.handleNsSaget)
+ 	api.mux.HandleFunc("POST /v1/ns/saset", api.handleNsSaset)
+ 
++	// /v1/hs: hostserv functionality
++	api.mux.HandleFunc("POST /v1/hs/set", api.handleHsSet)
++
+ 	return api
+ }
+ 
+@@ -450,6 +453,60 @@ func (a *ergoAPI) handleNsSaset(w http.ResponseWriter, r *http.Request) {
+ 	a.writeJSONResponse(a.accountSettingsResponse(request.AccountName), w, r)
+ }
+ 
++type apiHsSetRequest struct {
++	AccountName string `json:"accountName"`
++	VHost       string `json:"vhost"`
++}
++
++func (a *ergoAPI) handleHsSet(w http.ResponseWriter, r *http.Request) {
++	var request apiHsSetRequest
++	if err := a.decodeJSONRequest(&request, w, r); err != nil {
++		return
++	}
++
++	var response apiGenericResponse
++	if !hostservEnabled(a.server.Config()) {
++		response.ErrorCode = "FEATURE_DISABLED"
++		a.writeJSONResponse(response, w, r)
++		return
++	}
++	if request.AccountName == "" {
++		response.ErrorCode = "INVALID_REQUEST"
++		a.writeJSONResponse(response, w, r)
++		return
++	}
++	if request.VHost != "" && validateVhost(a.server, request.VHost, true) != nil {
++		response.ErrorCode = "INVALID_VHOST"
++		a.writeJSONResponse(response, w, r)
++		return
++	}
++
++	_, err := a.server.accounts.VHostSet(request.AccountName, request.VHost)
++	switch err {
++	case nil:
++		response.Success = true
++		var message string
++		if request.VHost != "" {
++			message = fmt.Sprintf("API set vhost %[1]s on account %[2]s", request.VHost, request.AccountName)
++		} else {
++			message = fmt.Sprintf("API cleared vhost on account %s", request.AccountName)
++		}
++		a.server.snomasks.Send(sno.LocalVhosts, message)
++	case errAccountDoesNotExist:
++		response.ErrorCode = "ACCOUNT_DOES_NOT_EXIST"
++	case errAccountUnverified:
++		response.ErrorCode = "ACCOUNT_UNVERIFIED"
++	case errFeatureDisabled:
++		response.ErrorCode = "FEATURE_DISABLED"
++	default:
++		a.server.logger.Error("api", "could not change vhost:", err.Error())
++		response.ErrorCode = "UNKNOWN_ERROR"
++		response.Error = err.Error()
++	}
++
++	a.writeJSONResponse(response, w, r)
++}
++
+ type apiAccountDetailsResponse struct {
+ 	apiGenericResponse
+ 	AccountName  string   `json:"accountName,omitempty"`
