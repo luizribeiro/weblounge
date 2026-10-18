@@ -11,7 +11,6 @@ if TYPE_CHECKING:
         concierge_admin,
         concierge_sql,
         files_containing,
-        https,
         irc,
         irc_command,
         members,
@@ -119,15 +118,11 @@ with subtest("leaving: an admin deletes the account, its email leaves the disk, 
 
 heidi: Account = {"account": "heidi", "password": "quarry-lantern-36"}
 ivan: Account = {"account": "ivan", "password": "saffron-kettle-12"}
-judy: Account = {"account": "judy", "password": "lichen-trumpet-47"}
-ken: Account = {"account": "ken", "password": "marble-fennel-83"}
-for member in [heidi, ivan, judy, ken]:
+for member in [heidi, ivan]:
     register(**member)
     irc(**member)
 said_in_channel = "the-canary-sings-in-the-lounge"
 said_to_ivan = "the-canary-whispers-to-ivan"
-said_to_judy = "the-canary-whispers-to-judy"
-said_between_opted_out = "the-canary-whispers-off-the-record"
 
 
 def lounge_history():
@@ -147,26 +142,10 @@ def wait_until_off_ergos_disk(*texts: str) -> None:
 
 
 with subtest("messages: channel and direct messages survive a restart"):
-    turn_off_dm_storage = re.findall(r"<code>/msg NickServ (.+?)</code>", https(members, "/privacy"))
-    assert len(turn_off_dm_storage) == 1, turn_off_dm_storage
-    for member in [judy, ken]:
-        reply = irc(f"PRIVMSG NickServ :{turn_off_dm_storage[0]}", **member)
-        assert "your direct message history setting is: ephemeral" in reply, reply
-    irc(
-        f"PRIVMSG #lounge :{said_in_channel}", f"PRIVMSG ivan :{said_to_ivan}", f"PRIVMSG judy :{said_to_judy}", **heidi
-    )
-    irc(f"PRIVMSG judy :{said_between_opted_out}", **ken)
-    assert said_between_opted_out in irc("HISTORY ken 50", **judy)
+    irc(f"PRIVMSG #lounge :{said_in_channel}", f"PRIVMSG ivan :{said_to_ivan}", **heidi)
     restart_ergo()
     assert said_in_channel in lounge_history()
     assert said_to_ivan in irc("HISTORY heidi 50", **ivan)
-
-with subtest("messages: members who turned off storing DMs keep their conversations off the disk"):
-    found = files_containing(said_between_opted_out)
-    assert found == [], found
-
-with subtest("messages: a DM is stored while either side stores DMs"):
-    assert files_containing(said_to_judy) != []
 
 with subtest("messages: a member can delete a message they sent, and it leaves the disk"):
     taken_back = "the-canary-takes-it-back"
@@ -182,7 +161,7 @@ with subtest("messages: a member can delete a message they sent, and it leaves t
 
 # Moves the clock, so it goes last.
 with subtest("messages: channel and direct messages stay two weeks, then leave the disk, and newer ones stay"):
-    stored = [said_in_channel, said_to_ivan, said_to_judy]
+    stored = [said_in_channel, said_to_ivan]
     assert all(files_containing(said) for said in stored)
     restart_ergo(13)
     assert said_in_channel in lounge_history()

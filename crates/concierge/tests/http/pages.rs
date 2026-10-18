@@ -61,6 +61,20 @@ async fn privacy_says_how_long_mail_and_its_links_last() {
 }
 
 #[tokio::test]
+async fn privacy_says_how_long_messages_last_and_that_others_may_keep_copies() {
+    let page = body_text(Site::start().await.get("/privacy", None).await).await;
+    assert!(
+        page.contains("direct messages are kept on the server for two weeks"),
+        "{page}"
+    );
+    assert!(
+        page.contains("other people's apps may keep their own copy"),
+        "{page}"
+    );
+    assert!(!page.contains("dm-history"), "{page}");
+}
+
+#[tokio::test]
 async fn guests_see_a_sign_in_link_and_members_their_nick() {
     let site = Site::start().await;
     site.add_member("Alice").await;
