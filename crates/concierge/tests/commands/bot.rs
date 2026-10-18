@@ -17,6 +17,10 @@ impl Fixture {
         self.db().await.bot(name).await.unwrap()
     }
 
+    fn vhost(&self, name: &str) -> Option<String> {
+        self.ergo.vhost(name)
+    }
+
     async fn in_ergo(&self, name: &str) -> bool {
         self.ergo.client().info(name).await.unwrap().is_some()
     }
@@ -87,6 +91,35 @@ mod create {
             (Preference::Off, Preference::Off)
         );
         assert_eq!(fixture.bot("bender").await.unwrap().note, None);
+    }
+
+    #[tokio::test]
+    async fn gives_the_bot_its_owners_vhost() {
+        let fixture = Fixture::with_owners().await;
+        fixture
+            .run(&["bot", "create", "LUIZ", "bender"])
+            .await
+            .unwrap();
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
+    }
+
+    #[tokio::test]
+    async fn gives_a_vhost_ergo_takes_even_for_the_longest_owner() {
+        let fixture = Fixture::with_owners().await;
+        let owner = "Zoe_the-longest-nick-anyone-has0";
+        assert_eq!(owner.len(), concierge::nick::MAX_LENGTH);
+        fixture.add_member(owner, Some("luiz")).await;
+
+        fixture
+            .run(&["bot", "create", owner, "bender"])
+            .await
+            .unwrap();
+
+        let vhost = format!("weblounge/bot/{owner}");
+        assert_eq!(fixture.vhost("bender"), Some(vhost));
     }
 
     #[tokio::test]
@@ -185,6 +218,27 @@ mod create {
         );
         assert!(fixture.bot("bender").await.is_some());
     }
+
+    #[tokio::test]
+    async fn says_so_when_ergo_refuses_the_vhost() {
+        let fixture = Fixture::with_owners().await;
+        fixture.ergo.pass_next();
+        fixture.ergo.pass_next();
+        fixture.ergo.fail_next(Failure::UnknownError);
+
+        let error = fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            format!("{error:#}"),
+            "bender was created, but not set up; bot reset-password bender tries again: \
+             Ergo didn't give bender its vhost: \
+             Ergo refused the request: UNKNOWN_ERROR (simulated failure)"
+        );
+        assert_eq!(fixture.vhost("bender"), None);
+    }
 }
 
 mod reset_password {
@@ -204,7 +258,7 @@ mod reset_password {
     }
 
     #[tokio::test]
-    async fn sets_a_new_password_and_turns_always_on_off_again() {
+    async fn sets_a_new_password_and_turns_always_on_off_and_the_vhost_on_again() {
         let (fixture, old) = with_bender().await;
         let always_on = SettingsChanges {
             always_on: Some(Preference::On),
@@ -212,6 +266,7 @@ mod reset_password {
         };
         let client = fixture.ergo.client();
         client.update_settings("bender", always_on).await.unwrap();
+        client.set_vhost("bender", "").await.unwrap();
 
         let output = fixture
             .run(&["bot", "reset-password", "BENDER"])
@@ -223,6 +278,10 @@ mod reset_password {
         assert!(!fixture.signs_in_to_ergo("bender", &old).await);
         let settings = client.settings("bender").await.unwrap();
         assert_eq!(settings.always_on, Preference::Off);
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
     }
 
     #[tokio::test]
@@ -246,6 +305,7 @@ mod reset_password {
     #[tokio::test]
     async fn keeps_the_password_when_ergo_refuses_it() {
         let (fixture, old) = with_bender().await;
+        fixture.ergo.pass_next();
         fixture.ergo.pass_next();
         fixture.ergo.fail_next(Failure::UnknownError);
 
@@ -358,6 +418,10 @@ mod ensure {
 
         assert_eq!(output, "created bender\n");
         assert!(fixture.signs_in_to_ergo("bender", PASSWORD).await);
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
         let bot = fixture.bot("bender").await.unwrap();
         assert_eq!((bot.owner.as_str(), bot.note), ("luiz", None));
         let settings = fixture.ergo.client().settings("bender").await.unwrap();
@@ -365,7 +429,7 @@ mod ensure {
     }
 
     #[tokio::test]
-    async fn sets_an_existing_bots_password_and_settings_every_time() {
+    async fn sets_an_existing_bots_password_settings_and_vhost_every_time() {
         let fixture = Fixture::with_owners().await;
         fixture
             .run(&["bot", "create", "luiz", "bender"])
@@ -378,6 +442,7 @@ mod ensure {
         };
         let client = fixture.ergo.client();
         client.update_settings("bender", always_on).await.unwrap();
+        client.set_vhost("bender", "elsewhere").await.unwrap();
 
         for _ in 0..2 {
             let output = ensure(&fixture, "luiz", &file).await.unwrap();
@@ -387,6 +452,10 @@ mod ensure {
         assert!(fixture.signs_in_to_ergo("bender", PASSWORD).await);
         let settings = client.settings("bender").await.unwrap();
         assert_eq!(settings.always_on, Preference::Off);
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
         assert_eq!(fixture.db().await.bots(None).await.unwrap().len(), 1);
     }
 

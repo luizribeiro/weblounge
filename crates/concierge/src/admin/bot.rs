@@ -10,7 +10,7 @@ use ergo_api::{Passphrase, Preference, Registration, SettingsChanges};
 use super::{Admin, erase_reminder, print_once};
 use crate::{
     db::{self, Bot, Member, NewBot},
-    nick::Nick,
+    nick::{self, Nick},
     password, password_rules, tree,
 };
 
@@ -29,7 +29,7 @@ pub enum BotCommand {
     /// date and note.
     List { owner: Option<String> },
     /// Give a bot a new generated password, and print it once. Turns its
-    /// always-on and auto-away off again too.
+    /// always-on and auto-away off and sets its vhost again too.
     ResetPassword { name: String },
     /// Lock a bot out with a password nobody knows and mark it deleted,
     /// keeping its name taken.
@@ -93,7 +93,7 @@ async fn ensure(
         bot.account,
         bot.owner
     );
-    stay_offline_when_stopped(admin, &bot.account).await?;
+    set_up(admin, &bot.account, &bot.owner).await?;
     admin.set_password(&bot.account, &password).await?;
     Ok(format!("updated {}\n", bot.account))
 }
@@ -132,7 +132,7 @@ async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
     let bot = live_bot(admin, name).await?;
-    stay_offline_when_stopped(admin, &bot.account).await?;
+    set_up(admin, &bot.account, &bot.owner).await?;
     let password = admin.set_generated_password(&bot.account).await?;
     Ok(print_once(&password))
 }
@@ -202,12 +202,38 @@ async fn register(
         Registration::Created => {}
         Registration::NameTaken => return Err(taken()),
     }
-    stay_offline_when_stopped(admin, nick.as_str())
+    set_up(admin, nick.as_str(), &owner.account)
         .await
         .with_context(|| {
             format!("{nick} was created, but not set up; bot reset-password {nick} tries again")
         })?;
     Ok(nick)
+}
+
+/// The host everyone sees `owner`'s bots connect from, so WHOIS and joins
+/// say whose bot it is, and one ban keeps every bot out of a channel.
+fn vhost(owner: &str) -> String {
+    format!("{VHOST_PREFIX}{owner}")
+}
+
+const VHOST_PREFIX: &str = "weblounge/bot/";
+
+/// Ergo's default `accounts.vhosts.max-length`, which owners' names stay
+/// within.
+const ERGO_VHOST_MAX_LENGTH: usize = 64;
+const _: () = assert!(VHOST_PREFIX.len() + nick::MAX_LENGTH <= ERGO_VHOST_MAX_LENGTH);
+
+async fn set_up(admin: &Admin, account: &str, owner: &str) -> anyhow::Result<()> {
+    stay_offline_when_stopped(admin, account).await?;
+    set_vhost(admin, account, owner).await
+}
+
+async fn set_vhost(admin: &Admin, account: &str, owner: &str) -> anyhow::Result<()> {
+    admin
+        .ergo
+        .set_vhost(account, vhost(owner))
+        .await
+        .with_context(|| format!("Ergo didn't give {account} its vhost"))
 }
 
 /// Turns the bot's always-on and auto-away off, so a stopped bot leaves the
@@ -224,4 +250,15 @@ async fn stay_offline_when_stopped(admin: &Admin, account: &str) -> anyhow::Resu
         .await
         .with_context(|| format!("Ergo didn't turn {account}'s always-on and auto-away off"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_the_owner_under_the_networks_bot_namespace() {
+        assert_eq!(vhost("luiz"), "weblounge/bot/luiz");
+        assert_eq!(vhost("Zoe"), "weblounge/bot/Zoe");
+    }
 }
