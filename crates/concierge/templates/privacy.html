@@ -11,7 +11,7 @@
         <h2>Not stored</h2>
         <p>Members' IP addresses: not in the database, not in the logs. Failed sign-ins, nick lookups and email confirmations are counted per address, in memory, for {{ failed_sign_in_minutes }} minutes.</p>
         <h2>Messages</h2>
-        <p>Channel messages and direct messages, for two weeks, so you can scroll back after a restart.</p>
+        <p>Channel messages and direct messages, for two weeks, so you can scroll back after a restart. You can delete a message you sent, if your app offers it.</p>
         <p>To keep your direct messages off the disk, send <code>/msg NickServ SET dm-history ephemeral</code>: they then stay in memory, and a restart forgets them. A conversation is still stored while the other person stores theirs.</p>
         <h2>Email</h2>
         <p>We send email through MXroute, our mail provider. A message waits on our server only until it's sent, {{ outbox_wait }} at most; replies and bounces land in our mailbox there.</p>

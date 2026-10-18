@@ -140,6 +140,12 @@ def restart_ergo(days_later: int = 0) -> None:
     credenza.wait_for_open_port(6697)
 
 
+def wait_until_off_ergos_disk(*texts: str) -> None:
+    credenza.wait_until_succeeds(
+        f"systemctl start ergochat-vacuum && ! grep -rqaF {patterns(texts)} /var/lib/private/ergo", timeout=60
+    )
+
+
 with subtest("messages: channel and direct messages survive a restart"):
     turn_off_dm_storage = re.findall(r"<code>/msg NickServ (.+?)</code>", https(members, "/privacy"))
     assert len(turn_off_dm_storage) == 1, turn_off_dm_storage
@@ -162,6 +168,18 @@ with subtest("messages: members who turned off storing DMs keep their conversati
 with subtest("messages: a DM is stored while either side stores DMs"):
     assert files_containing(said_to_judy) != []
 
+with subtest("messages: a member can delete a message they sent, and it leaves the disk"):
+    taken_back = "the-canary-takes-it-back"
+    echoed = irc("CAP REQ :echo-message message-tags", f"PRIVMSG ivan :{taken_back}", **heidi)
+    msgid = re.search(rf"[@;]msgid=([^ ;]+)\S* :heidi!\S+ PRIVMSG ivan :{taken_back}", echoed)
+    assert msgid, echoed
+    assert taken_back in irc("HISTORY heidi 50", **ivan)
+    irc(f"REDACT ivan {msgid[1]}", **heidi)
+    assert taken_back not in irc("HISTORY heidi 50", **ivan)
+    wait_until_off_ergos_disk(taken_back)
+    found = files_containing(taken_back)
+    assert found == [], found
+
 # Moves the clock, so it goes last.
 with subtest("messages: channel and direct messages stay two weeks, then leave the disk, and newer ones stay"):
     stored = [said_in_channel, said_to_ivan, said_to_judy]
@@ -172,9 +190,7 @@ with subtest("messages: channel and direct messages stay two weeks, then leave t
     restart_ergo(2)
     said_since = "the-canary-sings-two-weeks-later"
     irc(f"PRIVMSG #lounge :{said_since}", **heidi)
-    credenza.wait_until_succeeds(
-        f"systemctl start ergochat-vacuum && ! grep -rqaF {patterns(stored)} /var/lib/private/ergo", timeout=60
-    )
+    wait_until_off_ergos_disk(*stored)
     found = files_containing(*stored)
     assert found == [], found
     history = lounge_history()
