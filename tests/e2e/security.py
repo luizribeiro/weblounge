@@ -183,6 +183,11 @@ with subtest("a crash leaves no core dump on disk, even where its limit allows o
     assert credenza.succeed("systemctl show -P DefaultLimitCORE").strip() == "0"
     assert credenza.succeed("systemctl show -P LimitCORE concierge ergochat").split() == ["0", "0"]
 
+with subtest("the mailer's memory is out of reach of its own user and of core dumps"):
+    credenza.wait_for_unit("concierge-mailer.service")
+    pid = credenza.succeed("systemctl show -P MainPID concierge-mailer").strip()
+    assert credenza.succeed(f"stat -c %u /proc/{pid}/environ").strip() == "0"
+
 with subtest("admins alone can talk to the nix daemon, not services"):
     nix = "/run/current-system/sw/bin/nix store info"
     credenza.succeed(f"su - luiz -c '{nix}'")

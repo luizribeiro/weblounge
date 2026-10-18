@@ -126,6 +126,26 @@ async fn retries_mail_it_cannot_send_and_logs_no_address() {
     assert_eq!(due[0].attempts, 1);
 }
 
+/// The owner of `path`, which for a process's files in /proc is the
+/// process's user, unless it's undumpable.
+fn owner(path: &str) -> u32 {
+    std::os::unix::fs::MetadataExt::uid(&fs::metadata(path).unwrap())
+}
+
+#[tokio::test]
+async fn keeps_its_memory_from_its_own_user() {
+    let fixture = Fixture::start().await;
+    write_smtp_password(&fixture);
+    let mut mailer = start_mailer(&fixture);
+
+    log_until(&mut mailer, |line| line.starts_with("Sending mail through"));
+    let environ = owner(&format!("/proc/{}/environ", mailer.id()));
+    mailer.kill().unwrap();
+    mailer.wait().unwrap();
+
+    assert_ne!(environ, owner("/proc/self/environ"));
+}
+
 #[tokio::test]
 async fn stops_without_the_smtp_password() {
     let fixture = Fixture::start().await;

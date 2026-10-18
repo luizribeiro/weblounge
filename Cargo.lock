@@ -351,6 +351,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
  "rand 0.10.3",
  "regex",
  "sqlx",

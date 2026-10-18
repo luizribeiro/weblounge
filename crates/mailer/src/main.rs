@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::Parser;
 use mailer::{
     config::MailerConfig,
@@ -16,6 +17,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    common::make_undumpable().context("can't keep the mailer's memory out of core dumps")?;
     let args = Args::parse();
     let config = MailerConfig::from_env()?;
     if args.check {
