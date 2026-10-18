@@ -7,6 +7,9 @@ use ergo_api::{
     AccountSummary, Client, Error, ErrorCode, Passphrase, Preference, Registration, ReplayJoins,
     Settings, SettingsChanges, Url, fake::FakeErgo,
 };
+
+/// The longest vhost Ergo's default `accounts.vhosts.max-length` allows.
+const VHOST_MAX_LENGTH: usize = 64;
 use real_ergo::RealErgo;
 
 trait Backend: Sized {
@@ -50,6 +53,7 @@ macro_rules! with_every_case {
             a_new_password_replaces_the_old,
             describes_and_lists_accounts,
             settings_round_trip,
+            sets_and_clears_vhosts,
             rejects_a_wrong_token,
             fails_to_reach_a_stopped_server,
         );
@@ -242,6 +246,31 @@ async fn settings_round_trip(ergo: impl Backend) {
             .await
             .unwrap_err();
         assert_eq!(error.code(), Some(&code), "saset {name:?}");
+    }
+}
+
+async fn sets_and_clears_vhosts(ergo: impl Backend) {
+    let client = registered(&ergo, &[("louro", "correct-horse")]).await;
+    let longest = format!("weblounge/{}", "x".repeat(VHOST_MAX_LENGTH - 10));
+    for vhost in ["weblounge/bot/luiz", "Bot-1.example_org", &longest, ""] {
+        client.set_vhost("LOURO", vhost).await.unwrap();
+    }
+
+    let too_long = format!("{longest}x");
+    for (name, vhost, code) in [
+        ("louro", "bot host", ErrorCode::InvalidVhost),
+        ("louro", "weblounge/bot/luiz!", ErrorCode::InvalidVhost),
+        ("louro", too_long.as_str(), ErrorCode::InvalidVhost),
+        (
+            "carol",
+            "weblounge/bot/luiz",
+            ErrorCode::AccountDoesNotExist,
+        ),
+        ("carol", "", ErrorCode::AccountDoesNotExist),
+        ("", "weblounge/bot/luiz", ErrorCode::InvalidRequest),
+    ] {
+        let error = client.set_vhost(name, vhost).await.unwrap_err();
+        assert_eq!(error.code(), Some(&code), "{name:?} {vhost:?}");
     }
 }
 

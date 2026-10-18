@@ -1,5 +1,5 @@
 use crate::{
-    Account, AccountName, AccountSummary, CheckAuth, Client, Error, ErrorCode, Info, List,
+    Account, AccountName, AccountSummary, CheckAuth, Client, Error, ErrorCode, HsSet, Info, List,
     Passphrase, Passwd, Result, SaGet, SaRegister, SaSet, ServerStatus, Settings, SettingsChanges,
     Status,
 };
@@ -99,6 +99,19 @@ impl Client {
             changes,
         };
         self.call(&request).await
+    }
+
+    /// Sets an account's vhost, the host everyone sees it connect from.
+    pub async fn set_vhost(
+        &self,
+        account_name: impl Into<AccountName>,
+        vhost: impl Into<String>,
+    ) -> Result<()> {
+        let request = HsSet {
+            account_name: account_name.into(),
+            vhost: vhost.into(),
+        };
+        self.call(&request).await.map(drop)
     }
 }
 
@@ -234,6 +247,31 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.code(), Some(&ErrorCode::AccountDoesNotExist));
+    }
+
+    #[tokio::test]
+    async fn set_vhost_sends_the_account_and_its_vhost() {
+        let stub = Stub::answering(200, r#"{"success":true}"#).await;
+        stub.client()
+            .set_vhost("louro", "weblounge/bot/luiz")
+            .await
+            .unwrap();
+        assert_sent(
+            &stub,
+            "/v1/hs/set",
+            json!({"accountName": "louro", "vhost": "weblounge/bot/luiz"}),
+        );
+    }
+
+    #[tokio::test]
+    async fn set_vhost_fails_for_a_vhost_ergo_refuses() {
+        let stub = Stub::answering(200, r#"{"success":false,"errorCode":"INVALID_VHOST"}"#).await;
+        let error = stub
+            .client()
+            .set_vhost("louro", "bot host")
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), Some(&ErrorCode::InvalidVhost));
     }
 
     #[tokio::test]

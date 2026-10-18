@@ -124,6 +124,16 @@ pub struct SaSet {
 }
 endpoint!(SaSet, "/v1/ns/saset" => Settings);
 
+/// `/v1/hs/set`: sets an account's vhost, or clears it when empty. Ours,
+/// patched into Ergo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HsSet {
+    pub account_name: AccountName,
+    pub vhost: String,
+}
+endpoint!(HsSet, "/v1/hs/set" => Ack);
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {

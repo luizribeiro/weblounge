@@ -20,12 +20,14 @@ use tokio::{net::TcpListener, task::JoinHandle};
 
 use crate::{
     Account, AccountList, AccountName, AccountSummary, Ack, Authenticated, CheckAuth, Client,
-    Endpoint, ErrorCode, Info, List, Passwd, Preference, ReplayJoins, SaGet, SaRegister, SaSet,
-    ServerStatus, Settings, Status, UserCounts,
+    Endpoint, ErrorCode, HsSet, Info, List, Passwd, Preference, ReplayJoins, SaGet, SaRegister,
+    SaSet, ServerStatus, Settings, Status, UserCounts,
 };
 
 const TOKEN: &str = "fake-ergo-token";
 const TIMESTAMP: &str = "2026-01-01T00:00:00.000Z";
+/// Ergo's default `accounts.vhosts.max-length`.
+const VHOST_MAX_LENGTH: usize = 64;
 
 /// A way to make the fake fail the next call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,6 +60,7 @@ struct FakeAccount {
     name: AccountName,
     passphrase: String,
     settings: Settings,
+    vhost: Option<String>,
 }
 
 impl FakeErgo {
@@ -72,6 +75,7 @@ impl FakeErgo {
             .route(List::PATH, post(list))
             .route(SaGet::PATH, post(saget))
             .route(SaSet::PATH, post(saset))
+            .route(HsSet::PATH, post(hs_set))
             .layer(middleware::from_fn_with_state(state.clone(), gatekeeper))
             .with_state(state.clone());
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -98,6 +102,12 @@ impl FakeErgo {
     /// A client for the fake, with the token it accepts.
     pub fn client(&self) -> Client {
         Client::new(self.url(), TOKEN)
+    }
+
+    /// The vhost of the account named `account_name`, if it has one.
+    pub fn vhost(&self, account_name: &str) -> Option<String> {
+        let key = casefold(&account_name.into())?;
+        lock(&self.state).accounts.get(&key)?.vhost.clone()
     }
 
     /// Makes the next call fail; queued failures apply in order.
@@ -243,6 +253,7 @@ async fn saregister(State(state): State<Shared>, Json(request): Json<SaRegister>
                 email: None,
                 replay_joins: ReplayJoins::CommandsOnly,
             },
+            vhost: None,
         },
     );
     succeeded(Ack {})
@@ -323,6 +334,31 @@ async fn saset(State(state): State<Shared>, Json(request): Json<SaSet>) -> Respo
     )
 }
 
+/// Ergo's default `accounts.vhosts.valid-regexp`, `^[0-9A-Za-z.\-_/]+$`.
+fn valid_vhost(vhost: &str) -> bool {
+    let allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '/');
+    !vhost.is_empty() && vhost.len() <= VHOST_MAX_LENGTH && vhost.chars().all(allowed)
+}
+
+async fn hs_set(State(state): State<Shared>, Json(request): Json<HsSet>) -> Response {
+    if request.account_name.as_str().is_empty() {
+        return refused(ErrorCode::InvalidRequest, None);
+    }
+    let vhost = Some(request.vhost).filter(|vhost| !vhost.is_empty());
+    if vhost.as_deref().is_some_and(|vhost| !valid_vhost(vhost)) {
+        return refused(ErrorCode::InvalidVhost, None);
+    }
+    with_account(
+        &state,
+        &request.account_name,
+        account_does_not_exist,
+        |account| {
+            account.vhost = vhost;
+            succeeded(Ack {})
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -364,6 +400,28 @@ mod tests {
         let error = client.status().await.unwrap_err();
         assert_eq!(error.code(), Some(&ErrorCode::UnknownError));
         client.status().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn keeps_the_vhost_it_was_given_until_cleared() {
+        let ergo = FakeErgo::start().await;
+        let client = ergo.client();
+        let passphrase = "correct-horse".parse().unwrap();
+        let _ = client.register("Louro", &passphrase).await.unwrap();
+        assert_eq!(ergo.vhost("louro"), None);
+
+        client
+            .set_vhost("louro", "weblounge/bot/luiz")
+            .await
+            .unwrap();
+        assert_eq!(ergo.vhost("LOURO").as_deref(), Some("weblounge/bot/luiz"));
+        let error = client.set_vhost("louro", "bot host").await.unwrap_err();
+        assert_eq!(error.code(), Some(&ErrorCode::InvalidVhost));
+        assert_eq!(ergo.vhost("louro").as_deref(), Some("weblounge/bot/luiz"));
+
+        client.set_vhost("louro", "").await.unwrap();
+        assert_eq!(ergo.vhost("louro"), None);
+        assert_eq!(ergo.vhost("carol"), None);
     }
 
     #[tokio::test]

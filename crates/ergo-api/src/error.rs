@@ -86,6 +86,8 @@ error_codes! {
     InvalidPassphrase = "INVALID_PASSPHRASE",
     InvalidRequest = "INVALID_REQUEST",
     CredentialsExternallyManaged = "CREDENTIALS_EXTERNALLY_MANAGED",
+    InvalidVhost = "INVALID_VHOST",
+    FeatureDisabled = "FEATURE_DISABLED",
     UnknownError = "UNKNOWN_ERROR",
 }
 
