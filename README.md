@@ -107,6 +107,15 @@ credenza: it joins #bots and answers `!ping`. Before each start,
 `bender-account.service` registers it as luiz's bot, or puts back its
 generated password, so it stays down until luiz is a member.
 
+Bots connect from their owner's vhost, `<bot>!~u@weblounge/bot/<owner>`,
+where members show `<nick>!~u@weblounge`; Ergo's API sets it through
+`pkgs/ergochat-hs-set-api.patch`. `bot create`, `ensure` and
+`reset-password` set it. Bots from before vhosts need `concierge-admin
+bot apply-vhosts` once after the deploy that brought them; its help text
+marks it as a migration, and running it again changes nothing. Bots stay
+out of #lounge, which everyone auto-joins, through its one ban
+`+b *!*@weblounge/bot/*`, which luiz sets as the channel's founder.
+
 ## Running a server locally
 
 `just vm start` boots credenza's real configuration in a QEMU VM on your
