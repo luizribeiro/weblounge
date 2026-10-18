@@ -523,6 +523,80 @@ mod ensure {
     }
 }
 
+mod apply_vhosts {
+    use super::*;
+
+    #[tokio::test]
+    async fn gives_every_live_bot_its_owners_vhost_every_time() {
+        let fixture = Fixture::with_owners().await;
+        fixture.add_member("Zoe", Some("luiz")).await;
+        for (owner, bot) in [("luiz", "bender"), ("zoe", "Marvin"), ("luiz", "louro")] {
+            fixture.run(&["bot", "create", owner, bot]).await.unwrap();
+        }
+        let client = fixture.ergo.client();
+        client.set_vhost("bender", "").await.unwrap();
+        client.set_vhost("marvin", "elsewhere").await.unwrap();
+
+        for _ in 0..2 {
+            let output = fixture.run(&["bot", "apply-vhosts"]).await.unwrap();
+            assert_eq!(output, "bender\nlouro\nMarvin\n");
+        }
+
+        for (bot, vhost) in [
+            ("bender", "weblounge/bot/luiz"),
+            ("marvin", "weblounge/bot/Zoe"),
+            ("louro", "weblounge/bot/luiz"),
+        ] {
+            assert_eq!(fixture.vhost(bot).as_deref(), Some(vhost), "{bot}");
+        }
+    }
+
+    #[tokio::test]
+    async fn leaves_deleted_bots_alone() {
+        let fixture = Fixture::with_owners().await;
+        fixture.insert_deleted_bot("dalek").await;
+        fixture
+            .run(&["bot", "create", "luiz", "Hal"])
+            .await
+            .unwrap();
+        fixture.run(&["bot", "delete", "hal"]).await.unwrap();
+        fixture.ergo.client().set_vhost("hal", "").await.unwrap();
+
+        let output = fixture.run(&["bot", "apply-vhosts"]).await.unwrap();
+
+        assert_eq!(output, "");
+        assert_eq!(fixture.vhost("hal"), None);
+    }
+
+    #[tokio::test]
+    async fn sets_the_others_and_names_the_bots_ergo_refused() {
+        let fixture = Fixture::with_owners().await;
+        fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap();
+        fixture.insert_bot("ghost", "luiz", None).await;
+        fixture
+            .run(&["bot", "create", "luiz", "louro"])
+            .await
+            .unwrap();
+        fixture.ergo.client().set_vhost("louro", "").await.unwrap();
+
+        let error = fixture.run(&["bot", "apply-vhosts"]).await.unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "could not set the vhosts of 1 of 3 bots:\n\
+             Ergo didn't give ghost its vhost: \
+             Ergo refused the request: ACCOUNT_DOES_NOT_EXIST"
+        );
+        assert_eq!(
+            fixture.vhost("louro").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
+    }
+}
+
 mod list {
     use super::*;
 

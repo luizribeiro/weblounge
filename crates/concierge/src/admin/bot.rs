@@ -44,6 +44,10 @@ pub enum BotCommand {
         #[arg(long)]
         password_file: PathBuf,
     },
+    /// A migration: give every live bot its owner's vhost and print each
+    /// one's name. Bots from before vhosts need it once; create, ensure
+    /// and reset-password set it since.
+    ApplyVhosts,
 }
 
 pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<String> {
@@ -59,6 +63,7 @@ pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<St
             name,
             password_file,
         } => ensure(admin, &owner, &name, &password_file).await,
+        BotCommand::ApplyVhosts => apply_vhosts(admin).await,
     }
 }
 
@@ -128,6 +133,26 @@ async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
             fields.join(" ") + "\n"
         })
         .collect())
+}
+
+/// Deleted bots keep whatever vhost they had: nobody can sign in to them,
+/// and Ergo may have erased them.
+async fn apply_vhosts(admin: &Admin) -> anyhow::Result<String> {
+    let bots = admin.db.bots(None).await?;
+    let mut failures = Vec::new();
+    for bot in &bots {
+        if let Err(error) = set_vhost(admin, &bot.account, &bot.owner).await {
+            failures.push(format!("{error:#}"));
+        }
+    }
+    anyhow::ensure!(
+        failures.is_empty(),
+        "could not set the vhosts of {} of {} bots:\n{}",
+        failures.len(),
+        bots.len(),
+        failures.join("\n")
+    );
+    Ok(bots.iter().map(|bot| bot.account.clone() + "\n").collect())
 }
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
