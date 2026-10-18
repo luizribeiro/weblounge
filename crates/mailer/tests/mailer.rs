@@ -145,6 +145,42 @@ async fn publishes_a_new_key_each_time_it_starts() {
     assert_ne!(first, second);
 }
 
+#[tokio::test]
+async fn withdrawing_its_key_needs_only_the_outbox_and_deletes_only_sealed_mail() {
+    let fixture = Fixture::start().await;
+    write_smtp_password(&fixture);
+    let mut mailer = start_mailer(&fixture);
+    log_until(&mut mailer, |line| line.starts_with("Sending mail through"));
+    mailer.kill().unwrap();
+    mailer.wait().unwrap();
+    let outbox = fixture.outbox().await;
+    let message = Message {
+        account: None,
+        to: Email::parse("alice@example.org").unwrap(),
+        subject: Subject::parse("Verify your email for weblounge").unwrap(),
+        body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa\n".into(),
+    };
+    outbox.queue_sealed(&message, now()).await.unwrap();
+    outbox.queue(&message, now()).await.unwrap();
+
+    let output = mailer_command(&fixture, &["--withdraw-key"])
+        .env_remove("CREDENTIALS_DIRECTORY")
+        .env_remove("CONCIERGE_SMTP_HOST")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(
+        stderr,
+        "Withdrew the mailer's key; deleted 1 messages sealed to it, unsent\n"
+    );
+    assert_eq!(outbox.published_key().await.unwrap(), None);
+    let due = outbox.due(now()).await.unwrap();
+    assert_eq!(due.len(), 1);
+    assert!(matches!(due[0].body, outbox::Body::Plain(_)), "{due:?}");
+}
+
 /// The owner of `path`, which for a process's files in /proc is the
 /// process's user, unless it's undumpable.
 fn owner(path: &str) -> u32 {

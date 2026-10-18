@@ -208,7 +208,20 @@ impl Outbox {
         )
         .execute(&mut *transaction)
         .await?;
-        let deleted = delete_sealed_to_others(&mut *transaction, &key).await?;
+        let deleted = delete_sealed_to_others(&mut *transaction, Some(&key)).await?;
+        transaction.commit().await?;
+        Ok(self.erase(deleted.rows_affected()).await)
+    }
+
+    /// Withdraws the published key as its mailer stops, and deletes what
+    /// was sealed to it, which nobody can open once that mailer is gone.
+    /// Until the next mailer publishes its key, nothing is sealed.
+    pub async fn withdraw_key(&self) -> sqlx::Result<Deletion> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        sqlx::query!("DELETE FROM mailer_key")
+            .execute(&mut *transaction)
+            .await?;
+        let deleted = delete_sealed_to_others(&mut *transaction, None).await?;
         transaction.commit().await?;
         Ok(self.erase(deleted.rows_affected()).await)
     }
@@ -216,7 +229,7 @@ impl Outbox {
     /// Deletes the messages sealed to any key but `key`, which nobody can
     /// open any more.
     pub async fn delete_sealed_to_others(&self, key: &PublicKey) -> sqlx::Result<Deletion> {
-        let deleted = delete_sealed_to_others(&self.pool, &key.to_string()).await?;
+        let deleted = delete_sealed_to_others(&self.pool, Some(&key.to_string())).await?;
         Ok(self.erase(deleted.rows_affected()).await)
     }
 
@@ -345,12 +358,13 @@ async fn insert(
     .map(|inserted| inserted.last_insert_rowid())
 }
 
+/// Deletes what was sealed to any key but `key`, or to any key at all.
 async fn delete_sealed_to_others(
     executor: impl SqliteExecutor<'_>,
-    key: &str,
+    key: Option<&str>,
 ) -> sqlx::Result<SqliteQueryResult> {
     sqlx::query!(
-        "DELETE FROM outbox WHERE sealed_to IS NOT NULL AND sealed_to != ?",
+        "DELETE FROM outbox WHERE sealed_to IS NOT NULL AND sealed_to IS NOT ?",
         key,
     )
     .execute(executor)
@@ -607,6 +621,30 @@ mod tests {
             0
         );
         assert_eq!(outbox.due(QUEUED + 60).await.unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn withdrawing_the_key_deletes_all_sealed_mail_and_stops_sealing() {
+        let (outbox, _dir) = with_outbox().await;
+        TestKey::publish(&outbox).await;
+        let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
+        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+
+        let deletion = outbox.withdraw_key().await.unwrap();
+
+        assert_eq!(
+            deletion,
+            Deletion {
+                messages: 1,
+                off_the_disk: true,
+            }
+        );
+        assert_eq!(outbox.published_key().await.unwrap(), None);
+        let due = outbox.due(QUEUED + 60).await.unwrap();
+        assert_eq!(recipients(&due), ["alice@example.org", "bob@example.org"]);
+        let error = outbox.queue_sealed(&carols, QUEUED).await.unwrap_err();
+        assert_eq!(error.downcast_ref(), Some(&NoKey));
+        assert_eq!(outbox.withdraw_key().await.unwrap().messages, 0);
     }
 
     #[tokio::test]

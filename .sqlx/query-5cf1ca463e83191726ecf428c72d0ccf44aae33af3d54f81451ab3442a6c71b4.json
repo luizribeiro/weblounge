@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM outbox WHERE sealed_to IS NOT NULL AND sealed_to IS NOT ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "5cf1ca463e83191726ecf428c72d0ccf44aae33af3d54f81451ab3442a6c71b4"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM mailer_key",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "d4c090b1c31474e2189cf342c2cdce282606a70afe99826aa7fd89c26b9d14b6"
+}

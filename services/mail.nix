@@ -9,6 +9,9 @@ let
 
   serviceOnly = {
     ExecStart = lib.getExe pkgs.weblounge.mailer;
+    # It runs after a crash or a kill too, so concierge never seals mail
+    # to the key of a mailer that's gone.
+    ExecStopPost = "${lib.getExe pkgs.weblounge.mailer} --withdraw-key";
     Restart = "on-failure";
   };
 

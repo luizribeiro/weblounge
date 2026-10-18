@@ -18,7 +18,7 @@ vmTest {
         PATH=${bins}:$PATH
         exec systemd-run --quiet --pipe --wait --collect --service-type=exec --setenv=PATH=${bins} \
           ${lib.escapeShellArgs (config.weblounge.runProperties
-            (removeAttrs config.systemd.services.${unit}.serviceConfig [ "ExecStart" "Restart" ]))} \
+            (removeAttrs config.systemd.services.${unit}.serviceConfig [ "ExecStart" "ExecStopPost" "Restart" ]))} \
           "$(command -v "$1")" "''${@:2}"
       '';
     in

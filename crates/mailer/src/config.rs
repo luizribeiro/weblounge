@@ -52,7 +52,7 @@ impl MailerConfig {
                     "expected an address, or a name and an <address>",
                 )
             })?,
-            outbox_path: require("CONCIERGE_OUTBOX")?.into(),
+            outbox_path: outbox_path(&var)?,
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
         })
     }
@@ -66,6 +66,16 @@ impl MailerConfig {
         );
         Ok(password)
     }
+}
+
+/// The outbox alone, which is all withdrawing the key takes: systemd
+/// gives the commands a unit runs as it stops no credentials.
+pub fn outbox_path_from_env() -> Result<PathBuf, ConfigError> {
+    outbox_path(|name| std::env::var(name).ok())
+}
+
+fn outbox_path(var: impl Fn(&str) -> Option<String>) -> Result<PathBuf, ConfigError> {
+    required(var, "CONCIERGE_OUTBOX").map(PathBuf::from)
 }
 
 #[cfg(test)]

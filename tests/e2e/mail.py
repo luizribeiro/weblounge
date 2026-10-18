@@ -68,6 +68,18 @@ with subtest("the mailer publishes a new key each time it starts, for concierge 
     credenza.succeed("systemctl restart concierge-mailer")
     credenza.wait_until_succeeds(f"{key_query} | grep '^age1' | grep -qvxF {first}", timeout=30)
 
+with subtest("the mailer withdraws its key as it stops, and when it's killed before it starts again"):
+    withdrew = "Withdrew the mailer's key; deleted 0 messages sealed to it, unsent"
+    credenza.succeed("systemctl stop concierge-mailer")
+    assert outbox_sql("SELECT count(*) FROM mailer_key").strip() == "0"
+    credenza.succeed("systemctl start concierge-mailer")
+    killed = published_key()
+    credenza.succeed("systemctl kill --kill-whom=main -s KILL concierge-mailer")
+    credenza.wait_until_succeeds(f"{key_query} | grep '^age1' | grep -qvxF {killed}", timeout=30)
+    credenza.succeed("journalctl --sync")
+    log = credenza.succeed(f"{mailer_log} | grep -E '^(Withdrew|Sending mail through)'").splitlines()
+    assert log[-4:] == [withdrew, "Sending mail through mail:465", withdrew, "Sending mail through mail:465"], log
+
 with subtest("an admin's test message reaches the mail server from noreply@, as plain text, and leaves the outbox"):
     queued = queue_test_message("alice@example.org")
     message = wait_for_mail("alice@example.org", subject)
