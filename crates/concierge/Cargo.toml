@@ -14,7 +14,6 @@ common = { path = "../common" }
 ergo-api = { path = "../ergo-api" }
 form_urlencoded = "1.2.2"
 hmac = "0.12.1"
-lettre = { version = "0.11.23", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1-rustls", "rustls-native-certs", "ring"] }
 outbox = { path = "../outbox" }
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 serde = { version = "1.0.229", features = ["derive"] }
