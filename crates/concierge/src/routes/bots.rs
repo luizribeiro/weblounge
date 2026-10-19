@@ -193,7 +193,7 @@ async fn ask(app: &App, member: &Member, name: &str, question: Question) -> Resp
     };
     render(&QuestionPage {
         layout: Layout::new(app, Some(&member.account)).on(Tab::Bots),
-        bot: bot.account,
+        bot: bot.account.to_string(),
         question,
         history_kept: invite_rules::in_words(app.history_expiry),
     })
@@ -251,7 +251,7 @@ pub async fn reset(
     match bots(&app).reset_password(&bot.account, &bot.owner).await {
         Ok(password) => {
             let shown = Shown {
-                bot: bot.account,
+                bot: bot.account.to_string(),
                 password,
             };
             show_password(&app, member, shown).await
@@ -292,7 +292,7 @@ fn bots(app: &App) -> Bots<'_> {
 /// `member`'s live bot named `name`, in any case.
 async fn owned_bot(app: &App, member: &Member, name: &str) -> sqlx::Result<Option<Bot>> {
     let bot = app.db.bot(name).await?;
-    Ok(bot.filter(|bot| bot.removed_at.is_none() && bot.owner == member.account.as_str()))
+    Ok(bot.filter(|bot| bot.removed_at.is_none() && bot.owner == member.account))
 }
 
 /// `member`'s live bot named `name`, or the answer that none was found.

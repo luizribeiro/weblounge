@@ -138,10 +138,10 @@ async fn reconcile(admin: &Admin) -> anyhow::Result<String> {
         .collect();
     let known = members
         .into_iter()
-        .map(|member| ("", member.account, member.removed))
+        .map(|member| ("", member.account.to_string(), member.removed))
         .chain(
             bots.into_iter()
-                .map(|bot| ("bot ", bot.account, bot.removed)),
+                .map(|bot| ("bot ", bot.account.to_string(), bot.removed)),
         );
     for (kind, account, removed) in known {
         let known_to_ergo = in_ergo.remove(&account.to_ascii_lowercase()).is_some();

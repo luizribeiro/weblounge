@@ -105,7 +105,7 @@ async fn ensure(
     };
     ensure_live(&bot)?;
     anyhow::ensure!(
-        bot.owner == owner.account.as_str(),
+        bot.owner == owner.account,
         "{} belongs to {}",
         bot.account,
         bot.owner
@@ -140,7 +140,11 @@ async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
     Ok(bots
         .into_iter()
         .map(|bot| {
-            let fields = [bot.account, bot.owner, tree::date(bot.created_at)];
+            let fields = [
+                bot.account.to_string(),
+                bot.owner.to_string(),
+                tree::date(bot.created_at),
+            ];
             let fields: Vec<_> = fields.into_iter().chain(bot.note).collect();
             fields.join(" ") + "\n"
         })
@@ -164,7 +168,10 @@ async fn apply_vhosts(admin: &Admin) -> anyhow::Result<String> {
         bots.len(),
         failures.join("\n")
     );
-    Ok(bots.iter().map(|bot| bot.account.clone() + "\n").collect())
+    Ok(bots
+        .iter()
+        .map(|bot| format!("{}\n", bot.account))
+        .collect())
 }
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {

@@ -6,7 +6,7 @@ use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 use crate::{
     invite_code, invite_rules, link_code, link_mail,
-    name::MemberName,
+    name::{BotName, MemberName},
     oauth::CodeChallenge,
     reset_rules::{self, Lookup},
     tree::Branch,
@@ -190,8 +190,8 @@ pub struct NewBot<'a> {
 /// free again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bot {
-    pub account: String,
-    pub owner: String,
+    pub account: BotName,
+    pub owner: MemberName,
     pub note: Option<String>,
     pub created_at: i64,
     pub removed_at: Option<i64>,
@@ -210,8 +210,8 @@ pub enum BotInsertion {
 /// A bot's name and owner, and which of the two is gone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BotAccount {
-    pub account: String,
-    pub owner: String,
+    pub account: BotName,
+    pub owner: MemberName,
     pub removed: bool,
     pub owner_removed: bool,
 }
@@ -1129,7 +1129,8 @@ impl Db {
     pub async fn bot(&self, account: &str) -> sqlx::Result<Option<Bot>> {
         sqlx::query_as!(
             Bot,
-            r#"SELECT account AS "account!", owner, note, created_at, removed_at
+            r#"SELECT account AS "account!: BotName", owner AS "owner: MemberName", note,
+                      created_at, removed_at
                FROM bots WHERE account = ?"#,
             account
         )
@@ -1142,7 +1143,8 @@ impl Db {
     pub async fn bots(&self, owner: Option<&str>) -> sqlx::Result<Vec<Bot>> {
         sqlx::query_as!(
             Bot,
-            r#"SELECT account AS "account!", owner, note, created_at, removed_at
+            r#"SELECT account AS "account!: BotName", owner AS "owner: MemberName", note,
+                      created_at, removed_at
                FROM bots WHERE removed_at IS NULL AND (?1 IS NULL OR owner = ?1 COLLATE NOCASE)
                ORDER BY account"#,
             owner
@@ -1185,7 +1187,7 @@ impl Db {
     pub async fn bot_accounts(&self) -> sqlx::Result<Vec<BotAccount>> {
         sqlx::query_as!(
             BotAccount,
-            r#"SELECT bots.account AS "account!", bots.owner,
+            r#"SELECT bots.account AS "account!: BotName", bots.owner AS "owner: MemberName",
                       bots.removed_at IS NOT NULL AS "removed!: bool",
                       members.removed_at IS NOT NULL AS "owner_removed!: bool"
                FROM bots JOIN members ON members.account = bots.owner
@@ -2844,16 +2846,18 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_bot_is_found_by_its_name_in_any_case() {
         let (db, _dir) = with_bots().await;
+        let bender = db.bot("BENDER").await.unwrap();
         assert_eq!(
-            db.bot("BENDER").await.unwrap(),
+            bender,
             Some(Bot {
-                account: "bender".into(),
-                owner: "luiz".into(),
+                account: BotName::new("bender"),
+                owner: MemberName::new("luiz"),
                 note: Some("answers !ping".into()),
                 created_at: 100,
                 removed_at: None,
             })
         );
+        assert_eq!(bender.unwrap().account.as_str(), "bender");
         assert_eq!(
             db.bot("dalek").await.unwrap().unwrap().removed_at,
             Some(200)
@@ -2864,8 +2868,11 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn lists_the_live_bots_of_one_owner_or_of_everyone() {
         let (db, _dir) = with_bots().await;
-        let names =
-            |bots: Vec<Bot>| -> Vec<String> { bots.into_iter().map(|bot| bot.account).collect() };
+        let names = |bots: Vec<Bot>| -> Vec<String> {
+            bots.into_iter()
+                .map(|bot| bot.account.to_string())
+                .collect()
+        };
         assert_eq!(names(db.bots(None).await.unwrap()), ["bender", "Marvin"]);
         assert_eq!(names(db.bots(Some("LUIZ")).await.unwrap()), ["bender"]);
         assert!(db.bots(Some("nobody")).await.unwrap().is_empty());
@@ -2924,18 +2931,20 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        let account = |account: &str, owner: &str, removed, owner_removed| BotAccount {
-            account: account.into(),
-            owner: owner.into(),
-            removed,
-            owner_removed,
-        };
+        let accounts = db.bot_accounts().await.unwrap();
+        let accounts: Vec<_> = accounts
+            .iter()
+            .map(|bot| {
+                let names = (bot.account.as_str(), bot.owner.as_str());
+                (names, bot.removed, bot.owner_removed)
+            })
+            .collect();
         assert_eq!(
-            db.bot_accounts().await.unwrap(),
+            accounts,
             [
-                account("bender", "luiz", false, false),
-                account("dalek", "luiz", true, false),
-                account("Marvin", "alice", false, true),
+                (("bender", "luiz"), false, false),
+                (("dalek", "luiz"), true, false),
+                (("Marvin", "alice"), false, true),
             ]
         );
     }
@@ -2985,7 +2994,12 @@ pub(crate) mod tests {
         assert!(inserted.contains(&BotInsertion::Inserted), "{inserted:?}");
         assert!(inserted.contains(&BotInsertion::NameTaken), "{inserted:?}");
         let live = db.bots(None).await.unwrap();
-        assert_eq!(live.iter().filter(|bot| bot.account == "dalek").count(), 1);
+        assert_eq!(
+            live.iter()
+                .filter(|bot| bot.account.as_str() == "dalek")
+                .count(),
+            1
+        );
     }
 
     #[tokio::test]
@@ -3012,16 +3026,18 @@ pub(crate) mod tests {
         let inserted = db.insert_bot(&hal, Some(&dalek), None).await.unwrap();
 
         assert_eq!(inserted, BotInsertion::Inserted);
+        let taken_over = db.bot("DALEK").await.unwrap();
         assert_eq!(
-            db.bot("DALEK").await.unwrap(),
+            taken_over,
             Some(Bot {
-                account: "dalek".into(),
-                owner: "alice".into(),
+                account: BotName::new("dalek"),
+                owner: MemberName::new("alice"),
                 note: Some("takes over".into()),
                 created_at: 300,
                 removed_at: None,
             })
         );
+        assert_eq!(taken_over.unwrap().account.as_str(), "dalek");
         assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 2);
     }
 
