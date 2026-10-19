@@ -87,6 +87,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         introspection_secret: config.read_introspection_secret()?,
         irc_server: config.irc_server.clone(),
         presence_defaults: config.presence_defaults,
+        history_expiry: config.history_expiry,
     };
     let listener = TcpListener::bind(config.listen).await?;
     eprintln!("Serving {} on {}", config.public_url, config.listen);

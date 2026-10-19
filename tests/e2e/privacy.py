@@ -164,6 +164,12 @@ with subtest("messages: a member can delete a message they sent, and it leaves t
     found = files_containing(taken_back)
     assert found == [], found
 
+with subtest("messages: the page says how long they stay from the expire-time concierge is handed"):
+    environment = credenza.succeed("systemctl show -P Environment concierge.service").split()
+    assert "CONCIERGE_HISTORY_EXPIRE_TIME=2w" in environment, environment
+    page = graces_browser.get("/privacy")
+    assert "direct messages are kept on the server for 2 weeks," in page, page
+
 # Moves the clock, so it goes last.
 with subtest("messages: channel and direct messages stay two weeks, then leave the disk, and newer ones stay"):
     stored = [said_in_channel, said_to_ivan]

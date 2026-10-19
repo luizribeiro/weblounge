@@ -22,6 +22,7 @@ struct Privacy<'a> {
     link_lifetime: String,
     reset_lifetime: String,
     outbox_wait: String,
+    history_kept: String,
 }
 
 pub async fn rules(State(app): State<AppState>, visitor: Visitor) -> Response {
@@ -37,5 +38,6 @@ pub async fn privacy(State(app): State<AppState>, visitor: Visitor) -> Response 
         link_lifetime: invite_rules::in_words(verification_rules::LIFETIME),
         reset_lifetime: invite_rules::in_words(reset_rules::LIFETIME),
         outbox_wait: invite_rules::in_words(outbox::GIVE_UP_AFTER),
+        history_kept: invite_rules::in_words(app.history_expiry),
     })
 }

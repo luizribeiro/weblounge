@@ -70,7 +70,7 @@ async fn privacy_says_how_long_mail_and_its_links_last() {
 async fn privacy_says_how_long_messages_last_and_that_others_may_keep_copies() {
     let page = body_text(Site::start().await.get("/privacy", None).await).await;
     assert!(
-        page.contains("direct messages are kept on the server for two weeks"),
+        page.contains("direct messages are kept on the server for 2 weeks, so you can scroll back"),
         "{page}"
     );
     assert!(
@@ -78,6 +78,16 @@ async fn privacy_says_how_long_messages_last_and_that_others_may_keep_copies() {
         "{page}"
     );
     assert!(!page.contains("dm-history"), "{page}");
+}
+
+#[tokio::test]
+async fn privacy_says_how_long_ergo_keeps_messages_as_its_setting_does() {
+    let site = Site::start_with(|app| app.history_expiry = 10 * 24 * 60 * 60).await;
+    let page = body_text(site.get("/privacy", None).await).await;
+    assert!(
+        page.contains("direct messages are kept on the server for 10 days, so you can scroll back"),
+        "{page}"
+    );
 }
 
 #[tokio::test]

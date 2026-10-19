@@ -56,6 +56,8 @@ pub struct App {
     pub irc_server: IrcServer,
     /// What Ergo turns on for members who haven't chosen.
     pub presence_defaults: Presence,
+    /// How long Ergo keeps chat history, in seconds.
+    pub history_expiry: i64,
 }
 
 pub type AppState = Arc<App>;
