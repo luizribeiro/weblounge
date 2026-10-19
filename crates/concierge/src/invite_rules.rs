@@ -6,6 +6,7 @@
 
 const HOUR: i64 = 60 * 60;
 const DAY: i64 = 24 * HOUR;
+const WEEK: i64 = 7 * DAY;
 
 /// How many invites a member, admins too, may have open at once. Nothing
 /// lists open invites; each holds its place until it's redeemed or
@@ -152,9 +153,12 @@ pub fn wait_in_words(seconds: i64) -> String {
     in_words((seconds + HOUR - 1) / HOUR * HOUR)
 }
 
-/// A duration of `seconds`, in words: "6 days", "24 hours", "1 hour".
+/// A duration of `seconds`, in words: "2 weeks", "6 days", "24 hours",
+/// "1 hour". Weeks only when they're whole, so "10 days" stays exact.
 pub fn in_words(seconds: i64) -> String {
-    let (n, unit) = if seconds >= 2 * DAY {
+    let (n, unit) = if seconds >= 2 * WEEK && seconds / DAY % 7 == 0 {
+        (seconds / WEEK, "week")
+    } else if seconds >= 2 * DAY {
         (seconds / DAY, "day")
     } else {
         ((seconds / HOUR).max(1), "hour")
@@ -270,6 +274,16 @@ mod tests {
         assert_eq!(in_words(DAY + HOUR), "25 hours");
         assert_eq!(in_words(5 * HOUR + 59), "5 hours");
         assert_eq!(in_words(60), "1 hour");
+    }
+
+    #[test]
+    fn says_whole_weeks_from_two_on() {
+        assert_eq!(in_words(2 * WEEK), "2 weeks");
+        assert_eq!(in_words(2 * WEEK + HOUR), "2 weeks");
+        assert_eq!(in_words(52 * WEEK), "52 weeks");
+        assert_eq!(in_words(WEEK), "7 days");
+        assert_eq!(in_words(2 * WEEK + DAY), "15 days");
+        assert_eq!(in_words(30 * DAY), "30 days");
     }
 
     #[test]
