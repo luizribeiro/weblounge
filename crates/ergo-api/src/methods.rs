@@ -1,7 +1,7 @@
 use crate::{
-    Account, AccountName, AccountSummary, CheckAuth, Client, Error, ErrorCode, HsSet, Info, List,
-    Passphrase, Passwd, Result, SaGet, SaRegister, SaSet, ServerStatus, Settings, SettingsChanges,
-    Status,
+    Account, AccountName, AccountSummary, CheckAuth, Client, Erase, Error, ErrorCode, HsSet, Info,
+    List, Passphrase, Passwd, Result, SaGet, SaRegister, SaSet, ServerStatus, Settings,
+    SettingsChanges, Status,
 };
 
 /// What came of [`Client::register`].
@@ -11,6 +11,15 @@ pub enum Registration {
     Created,
     /// An account already holds the name, in any case.
     NameTaken,
+}
+
+/// What came of [`Client::erase`].
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Erasure {
+    Erased,
+    /// Ergo has no record of the name, maybe because it was erased already.
+    NoSuchAccount,
 }
 
 impl Client {
@@ -64,6 +73,21 @@ impl Client {
             passphrase: passphrase.clone(),
         };
         self.call(&request).await.map(drop)
+    }
+
+    /// Deletes an account and disconnects its clients, unless Ergo has no
+    /// record of it. Its name is free again as far as Ergo knows.
+    pub async fn erase(&self, account_name: impl Into<AccountName>) -> Result<Erasure> {
+        let request = Erase {
+            account_name: account_name.into(),
+        };
+        match self.call(&request).await {
+            Ok(_) => Ok(Erasure::Erased),
+            Err(error) if error.code() == Some(&ErrorCode::AccountDoesNotExist) => {
+                Ok(Erasure::NoSuchAccount)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// An account's details, or `None` if it doesn't exist, isn't verified
@@ -272,6 +296,32 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.code(), Some(&ErrorCode::InvalidVhost));
+    }
+
+    #[tokio::test]
+    async fn erase_sends_the_account() {
+        let stub = Stub::answering(200, r#"{"success":true}"#).await;
+        let erasure = stub.client().erase("bender").await.unwrap();
+        assert_eq!(erasure, Erasure::Erased);
+        assert_sent(&stub, "/v1/ns/erase", json!({"accountName": "bender"}));
+    }
+
+    #[tokio::test]
+    async fn erase_reports_an_account_ergo_has_no_record_of() {
+        let stub = Stub::answering(
+            200,
+            r#"{"success":false,"errorCode":"ACCOUNT_DOES_NOT_EXIST"}"#,
+        )
+        .await;
+        let erasure = stub.client().erase("nobody").await.unwrap();
+        assert_eq!(erasure, Erasure::NoSuchAccount);
+    }
+
+    #[tokio::test]
+    async fn erase_passes_other_refusals_on() {
+        let stub = Stub::answering(200, r#"{"success":false,"errorCode":"INVALID_REQUEST"}"#).await;
+        let error = stub.client().erase("").await.unwrap_err();
+        assert_eq!(error.code(), Some(&ErrorCode::InvalidRequest));
     }
 
     #[tokio::test]

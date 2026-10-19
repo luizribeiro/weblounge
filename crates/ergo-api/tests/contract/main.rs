@@ -4,8 +4,8 @@
 mod real_ergo;
 
 use ergo_api::{
-    AccountSummary, Client, Error, ErrorCode, Passphrase, Preference, Registration, ReplayJoins,
-    Settings, SettingsChanges, Url, fake::FakeErgo,
+    AccountSummary, Client, Erasure, Error, ErrorCode, Passphrase, Preference, Registration,
+    ReplayJoins, Settings, SettingsChanges, Url, fake::FakeErgo,
 };
 
 /// The longest vhost Ergo's default `accounts.vhosts.max-length` allows.
@@ -54,6 +54,7 @@ macro_rules! with_every_case {
             describes_and_lists_accounts,
             settings_round_trip,
             sets_and_clears_vhosts,
+            erases_accounts_and_frees_their_names,
             rejects_a_wrong_token,
             fails_to_reach_a_stopped_server,
         );
@@ -272,6 +273,40 @@ async fn sets_and_clears_vhosts(ergo: impl Backend) {
         let error = client.set_vhost(name, vhost).await.unwrap_err();
         assert_eq!(error.code(), Some(&code), "{name:?} {vhost:?}");
     }
+}
+
+async fn erases_accounts_and_frees_their_names(ergo: impl Backend) {
+    let client = registered(
+        &ergo,
+        &[("Bender", "correct-horse"), ("louro", "battery-staple")],
+    )
+    .await;
+
+    assert_eq!(client.erase("BENDER").await.unwrap(), Erasure::Erased);
+
+    assert_eq!(
+        client.check_auth("bender", "correct-horse").await.unwrap(),
+        None
+    );
+    assert_eq!(client.info("bender").await.unwrap(), None);
+    let names: Vec<_> = client
+        .accounts()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|account| account.account_name)
+        .collect();
+    assert_eq!(names, ["louro".into()]);
+    for name in ["bender", "carol", "a b"] {
+        let erasure = client.erase(name).await.unwrap();
+        assert_eq!(erasure, Erasure::NoSuchAccount, "{name}");
+    }
+    let error = client.erase("").await.unwrap_err();
+    assert_eq!(error.code(), Some(&ErrorCode::InvalidRequest));
+    let again = client
+        .register("bender", &passphrase("correct-horse"))
+        .await;
+    assert_eq!(again.unwrap(), Registration::Created);
 }
 
 async fn rejects_a_wrong_token(ergo: impl Backend) {

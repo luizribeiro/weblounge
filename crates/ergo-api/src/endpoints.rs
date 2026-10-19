@@ -62,6 +62,16 @@ pub struct Passwd {
 }
 endpoint!(Passwd, "/v1/ns/passwd" => Ack);
 
+/// `/v1/ns/erase`: deletes every record of an account and disconnects
+/// the clients logged in to it, as an oper's `NS ERASE` does. Ours,
+/// patched into Ergo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Erase {
+    pub account_name: AccountName,
+}
+endpoint!(Erase, "/v1/ns/erase" => Ack);
+
 /// `/v1/ns/info`: one account's details.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

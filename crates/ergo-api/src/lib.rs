@@ -32,6 +32,6 @@ mod stub;
 pub use client::{Client, Endpoint};
 pub use endpoints::*;
 pub use error::{Error, ErrorCode, Result};
-pub use methods::Registration;
+pub use methods::{Erasure, Registration};
 pub use names::{AccountName, InvalidPassphrase, Passphrase};
 pub use reqwest::{StatusCode, Url};

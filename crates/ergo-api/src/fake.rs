@@ -20,8 +20,8 @@ use tokio::{net::TcpListener, task::JoinHandle};
 
 use crate::{
     Account, AccountList, AccountName, AccountSummary, Ack, Authenticated, CheckAuth, Client,
-    Endpoint, ErrorCode, HsSet, Info, List, Passwd, Preference, ReplayJoins, SaGet, SaRegister,
-    SaSet, ServerStatus, Settings, Status, UserCounts,
+    Endpoint, Erase, ErrorCode, HsSet, Info, List, Passwd, Preference, ReplayJoins, SaGet,
+    SaRegister, SaSet, ServerStatus, Settings, Status, UserCounts,
 };
 
 const TOKEN: &str = "fake-ergo-token";
@@ -71,6 +71,7 @@ impl FakeErgo {
             .route(SaRegister::PATH, post(saregister))
             .route(CheckAuth::PATH, post(check_auth))
             .route(Passwd::PATH, post(passwd))
+            .route(Erase::PATH, post(erase))
             .route(Info::PATH, post(info))
             .route(List::PATH, post(list))
             .route(SaGet::PATH, post(saget))
@@ -281,6 +282,17 @@ async fn passwd(State(state): State<Shared>, Json(request): Json<Passwd>) -> Res
             succeeded(Ack {})
         },
     )
+}
+
+async fn erase(State(state): State<Shared>, Json(request): Json<Erase>) -> Response {
+    if request.account_name.as_str().is_empty() {
+        return refused(ErrorCode::InvalidRequest, None);
+    }
+    let mut state = lock(&state);
+    match casefold(&request.account_name).and_then(|key| state.accounts.remove(&key)) {
+        Some(_) => succeeded(Ack {}),
+        None => account_does_not_exist(),
+    }
 }
 
 async fn info(State(state): State<Shared>, Json(request): Json<Info>) -> Response {
