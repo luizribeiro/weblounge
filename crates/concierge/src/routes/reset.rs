@@ -246,8 +246,15 @@ pub async fn reset(
         return internal_error("Ending a reset member's sessions", error);
     }
     notify(&app, &taken.account, &taken.email).await;
-    let cookie = [(header::SET_COOKIE, session::removal_cookie())];
-    (cookie, changed(&app)).into_response()
+    let ended_here = visitor
+        .nick()
+        .is_some_and(|nick| nick.eq_ignore_ascii_case(&taken.account));
+    if ended_here {
+        let cookie = [(header::SET_COOKIE, session::removal_cookie())];
+        (cookie, changed(&app)).into_response()
+    } else {
+        changed(&app)
+    }
 }
 
 /// Tells `account`'s confirmed address their password changed, in mail

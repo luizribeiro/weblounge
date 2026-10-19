@@ -317,6 +317,15 @@ impl Site {
         self.post_with("/reset", &form, None, &headers).await
     }
 
+    async fn reset_from(&self, code: &str, cookie: &str) -> Response {
+        let form = [
+            ("code", code),
+            ("password", NEW_PASSWORD),
+            ("confirmation", NEW_PASSWORD),
+        ];
+        self.post("/reset", &form, Some(cookie)).await
+    }
+
     async fn reset(&self, code: &str) -> (u16, String) {
         let response = self.reset_with(code, NEW_PASSWORD, NEW_PASSWORD).await;
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
@@ -383,8 +392,6 @@ async fn resetting_sets_the_password_ends_every_session_and_token_and_mails_a_no
     let response = site.reset_with(&code, NEW_PASSWORD, NEW_PASSWORD).await;
 
     assert_eq!(response.status(), 200);
-    let set_cookie = response.headers()[header::SET_COOKIE].to_str().unwrap();
-    assert!(set_cookie.contains("Max-Age=0"), "{set_cookie}");
     let page = body_text(response).await;
     assert!(
         page.contains("<h1>Your password is changed.</h1>"),
@@ -563,4 +570,22 @@ async fn other_sites_cannot_post_the_form() {
     let response = site.post_with("/reset", &form, None, &evil).await;
     assert_eq!(response.status(), 403);
     assert!(site.carols_password_is(PASSWORD).await);
+}
+
+#[tokio::test]
+async fn the_browser_drops_its_session_only_if_it_was_the_members() {
+    let site = with_members().await;
+    let carols = site.sign_in("carol").await;
+    site.add_confirmed_member("erin").await;
+    let erins = site.sign_in("erin").await;
+
+    let from_carols = site.reset_from(&site.reset_code().await, &carols).await;
+    let from_erins = site.reset_from(&site.reset_code().await, &erins).await;
+
+    assert_eq!(from_erins.status(), 200);
+    assert!(!from_erins.headers().contains_key(header::SET_COOKIE));
+    assert!(site.session_expiry(&erins).await.is_some());
+    assert_eq!(from_carols.status(), 200);
+    let set_cookie = from_carols.headers()[header::SET_COOKIE].to_str().unwrap();
+    assert!(set_cookie.contains("Max-Age=0"), "{set_cookie}");
 }
