@@ -6,7 +6,7 @@ use concierge::{
 use ergo_api::fake::Failure;
 use regex::Regex;
 
-use crate::{PUBLIC_URL, Site, body_text, is_tab};
+use crate::{PUBLIC_URL, Site, body_text, is_tab, location};
 
 /// Posts a form from our own pages, from the client address `address`.
 async fn post_from(
@@ -577,6 +577,163 @@ async fn resetting_from_another_origin_is_refused() {
 
     assert_eq!(response.status(), 403);
     assert!(signs_in_to_ergo(&site, "bender", &password).await);
+}
+
+#[tokio::test]
+async fn deleting_a_bot_erases_its_account_and_keeps_its_name() {
+    let site = Site::start().await;
+    let (cookie, password) = alice_with_bender(&site).await;
+
+    let response = site.post("/bots/Bender/delete", &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 303);
+    assert_eq!(location(&response), "/bots");
+    assert!(site.ergo.client().info("bender").await.unwrap().is_none());
+    assert!(!signs_in_to_ergo(&site, "bender", &password).await);
+    let bot = site.db.bot("bender").await.unwrap().unwrap();
+    assert!(bot.removed_at.is_some());
+    let page = bots_tab(&site, &cookie).await;
+    assert!(listed(&page).is_empty(), "{page}");
+    assert!(page.contains(&count(0)), "{page}");
+    let (status, page) = make(&site, &cookie, "bender").await;
+    assert_eq!(status, 422, "{page}");
+    assert!(page.contains(&name_error("bender is taken.")), "{page}");
+}
+
+#[tokio::test]
+async fn the_tab_asks_before_deleting() {
+    let site = Site::start().await;
+    let (cookie, _) = alice_with_bender(&site).await;
+    let question = "Delete bender? If it's connected, it's disconnected right away, \
+                    and it can't log in again. Its name stays taken.";
+
+    let tab = bots_tab(&site, &cookie).await;
+    assert!(
+        tab.contains(r#"<a class="danger-link" href="/bots/bender/delete" data-dialog="delete-bender">Delete</a>"#),
+        "{tab}"
+    );
+    assert!(
+        tab.contains(r#"<dialog class="card" id="delete-bender""#),
+        "{tab}"
+    );
+    assert!(tab.contains(question), "{tab}");
+
+    let response = site.get("/bots/bender/delete", Some(&cookie)).await;
+    assert_eq!(response.status(), 200);
+    let page = body_text(response).await;
+    assert!(page.contains(question), "{page}");
+    assert!(
+        page.contains(
+            r#"<button class="button button-danger" type="submit">Delete bender</button>"#
+        ),
+        "{page}"
+    );
+    assert!(site.ergo.client().info("bender").await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_deleted_bot_frees_its_place() {
+    let site = Site::start().await;
+    let (cookie, _) = alice_with_bender(&site).await;
+    for name in ["hal", "marvin"] {
+        assert_eq!(make(&site, &cookie, name).await.0, 200);
+    }
+    assert_eq!(make(&site, &cookie, "eliza").await.0, 409);
+
+    site.post("/bots/hal/delete", &[], Some(&cookie)).await;
+
+    assert_eq!(make(&site, &cookie, "eliza").await.0, 200);
+}
+
+#[tokio::test]
+async fn an_unconfirmed_member_still_deletes_their_bots() {
+    let site = Site::start().await;
+    let (cookie, _) = alice_with_bender(&site).await;
+    site.execute("UPDATE members SET email_verified_at = NULL")
+        .await;
+
+    let response = site.post("/bots/bender/delete", &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 303);
+    assert!(site.db.bots(Some("alice")).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn someone_elses_bot_cant_be_deleted_or_asked_about() {
+    let site = Site::start().await;
+    let (_, password) = alice_with_bender(&site).await;
+    site.add_member("bob").await;
+    let cookie = site.sign_in("bob").await;
+
+    for name in ["bender", "nobody", "alice"] {
+        let path = format!("/bots/{name}/delete");
+        assert_eq!(site.get(&path, Some(&cookie)).await.status(), 404, "{name}");
+        let response = site.post(&path, &[], Some(&cookie)).await;
+        assert_eq!(response.status(), 404, "{name}");
+    }
+    assert!(signs_in_to_ergo(&site, "bender", &password).await);
+    assert!(
+        site.db
+            .bot("bender")
+            .await
+            .unwrap()
+            .unwrap()
+            .removed_at
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn deleting_from_another_origin_is_refused() {
+    let site = Site::start().await;
+    let (cookie, password) = alice_with_bender(&site).await;
+    let headers = [(header::ORIGIN.as_str(), "https://evil.example")];
+
+    let response = site
+        .post_with("/bots/bender/delete", &[], Some(&cookie), &headers)
+        .await;
+
+    assert_eq!(response.status(), 403);
+    assert!(signs_in_to_ergo(&site, "bender", &password).await);
+}
+
+#[tokio::test]
+async fn the_bot_stays_when_ergo_fails_to_erase_it() {
+    let site = Site::start().await;
+    let (cookie, password) = alice_with_bender(&site).await;
+    site.ergo.fail_next(Failure::UnknownError);
+
+    let response = site.post("/bots/bender/delete", &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 503);
+    let page = body_text(response).await;
+    assert!(page.contains("Can&#39;t reach the chat server."), "{page}");
+    assert_eq!(listed(&page), ["<strong>bender</strong>"]);
+    assert!(signs_in_to_ergo(&site, "bender", &password).await);
+}
+
+#[tokio::test]
+async fn deletes_and_resets_share_the_limit_on_bot_changes() {
+    let site = Site::start().await;
+    let (cookie, _) = alice_with_bender(&site).await;
+    for _ in 0..BOT_CHANGES_PER_ADDRESS {
+        let response = post_from(&site, "/bots/bender/password", &[], &cookie, "192.0.2.7").await;
+        assert_eq!(response.status(), 200);
+    }
+
+    let response = post_from(&site, "/bots/bender/delete", &[], &cookie, "192.0.2.7").await;
+
+    assert_eq!(response.status(), 429);
+    assert!(body_text(response).await.contains(TRY_LATER));
+    assert!(
+        site.db
+            .bot("bender")
+            .await
+            .unwrap()
+            .unwrap()
+            .removed_at
+            .is_none()
+    );
 }
 
 #[tokio::test]

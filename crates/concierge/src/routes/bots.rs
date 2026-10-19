@@ -10,7 +10,7 @@ use axum::{
     Form,
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use ergo_api::Passphrase;
 use serde::Deserialize;
@@ -70,6 +70,13 @@ struct Shown {
 struct QuestionPage<'a> {
     layout: Layout<'a>,
     bot: String,
+    question: Question,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Question {
+    Reset,
+    Delete,
 }
 
 #[derive(Deserialize, Default)]
@@ -164,15 +171,59 @@ pub async fn confirm_reset(
     CurrentMember(me): CurrentMember,
     Path(name): Path<String>,
 ) -> Response {
-    let bot = match owned_bot(&app, &me.member, &name).await {
-        Ok(Some(bot)) => bot,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(error) => return internal_error("Looking up a bot", error),
+    ask(&app, &me.member, &name, Question::Reset).await
+}
+
+/// Asks before deleting a bot.
+pub async fn confirm_delete(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    Path(name): Path<String>,
+) -> Response {
+    ask(&app, &me.member, &name, Question::Delete).await
+}
+
+async fn ask(app: &App, member: &Member, name: &str, question: Question) -> Response {
+    let bot = match owned_or_not_found(app, member, name).await {
+        Ok(bot) => bot,
+        Err(response) => return response,
     };
     render(&QuestionPage {
-        layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Bots),
+        layout: Layout::new(app, Some(&member.account)).on(Tab::Bots),
         bot: bot.account,
+        question,
     })
+}
+
+/// Erases the member's bot `name` in Ergo, which disconnects it at once,
+/// and marks it deleted, keeping its name taken.
+pub async fn delete(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    address: ClientAddress,
+    Path(name): Path<String>,
+) -> Response {
+    let member = &me.member;
+    let bot = match owned_or_not_found(&app, member, &name).await {
+        Ok(bot) => bot,
+        Err(response) => return response,
+    };
+    if !app.bot_changes.allows(address.0, Instant::now()) {
+        return alert(&app, member, StatusCode::TOO_MANY_REQUESTS, TRY_LATER).await;
+    }
+    match bots(&app).remove(&bot.account).await {
+        Ok(()) => Redirect::to("/bots").into_response(),
+        Err(error) => {
+            eprintln!("Deleting a bot failed: {error:#}");
+            alert(
+                &app,
+                member,
+                StatusCode::SERVICE_UNAVAILABLE,
+                ERGO_UNAVAILABLE,
+            )
+            .await
+        }
+    }
 }
 
 /// Gives the member's bot `name` a new generated password and shows it
@@ -185,20 +236,12 @@ pub async fn reset(
     Path(name): Path<String>,
 ) -> Response {
     let member = &me.member;
-    let alert = |status, alert: &str| {
-        let forms = Forms {
-            alert: Some(alert.to_owned()),
-            ..Forms::default()
-        };
-        page(&app, member, status, forms)
-    };
-    let bot = match owned_bot(&app, member, &name).await {
-        Ok(Some(bot)) => bot,
-        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
-        Err(error) => return internal_error("Looking up a bot", error),
+    let bot = match owned_or_not_found(&app, member, &name).await {
+        Ok(bot) => bot,
+        Err(response) => return response,
     };
     if !app.bot_changes.allows(address.0, Instant::now()) {
-        return alert(StatusCode::TOO_MANY_REQUESTS, TRY_LATER).await;
+        return alert(&app, member, StatusCode::TOO_MANY_REQUESTS, TRY_LATER).await;
     }
     match bots(&app).reset_password(&bot.account, &bot.owner).await {
         Ok(password) => {
@@ -210,7 +253,13 @@ pub async fn reset(
         }
         Err(error) => {
             eprintln!("Resetting a bot's password failed: {error:#}");
-            alert(StatusCode::SERVICE_UNAVAILABLE, ERGO_UNAVAILABLE).await
+            alert(
+                &app,
+                member,
+                StatusCode::SERVICE_UNAVAILABLE,
+                ERGO_UNAVAILABLE,
+            )
+            .await
         }
     }
 }
@@ -238,6 +287,24 @@ fn bots(app: &App) -> Bots<'_> {
 async fn owned_bot(app: &App, member: &Member, name: &str) -> sqlx::Result<Option<Bot>> {
     let bot = app.db.bot(name).await?;
     Ok(bot.filter(|bot| bot.removed_at.is_none() && bot.owner == member.account))
+}
+
+/// `member`'s live bot named `name`, or the answer that none was found.
+async fn owned_or_not_found(app: &App, member: &Member, name: &str) -> Result<Bot, Response> {
+    match owned_bot(app, member, name).await {
+        Ok(Some(bot)) => Ok(bot),
+        Ok(None) => Err(StatusCode::NOT_FOUND.into_response()),
+        Err(error) => Err(internal_error("Looking up a bot", error)),
+    }
+}
+
+/// The tab saying why the last change didn't go through.
+async fn alert(app: &App, member: &Member, status: StatusCode, alert: &str) -> Response {
+    let forms = Forms {
+        alert: Some(alert.to_owned()),
+        ..Forms::default()
+    };
+    page(app, member, status, forms).await
 }
 
 /// The tab with `shown`'s password in a dialog over it.

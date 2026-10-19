@@ -24,7 +24,7 @@
           </form>
         {%- endif %}
           {%- if invites.open > 0 %}
-          <a class="revoke-link" href="/invites/revoke" data-dialog="revoke-invites">Revoke unused invites</a>
+          <a class="danger-link" href="/invites/revoke" data-dialog="revoke-invites">Revoke unused invites</a>
           <dialog class="card" id="revoke-invites" aria-labelledby="revoke-invites-title" aria-describedby="revoke-invites-question">
             <h2 class="eyebrow" id="revoke-invites-title">Revoke your invites</h2>
             {%- call components::revoke_invites(invites.open) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep them</button>{% endcall %}

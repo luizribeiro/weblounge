@@ -117,6 +117,14 @@
               </form>
 {%- endmacro %}
 
+{% macro delete_bot(bot) %}
+              <p id="delete-{{ bot }}-question">Delete {{ bot }}? If it's connected, it's disconnected right away, and it can't log in again. Its name stays taken.</p>
+              <form class="dialog-actions" method="post" action="/bots/{{ bot }}/delete">
+                <button class="button button-danger" type="submit">Delete {{ bot }}</button>
+                {{ caller() }}
+              </form>
+{%- endmacro %}
+
 {% macro news_opt_in(checked) %}
           <label class="check">
             <input name="news" type="checkbox"{% if checked %} checked{% endif %}>

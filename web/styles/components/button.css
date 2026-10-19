@@ -34,6 +34,11 @@
   }
 }
 
+.button-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .button-small {
   padding: 0 0.875rem;
   font-size: 0.875rem;

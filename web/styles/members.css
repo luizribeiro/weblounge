@@ -419,7 +419,7 @@ dialog.card {
   }
 }
 
-.revoke-link {
+.danger-link {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
@@ -427,7 +427,9 @@ dialog.card {
   color: var(--danger);
   font-size: 0.9375rem;
   text-decoration: underline;
+}
 
+.invite-actions .danger-link {
   @media (max-width: 30rem) {
     align-self: center;
     margin-left: 0;
