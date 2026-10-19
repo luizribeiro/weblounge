@@ -99,10 +99,10 @@ pub async fn invite(
     Json(answer).into_response()
 }
 
-/// Whether a member, a removed member's placeholder or an Ergo account
-/// holds the nick.
+/// Whether a member or a bot, removed or not, or an Ergo account holds
+/// the nick.
 async fn taken(app: &crate::app::App, nick: &Nick) -> anyhow::Result<bool> {
-    if app.db.member(nick.as_str()).await?.is_some() {
+    if app.db.name_held(nick.as_str()).await? {
         return Ok(true);
     }
     Ok(app.ergo.info(nick.clone()).await?.is_some())
