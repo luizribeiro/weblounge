@@ -14,6 +14,7 @@ use outbox::Outbox;
 use crate::{
     config::Config,
     db::{Db, Member},
+    name::MemberName,
     status,
 };
 
@@ -103,6 +104,6 @@ fn print_once(password: &Passphrase) -> String {
 }
 
 /// What's left to do once concierge let go of `account`.
-fn erase_reminder(account: &str) -> String {
+fn erase_reminder(account: &MemberName) -> String {
     format!("An oper must still run /NS ERASE {account}\n")
 }

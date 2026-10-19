@@ -62,7 +62,7 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
         bots_removed += &bot::remove(admin, &bot.account).await?;
     }
     password::set_generated(&admin.ergo, account).await?;
-    let mail = admin.outbox.delete_for(account).await?;
+    let mail = admin.outbox.delete_for(account.as_str()).await?;
     let removal = admin.db.remove_member(account, db::now()).await?;
     let lingering = if removal.off_the_disk && mail.off_the_disk {
         ""

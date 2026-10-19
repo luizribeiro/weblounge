@@ -134,7 +134,7 @@ impl Fixture {
     async fn sign_in(&self, account: &str, token_hash: &[u8]) {
         let session = NewSession {
             token_hash,
-            account,
+            account: &MemberName::new(account),
             created_at: 1_760_000_000,
             expires_at: 1_762_592_000,
         };

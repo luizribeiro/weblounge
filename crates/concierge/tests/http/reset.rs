@@ -135,7 +135,10 @@ async fn a_confirmed_member_gets_a_sealed_link_by_nick_or_email_in_any_case() {
 async fn everyone_gets_the_same_answer_but_only_a_confirmed_member_gets_mail() {
     let site = with_members().await;
     site.add_confirmed_member("erin").await;
-    site.db.remove_member("erin", db::now()).await.unwrap();
+    site.db
+        .remove_member(&MemberName::new("erin"), db::now())
+        .await
+        .unwrap();
 
     let mut answers = Vec::new();
     for who in [

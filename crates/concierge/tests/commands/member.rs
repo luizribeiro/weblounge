@@ -30,8 +30,8 @@ mod reset_password {
         assert!(fixture.signs_in_to_ergo("alice", password).await);
         assert!(!fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
         let db = fixture.db().await;
-        assert_eq!(db.end_sessions("alice").await.unwrap(), 0);
-        assert_eq!(db.end_sessions("bob").await.unwrap(), 1);
+        assert_eq!(db.end_sessions(&MemberName::new("alice")).await.unwrap(), 0);
+        assert_eq!(db.end_sessions(&MemberName::new("bob")).await.unwrap(), 1);
     }
 
     #[tokio::test]
@@ -64,7 +64,15 @@ mod reset_password {
              Ergo refused the request: UNKNOWN_ERROR (simulated failure)"
         );
         assert!(fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
-        assert_eq!(fixture.db().await.end_sessions("alice").await.unwrap(), 1);
+        assert_eq!(
+            fixture
+                .db()
+                .await
+                .end_sessions(&MemberName::new("alice"))
+                .await
+                .unwrap(),
+            1
+        );
     }
 }
 
@@ -107,7 +115,7 @@ mod delete {
         assert_eq!(bob.invited_by.as_deref(), Some("alice"));
         let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
         assert!(invite.revoked_at.is_some());
-        assert_eq!(db.end_sessions("alice").await.unwrap(), 0);
+        assert_eq!(db.end_sessions(&MemberName::new("alice")).await.unwrap(), 0);
     }
 
     #[tokio::test]
@@ -195,7 +203,7 @@ mod delete {
         assert!(fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
         let db = fixture.db().await;
         assert_eq!(db.member("alice").await.unwrap().unwrap().removed_at, None);
-        assert_eq!(db.end_sessions("alice").await.unwrap(), 1);
+        assert_eq!(db.end_sessions(&MemberName::new("alice")).await.unwrap(), 1);
     }
 
     #[tokio::test]
@@ -289,7 +297,9 @@ mod reconcile {
             created_at: 1_760_000_000,
         };
         db.insert_bot(&ghost, None, None).await.unwrap();
-        db.remove_member("carol", db::now()).await.unwrap();
+        db.remove_member(&MemberName::new("carol"), db::now())
+            .await
+            .unwrap();
 
         let output = fixture.run(&["member", "reconcile"]).await.unwrap();
 

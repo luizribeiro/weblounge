@@ -48,13 +48,13 @@ pub struct Member {
 /// A member's name, and whether only their placeholder is left.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemberAccount {
-    pub account: String,
+    pub account: MemberName,
     pub removed: bool,
 }
 
 pub struct NewSession<'a> {
     pub token_hash: &'a [u8],
-    pub account: &'a str,
+    pub account: &'a MemberName,
     pub created_at: i64,
     pub expires_at: i64,
 }
@@ -90,7 +90,7 @@ pub struct NewAccessToken<'a> {
 /// A live access token, of a member who hasn't been removed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccessToken {
-    pub account: String,
+    pub account: MemberName,
     pub client_id: String,
     pub expires_at: i64,
 }
@@ -696,7 +696,8 @@ impl Db {
     pub async fn member_accounts(&self) -> sqlx::Result<Vec<MemberAccount>> {
         sqlx::query_as!(
             MemberAccount,
-            r#"SELECT account AS "account!", removed_at IS NOT NULL AS "removed!: bool"
+            r#"SELECT account AS "account!: MemberName",
+                      removed_at IS NOT NULL AS "removed!: bool"
                FROM members ORDER BY account"#
         )
         .fetch_all(&self.pool)
@@ -764,14 +765,14 @@ impl Db {
     }
 
     /// Ends every session of `account`, answering how many there were.
-    pub async fn end_sessions(&self, account: &str) -> sqlx::Result<u64> {
+    pub async fn end_sessions(&self, account: &MemberName) -> sqlx::Result<u64> {
         delete_sessions(&self.pool, account).await
     }
 
     /// Ends every session of `account` but the one whose token hashes to
     /// `kept`, answering how many it ended. Their OAuth codes and tokens go
     /// with them.
-    pub async fn end_other_sessions(&self, account: &str, kept: &[u8]) -> sqlx::Result<u64> {
+    pub async fn end_other_sessions(&self, account: &MemberName, kept: &[u8]) -> sqlx::Result<u64> {
         let deleted = sqlx::query!(
             "DELETE FROM sessions WHERE account = ? AND token_hash != ?",
             account,
@@ -786,7 +787,7 @@ impl Db {
     /// reset codes included, ends their sessions and revokes their open invites. Their row stays as their place in the
     /// invite tree, so the people they invited stay attached. Mail waiting
     /// for them is in the outbox's own database.
-    pub async fn remove_member(&self, account: &str, now: i64) -> sqlx::Result<Removal> {
+    pub async fn remove_member(&self, account: &MemberName, now: i64) -> sqlx::Result<Removal> {
         let mut transaction = self.pool.begin().await?;
         sqlx::query!(
             "UPDATE members
@@ -1053,7 +1054,7 @@ impl Db {
     ) -> sqlx::Result<Option<AccessToken>> {
         sqlx::query_as!(
             AccessToken,
-            r#"SELECT members.account AS "account!", oauth_tokens.client_id,
+            r#"SELECT members.account AS "account!: MemberName", oauth_tokens.client_id,
                       oauth_tokens.expires_at
                FROM oauth_tokens
                JOIN sessions ON sessions.token_hash = oauth_tokens.session_hash
@@ -1262,7 +1263,7 @@ async fn verification_code(
 
 async fn delete_verification_codes(
     executor: impl SqliteExecutor<'_>,
-    account: &str,
+    account: &MemberName,
 ) -> sqlx::Result<()> {
     sqlx::query!("DELETE FROM verification_codes WHERE account = ?", account)
         .execute(executor)
@@ -1344,7 +1345,7 @@ async fn hash_carried_over_codes(connection: &mut SqliteConnection) -> sqlx::Res
 
 async fn revoke_open_invites(
     executor: impl SqliteExecutor<'_>,
-    account: &str,
+    account: &MemberName,
     now: i64,
 ) -> sqlx::Result<u64> {
     let revoked = sqlx::query!(
@@ -1360,7 +1361,10 @@ async fn revoke_open_invites(
     Ok(revoked.rows_affected())
 }
 
-async fn delete_sessions(executor: impl SqliteExecutor<'_>, account: &str) -> sqlx::Result<u64> {
+async fn delete_sessions(
+    executor: impl SqliteExecutor<'_>,
+    account: &MemberName,
+) -> sqlx::Result<u64> {
     let deleted = sqlx::query!("DELETE FROM sessions WHERE account = ?", account)
         .execute(executor)
         .await?;
@@ -1697,7 +1701,9 @@ pub(crate) mod tests {
         .await
         .unwrap_err();
         assert!(error.to_string().contains("UNIQUE"), "{error}");
-        db.remove_member("alice", 3).await.unwrap();
+        db.remove_member(&MemberName::new("alice"), 3)
+            .await
+            .unwrap();
         execute(
             &db,
             "UPDATE members SET email_verified_at = 4 WHERE account = 'bob'",
@@ -1749,7 +1755,10 @@ pub(crate) mod tests {
         update_invite(&db, "to-alice", "redeemed_by = 'alice', redeemed_at = 10").await;
         update_invite(&db, "to-bob", "redeemed_by = 'bob', redeemed_at = 20").await;
 
-        let removal = db.remove_member("alice", 200).await.unwrap();
+        let removal = db
+            .remove_member(&MemberName::new("alice"), 200)
+            .await
+            .unwrap();
 
         assert_eq!(removal.invites_revoked, 1);
         let alice = db.member("alice").await.unwrap().unwrap();
@@ -1844,7 +1853,10 @@ pub(crate) mod tests {
         let alices = issue(&db, "alice", 100).await;
         let bobs = issue(&db, "bob", 100).await;
 
-        let removal = db.remove_member("alice", 200).await.unwrap();
+        let removal = db
+            .remove_member(&MemberName::new("alice"), 200)
+            .await
+            .unwrap();
 
         assert!(removal.off_the_disk);
         assert!(!files_contain(&dir, b"alice@example.org"));
@@ -1870,7 +1882,10 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        let removal = db.remove_member("alice", 200).await.unwrap();
+        let removal = db
+            .remove_member(&MemberName::new("alice"), 200)
+            .await
+            .unwrap();
 
         assert!(!removal.off_the_disk);
         assert_eq!(
@@ -2134,7 +2149,12 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(db.end_other_sessions("alice", b"\xa2").await.unwrap(), 1);
+        assert_eq!(
+            db.end_other_sessions(&MemberName::new("alice"), b"\xa2")
+                .await
+                .unwrap(),
+            1
+        );
         assert_eq!(db.session(b"\xa1", 0).await.unwrap(), None);
         assert!(db.session(b"\xa2", 0).await.unwrap().is_some());
         assert!(db.session(b"\xb1", 0).await.unwrap().is_some());
@@ -2147,7 +2167,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_sessions().await;
         assert_eq!(db.end_expired_sessions(150).await.unwrap(), 2);
         assert!(db.session(b"\xa2", 150).await.unwrap().is_some());
-        assert_eq!(db.end_sessions("bob").await.unwrap(), 0);
+        assert_eq!(db.end_sessions(&MemberName::new("bob")).await.unwrap(), 0);
     }
 
     #[tokio::test]
@@ -2288,7 +2308,9 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn verified_removed_and_unknown_members_get_no_code() {
         let (db, _dir) = with_unverified_members().await;
-        db.remove_member("bob", MAILED).await.unwrap();
+        db.remove_member(&MemberName::new("bob"), MAILED)
+            .await
+            .unwrap();
         for account in ["carol", "bob", "nobody"] {
             let issued = db
                 .issue_verification_code(&MemberName::new(account), MAILED)
@@ -2508,7 +2530,9 @@ pub(crate) mod tests {
             )
             .await
             .unwrap();
-            db.remove_member("dave", MAILED).await.unwrap();
+            db.remove_member(&MemberName::new("dave"), MAILED)
+                .await
+                .unwrap();
             for input in [
                 "alice",
                 "alice@example.org",
@@ -2653,7 +2677,9 @@ pub(crate) mod tests {
             assert_eq!(db.take_reset_code(&saved.code, MAILED).await.unwrap(), None);
 
             let removed = issue(&db, "carol", MAILED).await;
-            db.remove_member("carol", MAILED).await.unwrap();
+            db.remove_member(&MemberName::new("carol"), MAILED)
+                .await
+                .unwrap();
             assert_eq!(
                 db.take_reset_code(&removed.code, MAILED).await.unwrap(),
                 None
@@ -2785,7 +2811,7 @@ pub(crate) mod tests {
         assert_eq!(
             live,
             Some(AccessToken {
-                account: "alice".into(),
+                account: MemberName::new("alice"),
                 client_id: "gamja".into(),
                 expires_at: 150,
             })
@@ -2814,7 +2840,7 @@ pub(crate) mod tests {
         db.end_session(b"\xa1").await.unwrap();
         assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
         assert!(db.access_token(b"\xd2", 0).await.unwrap().is_some());
-        db.end_sessions("alice").await.unwrap();
+        db.end_sessions(&MemberName::new("alice")).await.unwrap();
         assert_eq!(db.access_token(b"\xd2", 0).await.unwrap(), None);
     }
 

@@ -1,5 +1,5 @@
 use axum::http::header;
-use concierge::oauth::CODE_LIFETIME;
+use concierge::{name::MemberName, oauth::CODE_LIFETIME};
 use serde_json::Value;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -539,7 +539,7 @@ async fn a_token_dies_with_its_session_or_its_member() {
     site.post("/signout", &[], Some(&alices)).await;
     assert_eq!(site.introspect(&alice_token).await["active"], false);
     site.db
-        .remove_member("bob", concierge::db::now())
+        .remove_member(&MemberName::new("bob"), concierge::db::now())
         .await
         .unwrap();
     assert_eq!(site.introspect(&bob_token).await["active"], false);

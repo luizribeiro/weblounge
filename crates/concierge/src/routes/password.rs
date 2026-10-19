@@ -79,7 +79,7 @@ pub async fn change(
     Form(change): Form<Change>,
 ) -> Response {
     let member = &me.member;
-    let account = member.account.as_str();
+    let account = &member.account;
     let refuse = |status, password| account::page(&app, member, status, Forms::password(password));
     let current_error = |error| PasswordForm {
         current_error: Some(error),

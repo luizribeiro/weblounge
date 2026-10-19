@@ -13,6 +13,7 @@ use axum::{
 use crate::{
     app::{App, AppState},
     db::{self, Member, NewSession},
+    name::MemberName,
     routes::internal_error,
     session::{self, Token},
 };
@@ -109,7 +110,7 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentMember {
 pub async fn start_session(
     app: &App,
     visitor: &Visitor,
-    account: &str,
+    account: &MemberName,
 ) -> sqlx::Result<HeaderValue> {
     let token = Token::generate();
     let token_hash = app.sessions.hash(&token);

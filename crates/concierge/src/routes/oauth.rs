@@ -184,7 +184,7 @@ pub async fn introspect(
     let answer = match live {
         Ok(Some(token)) => json!({
             "active": true,
-            "username": token.account,
+            "username": token.account.as_str(),
             "client_id": token.client_id,
             "token_type": "Bearer",
             "exp": token.expires_at,

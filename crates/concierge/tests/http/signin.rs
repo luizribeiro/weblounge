@@ -1,6 +1,7 @@
 use axum::http::header;
 use concierge::{
     db::{self, NewSession},
+    name::MemberName,
     nick,
     session::{self, LIFETIME},
 };
@@ -107,7 +108,10 @@ async fn every_refusal_reads_the_same_whoever_the_nick_is() {
     let site = Site::start().await;
     site.add_member("alice").await;
     site.add_member("dave").await;
-    site.db.remove_member("dave", db::now()).await.unwrap();
+    site.db
+        .remove_member(&MemberName::new("dave"), db::now())
+        .await
+        .unwrap();
     site.register("carol").await;
 
     let wrong_password = refusal(&site, "alice", "not-her-password").await;
@@ -135,7 +139,10 @@ async fn a_removed_member_cannot_sign_in_and_their_sessions_stop_working() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    site.db.remove_member("alice", db::now()).await.unwrap();
+    site.db
+        .remove_member(&MemberName::new("alice"), db::now())
+        .await
+        .unwrap();
     assert_eq!(site.get("/", Some(&cookie)).await.status(), 303);
     assert_eq!(site.sign_in_form("alice", PASSWORD).await.status(), 401);
 }
@@ -198,7 +205,7 @@ async fn an_expired_session_signs_nobody_in_and_is_cleaned_up_later() {
     site.db
         .insert_session(&NewSession {
             token_hash: b"bob's old laptop",
-            account: "bob",
+            account: &MemberName::new("bob"),
             created_at: 0,
             expires_at: 1,
         })
@@ -209,8 +216,17 @@ async fn an_expired_session_signs_nobody_in_and_is_cleaned_up_later() {
     assert_eq!(location(&response), "/signin");
 
     site.sign_in("bob").await;
-    assert_eq!(site.db.end_sessions("alice").await.unwrap(), 0);
-    assert_eq!(site.db.end_sessions("bob").await.unwrap(), 1);
+    assert_eq!(
+        site.db
+            .end_sessions(&MemberName::new("alice"))
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        site.db.end_sessions(&MemberName::new("bob")).await.unwrap(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -236,6 +252,9 @@ async fn a_password_reset_ends_the_sessions() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    site.db.end_sessions("alice").await.unwrap();
+    site.db
+        .end_sessions(&MemberName::new("alice"))
+        .await
+        .unwrap();
     assert_eq!(location(&site.get("/", Some(&cookie)).await), "/signin");
 }
