@@ -10,6 +10,7 @@ pub mod email;
 pub mod invite_code;
 pub mod invite_rules;
 pub mod link_code;
+mod link_mail;
 pub mod nick;
 pub mod oauth;
 pub mod password;

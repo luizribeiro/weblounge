@@ -4,12 +4,12 @@
 //! the disk.
 
 use askama::Template;
-use outbox::{Message, NoKey, Outbox, Subject};
+use outbox::{Message, Outbox, Subject};
 
 use crate::{
     db::{Db, IssuedCode},
     email::Email,
-    invite_rules, rate_limit, verification_rules,
+    invite_rules, link_mail, rate_limit, verification_rules,
 };
 
 pub const SUBJECT: &str = "Confirm your email for weblounge.org";
@@ -87,7 +87,7 @@ pub fn message(
 /// Issues `account` a new link, replacing their last, and queues the
 /// email of `kind` that carries it, sealed; answers its id, unless they
 /// had no address to verify. Issuing starts the grace period, so the email goes
-/// out right after. Fails with [`NoKey`] while the mailer is down.
+/// out right after. Fails with [`outbox::NoKey`] while the mailer is down.
 pub async fn send(
     db: &Db,
     outbox: &Outbox,
@@ -96,21 +96,11 @@ pub async fn send(
     kind: Kind,
     now: i64,
 ) -> anyhow::Result<Option<i64>> {
-    // Checked before issuing, so a mailer that's down doesn't cost the
-    // member the link they have.
-    if outbox.published_key().await?.is_none() {
-        return Err(NoKey.into());
-    }
-    let Some(issued) = db.issue_verification_code(account, now).await? else {
+    let issue = db.issue_verification_code(account, now);
+    let write = |issued: &IssuedCode| message(issued, public_url, kind, now);
+    let Some((id, issued)) = link_mail::send(outbox, now, issue, write).await? else {
         return Ok(None);
     };
-    let id = outbox
-        .queue_sealed(
-            &message(&issued, public_url, kind, now)?,
-            now,
-            issued.expires_at,
-        )
-        .await?;
     // Noted once queued: a failure in between leaves a reminder that may
     // go out twice, two days apart, rather than one that never does.
     if kind == Kind::Reminder {
@@ -162,7 +152,7 @@ pub async fn remind(db: &Db, outbox: &Outbox, public_url: &str, now: i64) -> any
 mod tests {
     use super::*;
     use crate::{db, link_code, nick};
-    use outbox::{Body, testing::TestKey};
+    use outbox::{Body, NoKey, testing::TestKey};
 
     const PUBLIC_URL: &str = "https://members.weblounge.org";
     const SENT: i64 = 1_760_000_000;

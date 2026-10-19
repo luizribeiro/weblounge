@@ -5,7 +5,7 @@ use common::sqlite;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 use crate::{
-    invite_code, invite_rules, link_code,
+    invite_code, invite_rules, link_code, link_mail,
     oauth::CodeChallenge,
     reset_rules::{self, Lookup},
     tree::Branch,
@@ -215,6 +215,12 @@ pub struct IssuedCode {
     pub expires_at: i64,
     /// When the member's grace period ends.
     pub deadline: i64,
+}
+
+impl link_mail::Issued for IssuedCode {
+    fn expires_at(&self) -> i64 {
+        self.expires_at
+    }
 }
 
 /// A code that verifies a member's email, as the database keeps it.
