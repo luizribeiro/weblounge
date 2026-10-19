@@ -180,8 +180,8 @@ pub struct Removal {
 
 pub struct NewBot<'a> {
     /// Ergo's canonical spelling of the account name.
-    pub account: &'a str,
-    pub owner: &'a str,
+    pub account: &'a BotName,
+    pub owner: &'a MemberName,
     pub note: Option<&'a str>,
     pub created_at: i64,
 }
@@ -1101,7 +1101,7 @@ impl Db {
                 return Ok(BotInsertion::TooMany);
             }
         }
-        let replaced_owner = replacing.map(|replaced| replaced.owner.as_str());
+        let replaced_owner = replacing.map(|replaced| &replaced.owner);
         let replaced_at = replacing.and_then(|replaced| replaced.removed_at);
         let inserted = sqlx::query!(
             "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)
@@ -1140,7 +1140,7 @@ impl Db {
 
     /// The bots that haven't been deleted, of `owner` or of everyone, by
     /// name.
-    pub async fn bots(&self, owner: Option<&str>) -> sqlx::Result<Vec<Bot>> {
+    pub async fn bots(&self, owner: Option<&MemberName>) -> sqlx::Result<Vec<Bot>> {
         sqlx::query_as!(
             Bot,
             r#"SELECT account AS "account!: BotName", owner AS "owner: MemberName", note,
@@ -1156,7 +1156,11 @@ impl Db {
     /// Takes back the insertion of the bot `account` Ergo never created:
     /// drops its row, freeing its name, or puts back the deleted bot it
     /// replaced, which holds the name as it did.
-    pub async fn take_back_bot(&self, account: &str, replaced: Option<&Bot>) -> sqlx::Result<()> {
+    pub async fn take_back_bot(
+        &self,
+        account: &BotName,
+        replaced: Option<&Bot>,
+    ) -> sqlx::Result<()> {
         match replaced {
             None => {
                 sqlx::query!(
@@ -1199,7 +1203,7 @@ impl Db {
 
     /// Marks a bot deleted, keeping its row so its name stays held until
     /// it's free; answers whether it was live.
-    pub async fn remove_bot(&self, account: &str, now: i64) -> sqlx::Result<bool> {
+    pub async fn remove_bot(&self, account: &BotName, now: i64) -> sqlx::Result<bool> {
         let removed = sqlx::query!(
             "UPDATE bots SET removed_at = ? WHERE account = ? AND removed_at IS NULL",
             now,
@@ -1521,7 +1525,7 @@ pub(crate) mod tests {
             (Some("alice"), Some(3))
         );
         assert!(db.invite("open").await.unwrap().is_some());
-        assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 1);
+        assert_eq!(db.bots(Some(&alice.account)).await.unwrap().len(), 1);
         let error = execute(
             &db,
             "INSERT INTO bots (account, owner, created_at) VALUES ('x', 'nobody', 0)",
@@ -2831,15 +2835,15 @@ pub(crate) mod tests {
             ("Marvin", "alice", Some("posts the weather")),
         ] {
             let bot = NewBot {
-                account,
-                owner,
+                account: &BotName::new(account),
+                owner: &MemberName::new(owner),
                 note,
                 created_at: 100,
             };
             let inserted = db.insert_bot(&bot, None, None).await.unwrap();
             assert_eq!(inserted, BotInsertion::Inserted);
         }
-        assert!(db.remove_bot("DALEK", 200).await.unwrap());
+        assert!(db.remove_bot(&BotName::new("DALEK"), 200).await.unwrap());
         (db, dir)
     }
 
@@ -2873,22 +2877,28 @@ pub(crate) mod tests {
                 .map(|bot| bot.account.to_string())
                 .collect()
         };
+        let owner = MemberName::new;
         assert_eq!(names(db.bots(None).await.unwrap()), ["bender", "Marvin"]);
-        assert_eq!(names(db.bots(Some("LUIZ")).await.unwrap()), ["bender"]);
-        assert!(db.bots(Some("nobody")).await.unwrap().is_empty());
+        assert_eq!(
+            names(db.bots(Some(&owner("LUIZ"))).await.unwrap()),
+            ["bender"]
+        );
+        assert!(db.bots(Some(&owner("nobody"))).await.unwrap().is_empty());
     }
 
     #[tokio::test]
     async fn inserts_a_bot_only_while_its_owner_has_room_for_it() {
         let (db, _dir) = with_bots().await;
+        let owner = MemberName::new("LUIZ");
         let bot = |account| NewBot {
             account,
-            owner: "LUIZ",
+            owner: &owner,
             note: None,
             created_at: 300,
         };
 
-        let (hal, eve) = (bot("hal"), bot("eve"));
+        let names = [BotName::new("hal"), BotName::new("eve")];
+        let (hal, eve) = (bot(&names[0]), bot(&names[1]));
         let inserted = db.insert_bot(&hal, None, Some(2)).await.unwrap();
         assert_eq!(inserted, BotInsertion::Inserted);
         let inserted = db.insert_bot(&eve, None, Some(2)).await.unwrap();
@@ -2903,14 +2913,16 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn two_bots_at_once_cannot_both_take_the_last_place() {
         let (db, _dir) = with_bots().await;
+        let owner = MemberName::new("luiz");
         let bot = |account| NewBot {
             account,
-            owner: "luiz",
+            owner: &owner,
             note: None,
             created_at: 300,
         };
 
-        let (hal, eve) = (bot("hal"), bot("eve"));
+        let names = [BotName::new("hal"), BotName::new("eve")];
+        let (hal, eve) = (bot(&names[0]), bot(&names[1]));
         let inserted = tokio::join!(
             db.insert_bot(&hal, None, Some(2)),
             db.insert_bot(&eve, None, Some(2))
@@ -2919,7 +2931,7 @@ pub(crate) mod tests {
         let inserted = [inserted.0.unwrap(), inserted.1.unwrap()];
         assert!(inserted.contains(&BotInsertion::Inserted), "{inserted:?}");
         assert!(inserted.contains(&BotInsertion::TooMany), "{inserted:?}");
-        assert_eq!(db.bots(Some("luiz")).await.unwrap().len(), 2);
+        assert_eq!(db.bots(Some(&owner)).await.unwrap().len(), 2);
     }
 
     #[tokio::test]
@@ -2952,8 +2964,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_bot_is_removed_once_and_needs_an_owner_and_a_free_name() {
         let (db, _dir) = with_bots().await;
-        assert!(!db.remove_bot("dalek", 300).await.unwrap());
-        assert!(!db.remove_bot("nobody", 300).await.unwrap());
+        assert!(!db.remove_bot(&BotName::new("dalek"), 300).await.unwrap());
+        assert!(!db.remove_bot(&BotName::new("nobody"), 300).await.unwrap());
         assert_eq!(
             db.bot("dalek").await.unwrap().unwrap().removed_at,
             Some(200)
@@ -2964,12 +2976,14 @@ pub(crate) mod tests {
             note: None,
             created_at: 300,
         };
+        let hal = (BotName::new("hal"), MemberName::new("nobody"));
         let error = db
-            .insert_bot(&bot("hal", "nobody"), None, None)
+            .insert_bot(&bot(&hal.0, &hal.1), None, None)
             .await
             .unwrap_err();
         assert!(error.to_string().contains("FOREIGN KEY"), "{error}");
-        let inserted = db.insert_bot(&bot("Dalek", "alice"), None, None).await;
+        let dalek = (BotName::new("Dalek"), MemberName::new("alice"));
+        let inserted = db.insert_bot(&bot(&dalek.0, &dalek.1), None, None).await;
         assert_eq!(inserted.unwrap(), BotInsertion::NameTaken);
     }
 
@@ -2977,13 +2991,15 @@ pub(crate) mod tests {
     async fn two_members_at_once_cannot_both_reuse_a_deleted_bots_name() {
         let (db, _dir) = with_bots().await;
         let dalek = db.bot("dalek").await.unwrap().unwrap();
+        let name = BotName::new("dalek");
         let bot = |owner| NewBot {
-            account: "dalek",
+            account: &name,
             owner,
             note: None,
             created_at: 300,
         };
-        let (luiz, alice) = (bot("luiz"), bot("alice"));
+        let owners = [MemberName::new("luiz"), MemberName::new("alice")];
+        let (luiz, alice) = (bot(&owners[0]), bot(&owners[1]));
 
         let inserted = tokio::join!(
             db.insert_bot(&luiz, Some(&dalek), None),
@@ -2994,12 +3010,7 @@ pub(crate) mod tests {
         assert!(inserted.contains(&BotInsertion::Inserted), "{inserted:?}");
         assert!(inserted.contains(&BotInsertion::NameTaken), "{inserted:?}");
         let live = db.bots(None).await.unwrap();
-        assert_eq!(
-            live.iter()
-                .filter(|bot| bot.account.as_str() == "dalek")
-                .count(),
-            1
-        );
+        assert_eq!(live.iter().filter(|bot| bot.account == name).count(), 1);
     }
 
     #[tokio::test]
@@ -3007,9 +3018,10 @@ pub(crate) mod tests {
         let (db, _dir) = with_bots().await;
         let dalek = db.bot("dalek").await.unwrap().unwrap();
         let bender = db.bot("bender").await.unwrap().unwrap();
+        let (account, alice) = (BotName::new("Dalek"), MemberName::new("alice"));
         let hal = NewBot {
-            account: "Dalek",
-            owner: "alice",
+            account: &account,
+            owner: &alice,
             note: Some("takes over"),
             created_at: 300,
         };
@@ -3031,33 +3043,35 @@ pub(crate) mod tests {
             taken_over,
             Some(Bot {
                 account: BotName::new("dalek"),
-                owner: MemberName::new("alice"),
+                owner: alice.clone(),
                 note: Some("takes over".into()),
                 created_at: 300,
                 removed_at: None,
             })
         );
         assert_eq!(taken_over.unwrap().account.as_str(), "dalek");
-        assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 2);
+        assert_eq!(db.bots(Some(&alice)).await.unwrap().len(), 2);
     }
 
     #[tokio::test]
     async fn taking_back_a_bot_frees_its_name_or_puts_back_the_one_it_replaced() {
         let (db, _dir) = with_bots().await;
         let dalek = db.bot("dalek").await.unwrap().unwrap();
+        let owner = MemberName::new("alice");
         let bot = |account| NewBot {
             account,
-            owner: "alice",
+            owner: &owner,
             note: None,
             created_at: 300,
         };
-        db.insert_bot(&bot("hal"), None, None).await.unwrap();
-        db.insert_bot(&bot("dalek"), Some(&dalek), None)
+        let (hal, new_dalek) = (BotName::new("hal"), BotName::new("dalek"));
+        db.insert_bot(&bot(&hal), None, None).await.unwrap();
+        db.insert_bot(&bot(&new_dalek), Some(&dalek), None)
             .await
             .unwrap();
 
-        db.take_back_bot("HAL", None).await.unwrap();
-        db.take_back_bot("dalek", Some(&dalek)).await.unwrap();
+        db.take_back_bot(&BotName::new("HAL"), None).await.unwrap();
+        db.take_back_bot(&new_dalek, Some(&dalek)).await.unwrap();
 
         assert_eq!(db.bot("hal").await.unwrap(), None);
         assert_eq!(db.bot("dalek").await.unwrap(), Some(dalek));

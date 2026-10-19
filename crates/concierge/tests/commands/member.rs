@@ -1,6 +1,7 @@
 use concierge::{
     db::{self, NewBot, NewInvite},
     email::Email,
+    name::{BotName, MemberName},
 };
 use ergo_api::fake::Failure;
 use outbox::{Message, Subject};
@@ -177,7 +178,8 @@ mod delete {
         assert!(error.is_err());
         let db = fixture.db().await;
         assert_eq!(db.member("alice").await.unwrap().unwrap().removed_at, None);
-        assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 1);
+        let alice = MemberName::new("alice");
+        assert_eq!(db.bots(Some(&alice)).await.unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -277,10 +279,12 @@ mod reconcile {
             fixture.run(&["bot", "create", owner, bot]).await.unwrap();
         }
         let db = fixture.db().await;
-        db.remove_bot("hal", db::now()).await.unwrap();
+        db.remove_bot(&BotName::new("hal"), db::now())
+            .await
+            .unwrap();
         let ghost = NewBot {
-            account: "ghost",
-            owner: "alice",
+            account: &BotName::new("ghost"),
+            owner: &MemberName::new("alice"),
             note: None,
             created_at: 1_760_000_000,
         };

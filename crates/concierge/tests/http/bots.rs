@@ -1,6 +1,7 @@
 use axum::{http::header, response::Response};
 use concierge::{
     bot_rules::MAX_LIVE,
+    name::MemberName,
     rate_limit::{BOT_CHANGES_PER_ADDRESS, TRY_LATER},
 };
 use ergo_api::fake::Failure;
@@ -774,7 +775,8 @@ async fn an_unconfirmed_member_still_deletes_their_bots() {
     let response = site.post("/bots/bender/delete", &[], Some(&cookie)).await;
 
     assert_eq!(response.status(), 303);
-    assert!(site.db.bots(Some("alice")).await.unwrap().is_empty());
+    let alice = MemberName::new("alice");
+    assert!(site.db.bots(Some(&alice)).await.unwrap().is_empty());
 }
 
 #[tokio::test]

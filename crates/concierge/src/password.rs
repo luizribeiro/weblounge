@@ -9,6 +9,8 @@ use anyhow::Context;
 use common::random;
 use ergo_api::{Client, Passphrase};
 
+use crate::name::Name;
+
 const ALPHABET: &[u8] = b"23456789abcdefghjkmnpqrstuvwxyz";
 const LENGTH: usize = 26;
 
@@ -18,14 +20,14 @@ pub fn generate() -> Passphrase {
 }
 
 /// Replaces `account`'s password in Ergo.
-pub async fn set(ergo: &Client, account: &str, password: &Passphrase) -> anyhow::Result<()> {
+pub async fn set<K>(ergo: &Client, account: &Name<K>, password: &Passphrase) -> anyhow::Result<()> {
     ergo.set_password(account, password)
         .await
         .with_context(|| format!("Ergo didn't take {account}'s new password"))
 }
 
 /// Gives `account` a new generated password in Ergo, and answers it.
-pub async fn set_generated(ergo: &Client, account: &str) -> anyhow::Result<Passphrase> {
+pub async fn set_generated<K>(ergo: &Client, account: &Name<K>) -> anyhow::Result<Passphrase> {
     let password = generate();
     set(ergo, account, &password).await?;
     Ok(password)

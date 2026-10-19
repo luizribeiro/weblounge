@@ -135,9 +135,9 @@ pub async fn create(
         )
         .await;
     match created {
-        Ok(Ok(nick)) => {
+        Ok(Ok(bot)) => {
             let shown = Shown {
-                bot: nick.to_string(),
+                bot: bot.to_string(),
                 password,
             };
             show_password(&app, member, shown).await

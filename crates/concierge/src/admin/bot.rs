@@ -11,7 +11,7 @@ use super::{Admin, print_once};
 use crate::{
     bots::{Bots, Refusal},
     db::{Bot, Member},
-    nick::Nick,
+    name::BotName,
     password, password_rules, tree,
 };
 
@@ -129,14 +129,17 @@ fn read_password(path: &Path) -> anyhow::Result<Passphrase> {
 }
 
 async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
-    if let Some(owner) = owner {
-        admin
-            .db
-            .member(owner)
-            .await?
-            .with_context(|| format!("{owner} is not a member"))?;
-    }
-    let bots = admin.db.bots(owner).await?;
+    let owner = match owner {
+        Some(owner) => {
+            let member = admin.db.member(owner).await?;
+            Some(member.with_context(|| format!("{owner} is not a member"))?)
+        }
+        None => None,
+    };
+    let bots = admin
+        .db
+        .bots(owner.as_ref().map(|owner| &owner.account))
+        .await?;
     Ok(bots
         .into_iter()
         .map(|bot| {
@@ -190,7 +193,7 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
 
 /// Erases the live bot `account` and marks it deleted, answering what it
 /// did.
-pub(super) async fn remove(admin: &Admin, account: &str) -> anyhow::Result<String> {
+pub(super) async fn remove(admin: &Admin, account: &BotName) -> anyhow::Result<String> {
     admin.bots().remove(account).await?;
     Ok(format!("removed bot {account}\n"))
 }
@@ -220,13 +223,13 @@ async fn register(
     name: &str,
     note: Option<&str>,
     password: &Passphrase,
-) -> anyhow::Result<Nick> {
+) -> anyhow::Result<BotName> {
     match admin
         .bots()
         .create(&owner.account, name, note, password, None)
         .await?
     {
-        Ok(nick) => Ok(nick),
+        Ok(bot) => Ok(bot),
         Err(Refusal::InvalidName(invalid)) => {
             Err(anyhow::Error::new(invalid).context(format!("{name} can't be a bot's name")))
         }

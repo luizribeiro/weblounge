@@ -6,6 +6,8 @@
 //!
 //! Times are Unix seconds.
 
+use crate::name::MemberName;
+
 /// How many live bots a member may have, counting the ones an admin made
 /// for them.
 pub const MAX_LIVE: i64 = 3;
@@ -31,9 +33,9 @@ pub fn remaining(verified: bool, live: i64) -> i64 {
 /// chat history, kept `history_expiry`, no longer holds what the bot said,
 /// so nobody new passes for it there.
 pub fn deleted_name_free(
-    owner: &str,
+    owner: &MemberName,
     removed_at: i64,
-    claimant: Option<&str>,
+    claimant: Option<&MemberName>,
     now: i64,
     history_expiry: i64,
 ) -> bool {
@@ -73,21 +75,26 @@ mod tests {
     }
 
     const DELETED: i64 = 1_760_000_000;
+
+    fn name(name: &str) -> MemberName {
+        MemberName::new(name)
+    }
     const TWO_WEEKS: i64 = 14 * 24 * 60 * 60;
 
     #[test]
     fn a_deleted_bots_owner_reuses_its_name_at_once() {
+        let zoe = name("zoe");
         assert!(deleted_name_free(
-            "zoe",
+            &zoe,
             DELETED,
-            Some("zoe"),
+            Some(&zoe),
             DELETED,
             TWO_WEEKS
         ));
         assert!(deleted_name_free(
-            "zoe",
+            &zoe,
             DELETED,
-            Some("zoe"),
+            Some(&zoe),
             DELETED + 60,
             TWO_WEEKS
         ));
@@ -95,8 +102,9 @@ mod tests {
 
     #[test]
     fn others_take_a_deleted_bots_name_once_its_history_expired() {
-        for claimant in [Some("luiz"), None] {
-            let free_at = |now| deleted_name_free("zoe", DELETED, claimant, now, TWO_WEEKS);
+        let luiz = name("luiz");
+        for claimant in [Some(&luiz), None] {
+            let free_at = |now| deleted_name_free(&name("zoe"), DELETED, claimant, now, TWO_WEEKS);
             assert!(!free_at(DELETED), "{claimant:?}");
             assert!(!free_at(DELETED + TWO_WEEKS - 1), "{claimant:?}");
             assert!(free_at(DELETED + TWO_WEEKS), "{claimant:?}");
@@ -107,9 +115,10 @@ mod tests {
     #[test]
     fn the_wait_follows_the_history_expiry() {
         let day = 24 * 60 * 60;
-        assert!(deleted_name_free("zoe", DELETED, None, DELETED + day, day));
+        let zoe = name("zoe");
+        assert!(deleted_name_free(&zoe, DELETED, None, DELETED + day, day));
         assert!(!deleted_name_free(
-            "zoe",
+            &zoe,
             DELETED,
             None,
             DELETED + day,

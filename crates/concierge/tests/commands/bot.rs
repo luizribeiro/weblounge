@@ -1,4 +1,7 @@
-use concierge::db::{self, Bot, NewBot};
+use concierge::{
+    db::{self, Bot, NewBot},
+    name::{BotName, MemberName},
+};
 use ergo_api::{Preference, fake::Failure};
 
 use crate::{Fixture, HISTORY_EXPIRY};
@@ -28,8 +31,8 @@ impl Fixture {
     /// Records a bot created on 2025-10-09, without touching Ergo.
     async fn insert_bot(&self, name: &str, owner: &str, note: Option<&str>) {
         let bot = NewBot {
-            account: name,
-            owner,
+            account: &BotName::new(name),
+            owner: &MemberName::new(owner),
             note,
             created_at: 1_760_000_000,
         };
@@ -48,7 +51,11 @@ impl Fixture {
     /// erased.
     async fn insert_bot_deleted_at(&self, name: &str, owner: &str, removed_at: i64) {
         self.insert_bot(name, owner, None).await;
-        let removed = self.db().await.remove_bot(name, removed_at).await;
+        let removed = self
+            .db()
+            .await
+            .remove_bot(&BotName::new(name), removed_at)
+            .await;
         assert!(removed.unwrap());
     }
 }
@@ -142,7 +149,8 @@ mod create {
                 .await
                 .unwrap();
         }
-        let bots = fixture.db().await.bots(Some("luiz")).await.unwrap();
+        let luiz = MemberName::new("luiz");
+        let bots = fixture.db().await.bots(Some(&luiz)).await.unwrap();
         assert_eq!(bots.len() as i64, beyond);
     }
 
@@ -656,7 +664,8 @@ mod apply_vhosts {
             .run(&["bot", "create", "luiz", "Hal"])
             .await
             .unwrap();
-        let deleted_before_erasing = fixture.db().await.remove_bot("hal", db::now()).await;
+        let hal = BotName::new("hal");
+        let deleted_before_erasing = fixture.db().await.remove_bot(&hal, db::now()).await;
         assert!(deleted_before_erasing.unwrap());
         fixture.ergo.client().set_vhost("hal", "").await.unwrap();
 

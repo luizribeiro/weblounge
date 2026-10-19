@@ -20,6 +20,7 @@ use crate::{
     auth::CurrentMember,
     bots::{self, NameClaim},
     invite_code,
+    name::MemberName,
     nick::Nick,
     password_rules,
     rate_limit::ClientAddress,
@@ -87,7 +88,7 @@ async fn availability(
     app: &App,
     address: ClientAddress,
     nick: &str,
-    claimant: Option<&str>,
+    claimant: Option<&MemberName>,
 ) -> Response {
     if !app.lookups.allows(address.0, Instant::now()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
@@ -132,7 +133,7 @@ pub async fn invite(
 
 /// Whether a member, removed or not, a bot or a deleted bot whose name
 /// isn't free to `claimant` yet, or an Ergo account holds the nick.
-async fn taken(app: &App, nick: &Nick, claimant: Option<&str>) -> anyhow::Result<bool> {
+async fn taken(app: &App, nick: &Nick, claimant: Option<&MemberName>) -> anyhow::Result<bool> {
     let claim = bots::name_claim(&app.db, nick.as_str(), claimant, app.history_expiry).await?;
     if claim == NameClaim::Held {
         return Ok(true);
