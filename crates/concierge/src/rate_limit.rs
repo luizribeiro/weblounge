@@ -16,6 +16,8 @@ use axum::{
 };
 use common::recent::{Quota, Recent};
 
+use crate::name::MemberName;
+
 /// How long a failed attempt counts against its account and address.
 pub const WINDOW: Duration = Duration::from_secs(15 * 60);
 /// Enough for a member fumbling their own password a few times.
@@ -187,12 +189,12 @@ pub enum Recipient {
 
 /// Links of one kind mailed lately, by member and overall.
 pub struct MailLimiter {
-    recent: Recent<Key>,
-    today: Recent<Key>,
+    recent: Recent<MemberName>,
+    today: Recent<MemberName>,
     overall: Quota,
     /// Whose link each message queued in the last day carries, and when it
     /// was queued, by message id.
-    links: Mutex<HashMap<i64, (Key, Instant)>>,
+    links: Mutex<HashMap<i64, (MemberName, Instant)>>,
 }
 
 impl Default for MailLimiter {
@@ -210,14 +212,13 @@ impl MailLimiter {
     /// Whether `account` may have a link mailed to `recipient` now.
     pub fn check(
         &self,
-        account: &str,
+        account: &MemberName,
         recipient: Recipient,
         now: Instant,
     ) -> Result<(), MailRefusal> {
-        let key = account_key(account);
-        if recipient == Recipient::SameAddress && !self.recent.under(&key, 1, now) {
+        if recipient == Recipient::SameAddress && !self.recent.under(account, 1, now) {
             Err(MailRefusal::TooSoon)
-        } else if !self.today.under(&key, LINKS_PER_DAY, now) {
+        } else if !self.today.under(account, LINKS_PER_DAY, now) {
             Err(MailRefusal::TooManyToday)
         } else if self.busy(now) {
             Err(MailRefusal::Busy)
@@ -234,14 +235,13 @@ impl MailLimiter {
     /// Counts the link to `account` just queued as message `id`. Only links
     /// that went out count, so a failure to queue one never makes the
     /// member wait.
-    pub fn record(&self, account: &str, id: i64, now: Instant) {
-        let key = account_key(account);
-        self.recent.record(key.clone(), now);
-        self.today.record(key.clone(), now);
+    pub fn record(&self, account: &MemberName, id: i64, now: Instant) {
+        self.recent.record(account.clone(), now);
+        self.today.record(account.clone(), now);
         self.overall.record(now);
         let mut links = self.links();
         links.retain(|_, (_, queued_at)| now.duration_since(*queued_at) < DAY);
-        links.insert(id, (key, now));
+        links.insert(id, (account.clone(), now));
     }
 
     /// Stops counting the links in messages `ids`, which the mailer deleted
@@ -249,15 +249,15 @@ impl MailLimiter {
     pub fn refund(&self, ids: &[i64]) {
         let mut links = self.links();
         for id in ids {
-            if let Some((key, queued_at)) = links.remove(id) {
-                self.recent.forget_one(&key, queued_at);
-                self.today.forget_one(&key, queued_at);
+            if let Some((account, queued_at)) = links.remove(id) {
+                self.recent.forget_one(&account, queued_at);
+                self.today.forget_one(&account, queued_at);
                 self.overall.forget_one(queued_at);
             }
         }
     }
 
-    fn links(&self) -> MutexGuard<'_, HashMap<i64, (Key, Instant)>> {
+    fn links(&self) -> MutexGuard<'_, HashMap<i64, (MemberName, Instant)>> {
         self.links
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -372,9 +372,9 @@ mod tests {
 
     /// Mails `account` a link if the limits allow, answering its message id.
     fn mail(links: &MailLimiter, account: &str, now: Instant) -> Result<i64, MailRefusal> {
-        links.check(account, Recipient::SameAddress, now)?;
+        links.check(&MemberName::new(account), Recipient::SameAddress, now)?;
         let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        links.record(account, id, now);
+        links.record(&MemberName::new(account), id, now);
         Ok(id)
     }
 
@@ -382,11 +382,14 @@ mod tests {
     fn checking_alone_counts_nothing() {
         let (links, now) = (MailLimiter::default(), Instant::now());
         for _ in 0..=LINKS_PER_DAY {
-            assert_eq!(links.check("alice", Recipient::SameAddress, now), Ok(()));
+            assert_eq!(
+                links.check(&MemberName::new("alice"), Recipient::SameAddress, now),
+                Ok(())
+            );
         }
         assert!(mail(&links, "alice", now).is_ok());
         assert_eq!(
-            links.check("alice", Recipient::SameAddress, now),
+            links.check(&MemberName::new("alice"), Recipient::SameAddress, now),
             Err(MailRefusal::TooSoon)
         );
     }
@@ -405,11 +408,14 @@ mod tests {
     fn a_new_address_needs_no_wait_but_counts_toward_the_day() {
         let (links, now) = (MailLimiter::default(), Instant::now());
         for id in 0..LINKS_PER_DAY as i64 {
-            assert_eq!(links.check("alice", Recipient::NewAddress, now), Ok(()));
-            links.record("alice", id, now);
+            assert_eq!(
+                links.check(&MemberName::new("alice"), Recipient::NewAddress, now),
+                Ok(())
+            );
+            links.record(&MemberName::new("alice"), id, now);
         }
         assert_eq!(
-            links.check("alice", Recipient::NewAddress, now),
+            links.check(&MemberName::new("alice"), Recipient::NewAddress, now),
             Err(MailRefusal::TooManyToday)
         );
     }
