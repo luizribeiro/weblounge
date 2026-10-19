@@ -33,6 +33,8 @@ struct Account<'a> {
     nick: &'a str,
     flash: Flash,
     link_error: Option<String>,
+    /// The email as stored: changing it needs the password.
+    saved_email: &'a str,
     settings: SettingsForm<'a>,
     /// Where confirming the stored email stands, until it's confirmed.
     unconfirmed: Option<Unconfirmed>,
@@ -234,8 +236,9 @@ const UNSENT: &str = "Couldn't send a link just now. Try again in a minute.";
 
 /// The Account tab of `member`, with `forms` filled in over what's stored.
 pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
-    let settings = forms.settings.unwrap_or_else(|| SettingsForm {
-        email: member.email.as_deref().unwrap_or(""),
+    let saved_email = member.email.as_deref().unwrap_or("");
+    let settings = forms.settings.unwrap_or(SettingsForm {
+        email: saved_email,
         news: member.news_opt_in,
         email_error: None,
         password_error: None,
@@ -256,6 +259,7 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         nick: &member.account,
         flash: forms.flash,
         link_error: forms.link_error,
+        saved_email,
         settings,
         unconfirmed: Unconfirmed::of(member, db::now()),
         password: forms.password,

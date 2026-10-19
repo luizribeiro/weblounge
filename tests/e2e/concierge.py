@@ -193,9 +193,9 @@ with subtest("a member turns always-on off on the Account tab, and Ergo has it")
     assert '<input name="auto_away" type="checkbox" checked>' in tab, tab
     assert "Both on by default." in tab, tab
 
-with subtest("in a browser, the Account tab's Save buttons turn on only for changes"):
+with subtest("in a browser, the Account tab's Save buttons and the email's password field follow changes"):
     result = client.succeed(f"account-browser dana {shlex.quote(password)} 2>&1")
-    assert "save buttons follow changes" in result, result
+    assert "save buttons and the email's password field follow changes" in result, result
 
 with subtest("the invite tree lists a new member under whoever invited them"):
     confirm_email("Dana")

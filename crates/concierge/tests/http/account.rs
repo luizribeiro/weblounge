@@ -591,7 +591,10 @@ async fn the_email_form_asks_for_the_password_to_change_the_address() {
     let page = body_text(site.get("/account", Some(&cookie)).await).await;
     let card = page.split(r#"id="email-and-news""#).nth(1).unwrap();
     assert!(
-        card.contains(r#"<label for="email-password">Current password</label>"#),
+        card.contains(
+            r#"<div class="field" data-needed-to-change="email" data-saved="someone@example.org">
+            <label for="email-password">Current password</label>"#
+        ),
         "{card}"
     );
     assert!(
