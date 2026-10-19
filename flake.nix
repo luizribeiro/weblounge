@@ -58,6 +58,7 @@
           bot-template-package = pkgs.callPackage ./templates/bot/package.nix { };
           # Building it runs dnscontrol check on the zone.
           dnsconfig = dnsconfig pkgs;
+          felt-seams = pkgs.weblounge.web.feltSeams;
         } // lib.mapAttrs' (name: lib.nameValuePair "concierge-${name}") pkgs.weblounge.concierge.checks))
         weblounge.testChecks
       ];

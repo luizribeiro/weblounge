@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, writeShellApplication, writeShellScript, gawk, diffutils, esbuild, python3, chromium, imagemagick }:
+{ lib, stdenvNoCC, runCommand, writeShellApplication, writeShellScript, gawk, diffutils, esbuild, python3, chromium, imagemagick }:
 
 let
   src = ../web;
@@ -80,6 +80,11 @@ stdenvNoCC.mkDerivation {
         python3 "$1/felt/seams.py" "$1"/images/felt-*
       '';
     };
+
+    feltSeams = runCommand "felt-seams" { nativeBuildInputs = [ python3 imagemagick ]; } ''
+      python3 ${src}/felt/seams.py ${src}/images/felt-*
+      touch $out
+    '';
 
     # Serves the working tree, not the store copy, so edits show up live.
     dev = writeShellApplication {
