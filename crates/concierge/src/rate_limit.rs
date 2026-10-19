@@ -115,6 +115,12 @@ pub const VERIFICATIONS_PER_ADDRESS: usize = 20;
 /// and keeps one address from trying a list of nicks and addresses.
 pub const RECOVERIES_PER_ADDRESS: usize = 20;
 
+/// Making, resetting or deleting a bot has Ergo hash a password or erase
+/// an account, and a made bot's name stays taken for good; this leaves
+/// room to set up a member's bots and fix a few names, and keeps one
+/// address from taking names by the hundred.
+pub const BOT_CHANGES_PER_ADDRESS: usize = 10;
+
 /// Requests in the last [`WINDOW`], by client address, up to a limit.
 pub struct AddressLimiter {
     requests: Recent<IpAddr>,

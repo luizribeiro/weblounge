@@ -203,7 +203,8 @@ fn ensure_live(bot: &Bot) -> anyhow::Result<()> {
 }
 
 /// Creates `name` as a bot of `owner` with `password`, answering its name,
-/// with the refusals put the way the commands print them.
+/// with the refusals put the way the commands print them. Admins aren't
+/// held to the members' cap.
 async fn register(
     admin: &Admin,
     owner: &Member,
@@ -213,7 +214,7 @@ async fn register(
 ) -> anyhow::Result<Nick> {
     match admin
         .bots()
-        .create(&owner.account, name, note, password)
+        .create(&owner.account, name, note, password, None)
         .await?
     {
         Ok(nick) => Ok(nick),
@@ -221,5 +222,6 @@ async fn register(
             Err(anyhow::Error::new(invalid).context(format!("{name} can't be a bot's name")))
         }
         Err(Refusal::Taken) => anyhow::bail!("{name} is taken"),
+        Err(Refusal::TooMany) => unreachable!("admins make as many bots as they like"),
     }
 }

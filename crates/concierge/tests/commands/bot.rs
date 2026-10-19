@@ -123,6 +123,21 @@ mod create {
     }
 
     #[tokio::test]
+    async fn makes_more_bots_than_members_may_make_themselves() {
+        let fixture = Fixture::with_owners().await;
+        let beyond = concierge::bot_rules::MAX_LIVE + 1;
+        for n in 0..beyond {
+            let name = format!("bot{n}");
+            fixture
+                .run(&["bot", "create", "luiz", &name])
+                .await
+                .unwrap();
+        }
+        let bots = fixture.db().await.bots(Some("luiz")).await.unwrap();
+        assert_eq!(bots.len() as i64, beyond);
+    }
+
+    #[tokio::test]
     async fn needs_a_current_member_as_owner() {
         let fixture = Fixture::with_owners().await;
         for (owner, message) in [

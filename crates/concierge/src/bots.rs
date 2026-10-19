@@ -22,17 +22,21 @@ pub enum Refusal {
     InvalidName(InvalidNick),
     /// A member or a bot holds the name, or once did.
     Taken,
+    /// The owner has as many live bots as they may.
+    TooMany,
 }
 
 impl Bots<'_> {
     /// Records `name` as a bot of `owner` and registers its Ergo account
     /// with `password`, answering its name, or why it can't be created.
+    /// With `max_live`, it's created only while `owner` has fewer live bots.
     pub async fn create(
         &self,
         owner: &str,
         name: &str,
         note: Option<&str>,
         password: &Passphrase,
+        max_live: Option<i64>,
     ) -> anyhow::Result<Result<Nick, Refusal>> {
         let nick = match Nick::parse(name) {
             Ok(nick) => nick,
@@ -43,14 +47,19 @@ impl Bots<'_> {
         }
         // Recorded first, so an account Ergo creates always has its row; the
         // row goes again if Ergo creates nothing.
-        self.db
-            .insert_bot(&NewBot {
-                account: nick.as_str(),
-                owner,
-                note,
-                created_at: db::now(),
-            })
-            .await?;
+        let bot = NewBot {
+            account: nick.as_str(),
+            owner,
+            note,
+            created_at: db::now(),
+        };
+        let inserted = match max_live {
+            Some(max_live) => self.db.insert_bot_within(&bot, max_live).await?,
+            None => self.db.insert_bot(&bot).await.map(|()| true)?,
+        };
+        if !inserted {
+            return Ok(Err(Refusal::TooMany));
+        }
         let registration = self.ergo.register(nick.clone(), password).await;
         if !matches!(registration, Ok(Registration::Created)) {
             self.db.forget_bot(nick.as_str()).await?;

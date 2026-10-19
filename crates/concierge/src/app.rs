@@ -39,6 +39,8 @@ pub struct App {
     pub background: Background,
     /// Asking for reset links and using them, by client address.
     pub recoveries: AddressLimiter,
+    /// Making, resetting and deleting bots, by client address.
+    pub bot_changes: AddressLimiter,
     /// Verification links mailed lately.
     pub mailed_links: MailLimiter,
     pub reset_links: MailLimiter,
@@ -119,7 +121,9 @@ pub fn router(app: App) -> Router {
         )
         .route(
             "/bots",
-            get(routes::bots::show).layer(map_response(routes::no_store)),
+            get(routes::bots::show)
+                .post(routes::bots::create)
+                .layer(map_response(routes::no_store)),
         )
         .route(
             "/signin",

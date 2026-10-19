@@ -1,15 +1,23 @@
 //! The Bots tab: the bots a member owns, and making, resetting and
-//! deleting them.
+//! deleting them. A bot's password is shown once, in the answer to making
+//! it, and nowhere else.
+
+use std::time::Instant;
 
 use askama::Template;
-use axum::{extract::State, http::StatusCode, response::Response};
+use axum::{Form, extract::State, http::StatusCode, response::Response};
+use ergo_api::Passphrase;
+use serde::Deserialize;
 
-use super::{Layout, Tab, internal_error, render_with, verify::Unconfirmed};
+use super::{ERGO_UNAVAILABLE, Layout, Tab, internal_error, render_with, verify::Unconfirmed};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
     bot_rules,
+    bots::{Bots, Refusal},
     db::{self, Bot, Member},
+    nick, password,
+    rate_limit::{ClientAddress, TRY_LATER},
 };
 
 #[derive(Template)]
@@ -23,14 +31,152 @@ struct BotsPage<'a> {
     /// Where confirming the member's email stands, until they do; making
     /// bots waits on it.
     unconfirmed: Option<Unconfirmed>,
+    forms: Forms<'a>,
+    name_max_length: usize,
+    name_pattern: String,
+    name_rule: &'a str,
+}
+
+/// What the last change left on the tab.
+#[derive(Default)]
+struct Forms<'a> {
+    /// The name typed into the form to make a bot.
+    name: &'a str,
+    name_error: Option<String>,
+    /// Why the last change didn't go through.
+    alert: Option<String>,
+    /// A password just set, the only time it's shown.
+    shown: Option<Shown>,
+}
+
+/// A bot's password, as it's set.
+struct Shown {
+    bot: String,
+    password: Passphrase,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub struct NewBot {
+    name: String,
 }
 
 pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
-    page(&app, &me.member, StatusCode::OK).await
+    page(&app, &me.member, StatusCode::OK, Forms::default()).await
 }
 
-/// The Bots tab of `member`.
-async fn page(app: &App, member: &Member, status: StatusCode) -> Response {
+pub async fn create(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    address: ClientAddress,
+    Form(form): Form<NewBot>,
+) -> Response {
+    let member = &me.member;
+    let refuse = |status, name_error, alert| {
+        let forms = Forms {
+            name: &form.name,
+            name_error,
+            alert,
+            shown: None,
+        };
+        page(&app, member, status, forms)
+    };
+    if !app.bot_changes.allows(address.0, Instant::now()) {
+        return refuse(StatusCode::TOO_MANY_REQUESTS, None, Some(TRY_LATER.into())).await;
+    }
+    let live = match app.db.bots(Some(&member.account)).await {
+        Ok(bots) => bots.len() as i64,
+        Err(error) => return internal_error("Listing a member's bots", error),
+    };
+    let verified = member.email_verified_at.is_some();
+    if let Err(refusal) = bot_rules::may_create(verified, live) {
+        return match refusal {
+            bot_rules::Refusal::Unverified => refuse(StatusCode::FORBIDDEN, None, None).await,
+            bot_rules::Refusal::TooMany => {
+                refuse(StatusCode::CONFLICT, None, Some(TOO_MANY.into())).await
+            }
+        };
+    }
+    let password = password::generate();
+    let created = bots(&app)
+        .create(
+            &member.account,
+            &form.name,
+            None,
+            &password,
+            Some(bot_rules::MAX_LIVE),
+        )
+        .await;
+    match created {
+        Ok(Ok(nick)) => {
+            let shown = Shown {
+                bot: nick.to_string(),
+                password,
+            };
+            show_password(&app, member, shown).await
+        }
+        Ok(Err(Refusal::InvalidName(invalid))) => {
+            refuse(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some(invalid.to_string()),
+                None,
+            )
+            .await
+        }
+        Ok(Err(Refusal::Taken)) => {
+            let taken = format!("{} is taken.", form.name);
+            refuse(StatusCode::UNPROCESSABLE_ENTITY, Some(taken), None).await
+        }
+        Ok(Err(Refusal::TooMany)) => {
+            refuse(StatusCode::CONFLICT, None, Some(TOO_MANY.into())).await
+        }
+        Err(error) => {
+            eprintln!("Making a bot failed: {error:#}");
+            let alert = match owned_bot(&app, member, &form.name).await {
+                Ok(Some(bot)) => half_made(&bot.account),
+                _ => ERGO_UNAVAILABLE.into(),
+            };
+            refuse(StatusCode::SERVICE_UNAVAILABLE, None, Some(alert)).await
+        }
+    }
+}
+
+/// What the tab says when a bot is refused for the member's having as many
+/// as they may.
+const TOO_MANY: &str = "That's as many bots as you can have. Delete one to make another.";
+
+/// What the tab says when Ergo made a bot but didn't finish setting it up.
+fn half_made(bot: &str) -> String {
+    format!(
+        "Made {bot}, but the chat server didn't finish setting it up. \
+         Make it a new password in a minute to try again."
+    )
+}
+
+fn bots(app: &App) -> Bots<'_> {
+    Bots {
+        db: &app.db,
+        ergo: &app.ergo,
+    }
+}
+
+/// `member`'s live bot named `name`, in any case.
+async fn owned_bot(app: &App, member: &Member, name: &str) -> sqlx::Result<Option<Bot>> {
+    let bot = app.db.bot(name).await?;
+    Ok(bot.filter(|bot| bot.removed_at.is_none() && bot.owner == member.account))
+}
+
+/// The tab with `shown`'s password in a dialog over it.
+async fn show_password(app: &App, member: &Member, shown: Shown) -> Response {
+    let forms = Forms {
+        shown: Some(shown),
+        ..Forms::default()
+    };
+    page(app, member, StatusCode::OK, forms).await
+}
+
+/// The Bots tab of `member`, with `forms` filled in.
+async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
     let bots = match app.db.bots(Some(&member.account)).await {
         Ok(bots) => bots,
         Err(error) => return internal_error("Listing a member's bots", error),
@@ -42,6 +188,10 @@ async fn page(app: &App, member: &Member, status: StatusCode) -> Response {
         remaining: bot_rules::remaining(verified, bots.len() as i64),
         bots,
         unconfirmed: Unconfirmed::of(member, db::now()),
+        forms,
+        name_max_length: nick::MAX_LENGTH,
+        name_pattern: nick::html_pattern(),
+        name_rule: nick::RULE,
     };
     render_with(status, &page)
 }

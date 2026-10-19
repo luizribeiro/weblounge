@@ -344,14 +344,14 @@
   & .invitees-title {
     margin-top: 1.75rem;
   }
+}
 
-  & dialog {
-    width: min(32rem, calc(100% - 2rem));
-    color: var(--fg);
+dialog.card {
+  width: min(32rem, calc(100% - 2rem));
+  color: var(--fg);
 
-    &::backdrop {
-      background: rgb(0 0 0 / 40%);
-    }
+  &::backdrop {
+    background: rgb(0 0 0 / 40%);
   }
 }
 
@@ -451,6 +451,26 @@
   margin: 1.25rem 0 0;
   font-size: 1.25rem;
   line-height: 1.35;
+}
+
+.bot-form {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+
+  & .button {
+    justify-self: start;
+  }
+}
+
+.bot-password-once {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+
+#bot-password > .button {
+  margin-top: 1rem;
 }
 
 .invite-link {

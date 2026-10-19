@@ -1,11 +1,8 @@
-import { field } from "./dom";
-
 const LOOKUP_DELAY_MS = 300;
 
-/** Says whether the nick is free as it's typed; the server decides at signup anyway. */
-function enhanceNickLookup(form: HTMLFormElement) {
-  const nick = field(form, "nick");
-  const status = form.querySelector<HTMLElement>("[data-nick-status]");
+/** Says whether a nick, a member's or a bot's, is free as it's typed; the server decides as the form is sent anyway. */
+function enhanceNickLookup(nick: HTMLInputElement) {
+  const status = nick.form?.querySelector<HTMLElement>("[data-nick-status]");
   const url = nick.dataset.availability;
   if (!status || !url) {
     return;
@@ -56,7 +53,8 @@ function enhanceNickLookup(form: HTMLFormElement) {
   });
 }
 
-const signup = document.querySelector<HTMLFormElement>("form[data-signup]");
-if (signup) {
-  enhanceNickLookup(signup);
+for (const nick of document.querySelectorAll<HTMLInputElement>(
+  "input[data-availability]",
+)) {
+  enhanceNickLookup(nick);
 }
