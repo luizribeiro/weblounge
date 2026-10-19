@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, writeShellApplication, writeShellScript, gawk, diffutils, esbuild }:
+{ lib, stdenvNoCC, writeShellApplication, writeShellScript, gawk, diffutils, esbuild, python3, chromium, imagemagick }:
 
 let
   src = ../web;
@@ -71,6 +71,16 @@ stdenvNoCC.mkDerivation {
   '';
 
   passthru = {
+    # Redraws web/images/felt-* from web/felt, given the path to web/.
+    bakeFelt = writeShellApplication {
+      name = "weblounge-bake-felt";
+      runtimeInputs = [ python3 chromium imagemagick ];
+      text = ''
+        python3 "$1/felt/bake.py"
+        python3 "$1/felt/seams.py" "$1"/images/felt-*
+      '';
+    };
+
     # Serves the working tree, not the store copy, so edits show up live.
     dev = writeShellApplication {
       name = "weblounge-web-dev";
