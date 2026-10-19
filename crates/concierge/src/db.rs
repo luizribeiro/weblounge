@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{fmt, path::Path};
 
 use anyhow::Context;
 use common::sqlite;
@@ -221,7 +221,8 @@ pub struct BotAccount {
 }
 
 /// A code just issued to verify a member's email, to mail to them once.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Its `Debug` output leaves the code out.
+#[derive(Clone, PartialEq, Eq)]
 pub struct IssuedCode {
     pub code: String,
     /// Ergo's canonical spelling of the member's account name.
@@ -236,6 +237,18 @@ pub struct IssuedCode {
 impl link_mail::Issued for IssuedCode {
     fn expires_at(&self) -> i64 {
         self.expires_at
+    }
+}
+
+impl fmt::Debug for IssuedCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IssuedCode")
+            .field("code", &format_args!("<redacted>"))
+            .field("account", &self.account)
+            .field("email", &self.email)
+            .field("expires_at", &self.expires_at)
+            .field("deadline", &self.deadline)
+            .finish()
     }
 }
 
@@ -2283,6 +2296,16 @@ pub(crate) mod tests {
             .await
             .unwrap()
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_issued_codes_debug_output_leaves_the_code_out() {
+        let (db, _dir) = with_unverified_members().await;
+        let issued = issue(&db, "alice", MAILED).await;
+        let debug = format!("{issued:?}");
+        assert!(!debug.contains(&issued.code), "{debug}");
+        assert!(debug.contains("alice@example.org"), "{debug}");
+        assert!(debug.contains("code: <redacted>"), "{debug}");
     }
 
     #[tokio::test]
