@@ -278,7 +278,7 @@ pub enum Verification {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recoverable {
     /// Ergo's canonical spelling of the member's account name.
-    pub account: String,
+    pub account: MemberName,
     pub email: String,
 }
 
@@ -301,7 +301,7 @@ impl link_mail::Issued for IssuedReset {
 pub struct TakenReset {
     code_hash: Vec<u8>,
     /// Ergo's canonical spelling of the member's account name.
-    pub account: String,
+    pub account: MemberName,
     /// The confirmed address it went to.
     pub email: String,
     created_at: i64,
@@ -564,7 +564,7 @@ impl Db {
             Lookup::Nick(nick) => {
                 sqlx::query_as!(
                     Recoverable,
-                    r#"SELECT account AS "account!", email AS "email!" FROM members
+                    r#"SELECT account AS "account!: MemberName", email AS "email!" FROM members
                        WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NOT NULL"#,
                     nick
                 )
@@ -574,7 +574,7 @@ impl Db {
             Lookup::Email(email) => {
                 sqlx::query_as!(
                     Recoverable,
-                    r#"SELECT account AS "account!", email AS "email!" FROM members
+                    r#"SELECT account AS "account!: MemberName", email AS "email!" FROM members
                        WHERE lower(email) = lower(?) AND removed_at IS NULL
                          AND email_verified_at IS NOT NULL"#,
                     email
@@ -591,13 +591,13 @@ impl Db {
     /// unless `account` is a current member with a confirmed email.
     pub async fn issue_reset_code(
         &self,
-        account: &str,
+        account: &MemberName,
         now: i64,
     ) -> sqlx::Result<Option<IssuedReset>> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let member = sqlx::query_as!(
             Recoverable,
-            r#"SELECT account AS "account!", email AS "email!" FROM members
+            r#"SELECT account AS "account!: MemberName", email AS "email!" FROM members
                WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NOT NULL"#,
             account
         )
@@ -642,8 +642,8 @@ impl Db {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let code_hash = link_code::hash(code);
         let taken = sqlx::query!(
-            "DELETE FROM password_reset_codes WHERE code_hash = ?
-             RETURNING account, email, created_at, expires_at",
+            r#"DELETE FROM password_reset_codes WHERE code_hash = ?
+               RETURNING account AS "account: MemberName", email, created_at, expires_at"#,
             code_hash,
         )
         .fetch_optional(&mut *transaction)
@@ -2472,13 +2472,14 @@ pub(crate) mod tests {
         /// carol, as `with_unverified_members` confirmed her email.
         fn carol() -> Recoverable {
             Recoverable {
-                account: "carol".into(),
+                account: MemberName::new("carol"),
                 email: "carol@example.org".into(),
             }
         }
 
         async fn issue(db: &Db, account: &str, now: i64) -> IssuedReset {
-            db.issue_reset_code(account, now).await.unwrap().unwrap()
+            let account = MemberName::new(account);
+            db.issue_reset_code(&account, now).await.unwrap().unwrap()
         }
 
         #[tokio::test]
@@ -2487,6 +2488,8 @@ pub(crate) mod tests {
             for input in ["carol", "CAROL", "carol@example.org", "Carol@EXAMPLE.org"] {
                 let lookup = Lookup::parse(input).unwrap();
                 let found = db.recoverable_member(&lookup).await.unwrap();
+                let spelled = found.as_ref().map(|found| found.account.as_str());
+                assert_eq!(spelled, Some("carol"), "{input}");
                 assert_eq!(found, Some(carol()), "{input}");
             }
         }
@@ -2519,7 +2522,8 @@ pub(crate) mod tests {
                 );
             }
             for account in ["alice", "dave", "nobody"] {
-                let issued = db.issue_reset_code(account, MAILED).await.unwrap();
+                let name = MemberName::new(account);
+                let issued = db.issue_reset_code(&name, MAILED).await.unwrap();
                 assert!(issued.is_none(), "{account}");
             }
         }

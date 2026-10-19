@@ -19,6 +19,7 @@ use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
     db, invite_rules, link_code,
+    name::MemberName,
     password_rules::{self, FieldErrors},
     rate_limit::{self, ClientAddress, MailRefusal, Recipient},
     reset_mail,
@@ -108,7 +109,7 @@ pub async fn ask(
 /// Mails `account` a reset link if their own limits allow. Whatever stops
 /// it is the member's business, not the visitor's, so it's only logged
 /// when it fails.
-async fn mail_link(app: &App, account: &str, now: Instant) {
+async fn mail_link(app: &App, account: &MemberName, now: Instant) {
     if app
         .reset_links
         .check(account, Recipient::SameAddress, now)
@@ -235,7 +236,7 @@ pub async fn reset(
         Ok(None) => return lapsed(&app),
         Err(error) => return internal_error("Taking a reset code", error),
     };
-    if let Err(error) = app.ergo.set_password(taken.account.as_str(), &new).await {
+    if let Err(error) = app.ergo.set_password(&taken.account, &new).await {
         eprintln!("Resetting a password failed: {error}");
         if let Err(error) = app.db.restore_reset_code(&taken).await {
             return internal_error("Putting a reset code back", error);
@@ -253,8 +254,9 @@ pub async fn reset(
     }
     notify(&app, &taken.account, &taken.email).await;
     let ended_here = visitor
-        .nick()
-        .is_some_and(|nick| nick.eq_ignore_ascii_case(&taken.account));
+        .0
+        .as_ref()
+        .is_some_and(|me| me.member.account == taken.account);
     if ended_here {
         let cookie = [(header::SET_COOKIE, session::removal_cookie())];
         (cookie, changed(&app)).into_response()
@@ -265,7 +267,7 @@ pub async fn reset(
 
 /// Tells `account`'s confirmed address their password changed, in mail
 /// that carries no secret, so it waits for the mailer as it is.
-async fn notify(app: &App, account: &str, email: &str) {
+async fn notify(app: &App, account: &MemberName, email: &str) {
     let queued = match reset_mail::changed_message(account, email, app.public_url.as_str()) {
         Ok(message) => app
             .outbox

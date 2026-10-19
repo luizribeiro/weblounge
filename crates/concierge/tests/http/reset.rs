@@ -1,6 +1,7 @@
 use axum::{http::header, response::Response};
 use concierge::{
     db,
+    name::MemberName,
     rate_limit::{LINKS_PER_HOUR, PER_ACCOUNT, RECOVERIES_PER_ADDRESS},
     reset_mail,
 };
@@ -295,7 +296,8 @@ const LAPSED: &str = "<h1>This link doesn&#39;t work any more.</h1>";
 impl Site {
     /// Issues `account` a reset code, as mailing them a link does.
     async fn reset_code_of(&self, account: &str) -> String {
-        let issued = self.db.issue_reset_code(account, db::now()).await;
+        let account = MemberName::new(account);
+        let issued = self.db.issue_reset_code(&account, db::now()).await;
         issued.unwrap().expect("a confirmed member").code
     }
 

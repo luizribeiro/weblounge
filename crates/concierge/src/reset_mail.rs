@@ -8,7 +8,9 @@ use outbox::{Message, Outbox, Subject};
 use crate::{
     db::{Db, IssuedReset},
     email::Email,
-    invite_rules, link_mail, reset_rules,
+    invite_rules, link_mail,
+    name::MemberName,
+    reset_rules,
 };
 
 pub const LINK_SUBJECT: &str = "Reset your password for weblounge.org";
@@ -50,7 +52,11 @@ pub fn link_message(issued: &IssuedReset, public_url: &str) -> anyhow::Result<Me
 
 /// The email that tells `account`, at `email`, that a link reset their
 /// password.
-pub fn changed_message(account: &str, email: &str, public_url: &str) -> anyhow::Result<Message> {
+pub fn changed_message(
+    account: &MemberName,
+    email: &str,
+    public_url: &str,
+) -> anyhow::Result<Message> {
     let body = ChangedBody {
         nick: account,
         forgot_link: format!("{public_url}{FORGOT_PATH}"),
@@ -58,9 +64,14 @@ pub fn changed_message(account: &str, email: &str, public_url: &str) -> anyhow::
     message(account, email, CHANGED_SUBJECT, body.render()?)
 }
 
-fn message(account: &str, email: &str, subject: &str, body: String) -> anyhow::Result<Message> {
+fn message(
+    account: &MemberName,
+    email: &str,
+    subject: &str,
+    body: String,
+) -> anyhow::Result<Message> {
     Ok(Message {
-        account: Some(account.to_owned()),
+        account: Some(account.to_string()),
         to: Email::parse(email)?,
         subject: Subject::parse(subject)?,
         body,
@@ -74,7 +85,7 @@ pub async fn send_link(
     db: &Db,
     outbox: &Outbox,
     public_url: &str,
-    account: &str,
+    account: &MemberName,
     now: i64,
 ) -> anyhow::Result<Option<i64>> {
     let issue = db.issue_reset_code(account, now);
@@ -96,7 +107,7 @@ mod tests {
         IssuedReset {
             code: "q".repeat(link_code::MAILED_LENGTH),
             member: db::Recoverable {
-                account: account.into(),
+                account: MemberName::new(account),
                 email: "bob@example.org".into(),
             },
             expires_at: reset_rules::expires_at(SENT),
@@ -134,7 +145,8 @@ mod tests {
 
     #[test]
     fn the_notice_says_what_changed_and_where_to_go_if_it_wasnt_them() {
-        let message = changed_message("Bob", "bob@example.org", PUBLIC_URL).unwrap();
+        let bob = MemberName::new("Bob");
+        let message = changed_message(&bob, "bob@example.org", PUBLIC_URL).unwrap();
         assert_eq!(message.subject.as_str(), CHANGED_SUBJECT);
         assert_eq!(message.to.as_str(), "bob@example.org");
         let body = message.body;
@@ -154,7 +166,7 @@ mod tests {
         let longest = "B".repeat(nick::MAX_LENGTH);
         for message in [
             link_message(&issued(&longest), PUBLIC_URL).unwrap(),
-            changed_message(&longest, "bob@example.org", PUBLIC_URL).unwrap(),
+            changed_message(&MemberName::new(&longest), "bob@example.org", PUBLIC_URL).unwrap(),
         ] {
             let body = message.body;
             assert!(body.is_ascii(), "{body}");
@@ -183,7 +195,8 @@ mod tests {
     async fn sending_queues_the_link_sealed_until_it_stops_working() {
         let (db, outbox, key, _dirs) = with_carol().await;
 
-        let sent = send_link(&db, &outbox, PUBLIC_URL, "Carol", SENT).await;
+        let carol = MemberName::new("Carol");
+        let sent = send_link(&db, &outbox, PUBLIC_URL, &carol, SENT).await;
 
         let due = outbox.due(SENT).await.unwrap();
         assert_eq!(sent.unwrap(), Some(due[0].id));
@@ -204,13 +217,14 @@ mod tests {
         let lapses = reset_rules::expires_at(SENT);
         assert!(outbox.due(lapses).await.unwrap().is_empty());
         let taken = db.take_reset_code(code, lapses - 1).await.unwrap();
-        assert_eq!(taken.unwrap().account, "carol");
+        assert_eq!(taken.unwrap().account.as_str(), "carol");
     }
 
     #[tokio::test]
     async fn an_unconfirmed_member_gets_nothing() {
         let (db, outbox, _key, _dirs) = with_carol().await;
-        let sent = send_link(&db, &outbox, PUBLIC_URL, "dave", SENT).await;
+        let dave = MemberName::new("dave");
+        let sent = send_link(&db, &outbox, PUBLIC_URL, &dave, SENT).await;
         assert_eq!(sent.unwrap(), None);
         assert!(outbox.due(SENT).await.unwrap().is_empty());
     }
@@ -218,10 +232,11 @@ mod tests {
     #[tokio::test]
     async fn without_the_mailers_key_no_code_is_issued_and_the_last_keeps_working() {
         let (db, outbox, _key, _dirs) = with_carol().await;
-        let last = db.issue_reset_code("carol", SENT).await.unwrap().unwrap();
+        let carol = MemberName::new("carol");
+        let last = db.issue_reset_code(&carol, SENT).await.unwrap().unwrap();
         outbox.withdraw_key().await.unwrap();
 
-        let error = send_link(&db, &outbox, PUBLIC_URL, "carol", SENT)
+        let error = send_link(&db, &outbox, PUBLIC_URL, &carol, SENT)
             .await
             .unwrap_err();
 
