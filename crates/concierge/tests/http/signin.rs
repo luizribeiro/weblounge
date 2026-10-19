@@ -3,6 +3,7 @@ use concierge::{
     db::{self, NewSession},
     name::MemberName,
     nick,
+    secret_hash::SessionHash,
     session::{self, LIFETIME},
 };
 use ergo_api::fake::Failure;
@@ -204,7 +205,7 @@ async fn an_expired_session_signs_nobody_in_and_is_cleaned_up_later() {
     site.db.renew_session(&hash, db::now() - 1).await.unwrap();
     site.db
         .insert_session(&NewSession {
-            token_hash: b"bob's old laptop",
+            token_hash: &SessionHash::from_bytes(b"bob's old laptop".to_vec()),
             account: &MemberName::new("bob"),
             created_at: 0,
             expires_at: 1,

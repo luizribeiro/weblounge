@@ -255,6 +255,7 @@ fn basic_credentials(authorization: &str) -> Option<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secret_hash::SessionHash;
 
     /// RFC 7636, appendix B.
     const VERIFIER: &str = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
@@ -461,7 +462,7 @@ mod tests {
 
     fn issued_code() -> AuthorizationCode {
         AuthorizationCode {
-            session_hash: vec![0xa1],
+            session_hash: SessionHash::from_bytes(vec![0xa1]),
             client_id: "gamja".into(),
             redirect_uri: "https://irc.weblounge.org/".into(),
             code_challenge: challenge(),

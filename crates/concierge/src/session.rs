@@ -9,6 +9,8 @@ use common::random;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
+use crate::secret_hash::{Keyed, SecretHash};
+
 /// `__Host-` makes browsers insist on Secure, Path=/ and no Domain, so no
 /// other subdomain can plant or read it. Browsers treat http://localhost as
 /// secure, so the dev loop gets the same cookie as production.
@@ -88,16 +90,19 @@ impl Hasher {
         Self(Hmac::new_from_slice(key).expect("HMAC takes keys of any length"))
     }
 
-    pub fn hash(&self, token: &Token) -> Vec<u8> {
+    /// What the database keeps of `token`, used as a secret of the kind
+    /// `K`.
+    pub fn hash<K: Keyed>(&self, token: &Token) -> SecretHash<K> {
         let mut mac = self.0.clone();
         mac.update(token.0.as_bytes());
-        mac.finalize().into_bytes().to_vec()
+        SecretHash::from_bytes(mac.finalize().into_bytes().to_vec())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secret_hash::Session;
 
     const NOW: i64 = 1_760_000_000;
 
@@ -179,11 +184,15 @@ mod tests {
     #[test]
     fn hashes_depend_on_the_token_and_the_key() {
         let (token, other) = (Token::generate(), Token::generate());
+        let hash = |hasher: &Hasher, token| hasher.hash::<Session>(token);
         let hasher = Hasher::new(b"key one");
-        assert_eq!(hasher.hash(&token), hasher.hash(&token));
-        assert_eq!(hasher.hash(&token).len(), 32);
-        assert_ne!(hasher.hash(&token), hasher.hash(&other));
-        assert_ne!(hasher.hash(&token), Hasher::new(b"key two").hash(&token));
+        assert_eq!(hash(&hasher, &token), hash(&hasher, &token));
+        assert_eq!(hash(&hasher, &token).as_bytes().len(), 32);
+        assert_ne!(hash(&hasher, &token), hash(&hasher, &other));
+        assert_ne!(
+            hash(&hasher, &token),
+            hash(&Hasher::new(b"key two"), &token)
+        );
     }
 
     #[test]

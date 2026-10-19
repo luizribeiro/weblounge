@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "DELETE FROM oauth_codes WHERE code_hash = ?\n             RETURNING session_hash, client_id, redirect_uri, code_challenge, expires_at",
+  "query": "DELETE FROM oauth_codes WHERE code_hash = ?\n               RETURNING session_hash AS \"session_hash: SessionHash\", client_id, redirect_uri,\n                         code_challenge, expires_at",
   "describe": {
     "columns": [
       {
-        "name": "session_hash",
+        "name": "session_hash: SessionHash",
         "ordinal": 0,
         "type_info": "Blob"
       },
@@ -40,5 +40,5 @@
       false
     ]
   },
-  "hash": "0bf917248d9170849baec15dcc41768d272862341b43cdb568d3b07f6925e8b2"
+  "hash": "5063f612d7bb05e1d9649ad8f3cc56d569a076ff907a626d5024a6a08f140ed0"
 }

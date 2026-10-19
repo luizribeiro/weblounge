@@ -43,6 +43,7 @@ use concierge::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
         OAUTH_REQUESTS_PER_ADDRESS, RECOVERIES_PER_ADDRESS, VERIFICATIONS_PER_ADDRESS,
     },
+    secret_hash::SessionHash,
     session::{self, Token},
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
@@ -283,7 +284,7 @@ impl Site {
         session_cookie(&response).expect("signing in sets the session cookie")
     }
 
-    async fn session_hash(&self, cookie: &str) -> Vec<u8> {
+    async fn session_hash(&self, cookie: &str) -> SessionHash {
         let mut headers = HeaderMap::new();
         headers.insert(header::COOKIE, cookie.parse().unwrap());
         let token = Token::from_cookies(&headers).unwrap();

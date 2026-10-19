@@ -18,6 +18,7 @@ use concierge::{
     db::{self, Db, NewMember, NewSession},
     name::MemberName,
     origin::Origin,
+    secret_hash::SessionHash,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
 use outbox::{Outbox, QueuedMessage, testing::TestKey};
@@ -133,7 +134,7 @@ impl Fixture {
 
     async fn sign_in(&self, account: &str, token_hash: &[u8]) {
         let session = NewSession {
-            token_hash,
+            token_hash: &SessionHash::from_bytes(token_hash),
             account: &MemberName::new(account),
             created_at: 1_760_000_000,
             expires_at: 1_762_592_000,

@@ -9,6 +9,7 @@ use crate::{
     name::{BotName, MemberName},
     oauth::CodeChallenge,
     reset_rules::{self, Lookup},
+    secret_hash::{AccessTokenHash, AuthorizationCodeHash, SessionHash},
     tree::Branch,
     verification_rules,
 };
@@ -53,16 +54,16 @@ pub struct MemberAccount {
 }
 
 pub struct NewSession<'a> {
-    pub token_hash: &'a [u8],
+    pub token_hash: &'a SessionHash,
     pub account: &'a MemberName,
     pub created_at: i64,
     pub expires_at: i64,
 }
 
 pub struct NewAuthorizationCode<'a> {
-    pub code_hash: &'a [u8],
+    pub code_hash: &'a AuthorizationCodeHash,
     /// The session that approved it, whose member it signs in.
-    pub session_hash: &'a [u8],
+    pub session_hash: &'a SessionHash,
     pub client_id: &'a str,
     pub redirect_uri: &'a str,
     pub code_challenge: &'a CodeChallenge,
@@ -72,7 +73,7 @@ pub struct NewAuthorizationCode<'a> {
 /// An authorization code, taken out of the database by its one use.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthorizationCode {
-    pub session_hash: Vec<u8>,
+    pub session_hash: SessionHash,
     pub client_id: String,
     pub redirect_uri: String,
     pub code_challenge: CodeChallenge,
@@ -80,8 +81,8 @@ pub struct AuthorizationCode {
 }
 
 pub struct NewAccessToken<'a> {
-    pub token_hash: &'a [u8],
-    pub session_hash: &'a [u8],
+    pub token_hash: &'a AccessTokenHash,
+    pub session_hash: &'a SessionHash,
     pub client_id: &'a str,
     pub created_at: i64,
     pub expires_at: i64,
@@ -718,7 +719,11 @@ impl Db {
     }
 
     /// The live session whose token hashes to `token_hash`, if any.
-    pub async fn session(&self, token_hash: &[u8], now: i64) -> sqlx::Result<Option<Session>> {
+    pub async fn session(
+        &self,
+        token_hash: &SessionHash,
+        now: i64,
+    ) -> sqlx::Result<Option<Session>> {
         let row = sqlx::query!(
             "SELECT account, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?",
             token_hash,
@@ -738,7 +743,11 @@ impl Db {
             }))
     }
 
-    pub async fn renew_session(&self, token_hash: &[u8], expires_at: i64) -> sqlx::Result<()> {
+    pub async fn renew_session(
+        &self,
+        token_hash: &SessionHash,
+        expires_at: i64,
+    ) -> sqlx::Result<()> {
         sqlx::query!(
             "UPDATE sessions SET expires_at = ? WHERE token_hash = ?",
             expires_at,
@@ -749,7 +758,7 @@ impl Db {
         .map(drop)
     }
 
-    pub async fn end_session(&self, token_hash: &[u8]) -> sqlx::Result<()> {
+    pub async fn end_session(&self, token_hash: &SessionHash) -> sqlx::Result<()> {
         sqlx::query!("DELETE FROM sessions WHERE token_hash = ?", token_hash)
             .execute(&self.pool)
             .await
@@ -772,7 +781,11 @@ impl Db {
     /// Ends every session of `account` but the one whose token hashes to
     /// `kept`, answering how many it ended. Their OAuth codes and tokens go
     /// with them.
-    pub async fn end_other_sessions(&self, account: &MemberName, kept: &[u8]) -> sqlx::Result<u64> {
+    pub async fn end_other_sessions(
+        &self,
+        account: &MemberName,
+        kept: &SessionHash,
+    ) -> sqlx::Result<u64> {
         let deleted = sqlx::query!(
             "DELETE FROM sessions WHERE account = ? AND token_hash != ?",
             account,
@@ -1004,11 +1017,12 @@ impl Db {
     /// stored challenge isn't one is gone all the same, and redeems nothing.
     pub async fn take_authorization_code(
         &self,
-        code_hash: &[u8],
+        code_hash: &AuthorizationCodeHash,
     ) -> sqlx::Result<Option<AuthorizationCode>> {
         let row = sqlx::query!(
-            "DELETE FROM oauth_codes WHERE code_hash = ?
-             RETURNING session_hash, client_id, redirect_uri, code_challenge, expires_at",
+            r#"DELETE FROM oauth_codes WHERE code_hash = ?
+               RETURNING session_hash AS "session_hash: SessionHash", client_id, redirect_uri,
+                         code_challenge, expires_at"#,
             code_hash
         )
         .fetch_optional(&self.pool)
@@ -1050,7 +1064,7 @@ impl Db {
     /// and its member hasn't been removed.
     pub async fn access_token(
         &self,
-        token_hash: &[u8],
+        token_hash: &AccessTokenHash,
         now: i64,
     ) -> sqlx::Result<Option<AccessToken>> {
         sqlx::query_as!(
@@ -1375,6 +1389,7 @@ async fn delete_sessions(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::secret_hash::SecretHash;
     use common::sqlite::testing::files_contain;
     use sqlx::sqlite::SqliteConnectOptions;
     use std::sync::LazyLock;
@@ -1513,7 +1528,7 @@ pub(crate) mod tests {
         let db = Db::migrate(path).await.unwrap();
 
         assert_eq!(
-            db.session(b"\x00", 10)
+            db.session(&hash(b"\x00"), 10)
                 .await
                 .unwrap()
                 .unwrap()
@@ -1522,7 +1537,7 @@ pub(crate) mod tests {
                 .as_str(),
             "alice"
         );
-        assert!(db.access_token(b"\x01", 10).await.unwrap().is_some());
+        assert!(db.access_token(&hash(b"\x01"), 10).await.unwrap().is_some());
 
         let alice = db.member("ALICE").await.unwrap().unwrap();
         assert_eq!(alice.email.as_deref(), Some("alice@example.org"));
@@ -2128,25 +2143,33 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_session_signs_its_member_in_until_it_expires() {
         let (db, _dir) = with_sessions().await;
-        let session = db.session(b"\xa1", 99).await.unwrap().unwrap();
+        let session = db.session(&hash(b"\xa1"), 99).await.unwrap().unwrap();
         assert_eq!(
             (session.member.account.as_str(), session.expires_at),
             ("alice", 100)
         );
-        assert_eq!(db.session(b"\xa1", 100).await.unwrap(), None);
-        assert_eq!(db.session(b"\xff", 0).await.unwrap(), None);
+        assert_eq!(db.session(&hash(b"\xa1"), 100).await.unwrap(), None);
+        assert_eq!(db.session(&hash(b"\xff"), 0).await.unwrap(), None);
     }
 
     #[tokio::test]
     async fn renewing_pushes_the_expiry_back() {
         let (db, _dir) = with_sessions().await;
-        db.renew_session(b"\xa1", 500).await.unwrap();
+        db.renew_session(&hash(b"\xa1"), 500).await.unwrap();
         assert_eq!(
-            db.session(b"\xa1", 300).await.unwrap().unwrap().expires_at,
+            db.session(&hash(b"\xa1"), 300)
+                .await
+                .unwrap()
+                .unwrap()
+                .expires_at,
             500
         );
         assert_eq!(
-            db.session(b"\xb1", 0).await.unwrap().unwrap().expires_at,
+            db.session(&hash(b"\xb1"), 0)
+                .await
+                .unwrap()
+                .unwrap()
+                .expires_at,
             100
         );
     }
@@ -2154,9 +2177,9 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn ending_a_session_leaves_the_members_others() {
         let (db, _dir) = with_sessions().await;
-        db.end_session(b"\xa1").await.unwrap();
-        assert_eq!(db.session(b"\xa1", 0).await.unwrap(), None);
-        assert!(db.session(b"\xa2", 0).await.unwrap().is_some());
+        db.end_session(&hash(b"\xa1")).await.unwrap();
+        assert_eq!(db.session(&hash(b"\xa1"), 0).await.unwrap(), None);
+        assert!(db.session(&hash(b"\xa2"), 0).await.unwrap().is_some());
     }
 
     #[tokio::test]
@@ -2170,23 +2193,23 @@ pub(crate) mod tests {
         .await
         .unwrap();
         assert_eq!(
-            db.end_other_sessions(&MemberName::new("alice"), b"\xa2")
+            db.end_other_sessions(&MemberName::new("alice"), &hash(b"\xa2"))
                 .await
                 .unwrap(),
             1
         );
-        assert_eq!(db.session(b"\xa1", 0).await.unwrap(), None);
-        assert!(db.session(b"\xa2", 0).await.unwrap().is_some());
-        assert!(db.session(b"\xb1", 0).await.unwrap().is_some());
-        assert_eq!(db.access_token(b"\xf1", 0).await.unwrap(), None);
-        assert!(db.access_token(b"\xf2", 0).await.unwrap().is_some());
+        assert_eq!(db.session(&hash(b"\xa1"), 0).await.unwrap(), None);
+        assert!(db.session(&hash(b"\xa2"), 0).await.unwrap().is_some());
+        assert!(db.session(&hash(b"\xb1"), 0).await.unwrap().is_some());
+        assert_eq!(db.access_token(&hash(b"\xf1"), 0).await.unwrap(), None);
+        assert!(db.access_token(&hash(b"\xf2"), 0).await.unwrap().is_some());
     }
 
     #[tokio::test]
     async fn expired_sessions_are_cleaned_up() {
         let (db, _dir) = with_sessions().await;
         assert_eq!(db.end_expired_sessions(150).await.unwrap(), 2);
-        assert!(db.session(b"\xa2", 150).await.unwrap().is_some());
+        assert!(db.session(&hash(b"\xa2"), 150).await.unwrap().is_some());
         assert_eq!(db.end_sessions(&MemberName::new("bob")).await.unwrap(), 0);
     }
 
@@ -2740,9 +2763,13 @@ pub(crate) mod tests {
         CodeChallenge::parse("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM").unwrap()
     });
 
+    fn hash<K>(bytes: &[u8]) -> SecretHash<K> {
+        SecretHash::from_bytes(bytes)
+    }
+
     fn code<'a>(
-        session_hash: &'a [u8],
-        code_hash: &'a [u8],
+        session_hash: &'a SessionHash,
+        code_hash: &'a AuthorizationCodeHash,
         expires_at: i64,
     ) -> NewAuthorizationCode<'a> {
         NewAuthorizationCode {
@@ -2756,8 +2783,8 @@ pub(crate) mod tests {
     }
 
     fn token<'a>(
-        session_hash: &'a [u8],
-        token_hash: &'a [u8],
+        session_hash: &'a SessionHash,
+        token_hash: &'a AccessTokenHash,
         expires_at: i64,
     ) -> NewAccessToken<'a> {
         NewAccessToken {
@@ -2772,35 +2799,48 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn an_authorization_code_can_be_taken_once() {
         let (db, _dir) = with_sessions().await;
-        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+        db.insert_authorization_code(&code(&hash(b"\xa1"), &hash(b"\xc1"), 60), 0)
             .await
             .unwrap();
-        let taken = db.take_authorization_code(b"\xc1").await.unwrap().unwrap();
+        let taken = db
+            .take_authorization_code(&hash(b"\xc1"))
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(
             taken,
             AuthorizationCode {
-                session_hash: b"\xa1".to_vec(),
+                session_hash: hash(b"\xa1"),
                 client_id: "gamja".into(),
                 redirect_uri: "https://irc.weblounge.org/".into(),
                 code_challenge: CHALLENGE.clone(),
                 expires_at: 60,
             }
         );
-        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
-        assert_eq!(db.take_authorization_code(b"\xff").await.unwrap(), None);
+        assert_eq!(
+            db.take_authorization_code(&hash(b"\xc1")).await.unwrap(),
+            None
+        );
+        assert_eq!(
+            db.take_authorization_code(&hash(b"\xff")).await.unwrap(),
+            None
+        );
     }
 
     #[tokio::test]
     async fn a_code_with_a_malformed_challenge_is_taken_but_not_handed_back() {
         let (db, _dir) = with_sessions().await;
-        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+        db.insert_authorization_code(&code(&hash(b"\xa1"), &hash(b"\xc1"), 60), 0)
             .await
             .unwrap();
         sqlx::query("UPDATE oauth_codes SET code_challenge = 'plain'")
             .execute(&db.pool)
             .await
             .unwrap();
-        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
+        assert_eq!(
+            db.take_authorization_code(&hash(b"\xc1")).await.unwrap(),
+            None
+        );
         let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM oauth_codes")
             .fetch_one(&db.pool)
             .await
@@ -2811,23 +2851,31 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn expired_codes_are_cleaned_up_when_another_is_issued() {
         let (db, _dir) = with_sessions().await;
-        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+        db.insert_authorization_code(&code(&hash(b"\xa1"), &hash(b"\xc1"), 60), 0)
             .await
             .unwrap();
-        db.insert_authorization_code(&code(b"\xa1", b"\xc2", 120), 60)
+        db.insert_authorization_code(&code(&hash(b"\xa1"), &hash(b"\xc2"), 120), 60)
             .await
             .unwrap();
-        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
-        assert!(db.take_authorization_code(b"\xc2").await.unwrap().is_some());
+        assert_eq!(
+            db.take_authorization_code(&hash(b"\xc1")).await.unwrap(),
+            None
+        );
+        assert!(
+            db.take_authorization_code(&hash(b"\xc2"))
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
     async fn an_access_token_names_its_member_until_it_expires() {
         let (db, _dir) = with_sessions().await;
-        db.insert_access_token(&token(b"\xa2", b"\xd1", 150))
+        db.insert_access_token(&token(&hash(b"\xa2"), &hash(b"\xd1"), 150))
             .await
             .unwrap();
-        let live = db.access_token(b"\xd1", 149).await.unwrap();
+        let live = db.access_token(&hash(b"\xd1"), 149).await.unwrap();
         assert_eq!(
             live,
             Some(AccessToken {
@@ -2836,39 +2884,42 @@ pub(crate) mod tests {
                 expires_at: 150,
             })
         );
-        assert_eq!(db.access_token(b"\xd1", 150).await.unwrap(), None);
-        assert_eq!(db.access_token(b"\xff", 0).await.unwrap(), None);
+        assert_eq!(db.access_token(&hash(b"\xd1"), 150).await.unwrap(), None);
+        assert_eq!(db.access_token(&hash(b"\xff"), 0).await.unwrap(), None);
     }
 
     #[tokio::test]
     async fn codes_and_tokens_end_with_their_session() {
         let (db, _dir) = with_sessions().await;
-        db.insert_authorization_code(&code(b"\xa1", b"\xc1", 60), 0)
+        db.insert_authorization_code(&code(&hash(b"\xa1"), &hash(b"\xc1"), 60), 0)
             .await
             .unwrap();
-        db.insert_access_token(&token(b"\xa1", b"\xd1", 300))
+        db.insert_access_token(&token(&hash(b"\xa1"), &hash(b"\xd1"), 300))
             .await
             .unwrap();
-        db.insert_access_token(&token(b"\xa2", b"\xd2", 300))
+        db.insert_access_token(&token(&hash(b"\xa2"), &hash(b"\xd2"), 300))
             .await
             .unwrap();
         assert_eq!(
-            db.access_token(b"\xd1", 100).await.unwrap(),
+            db.access_token(&hash(b"\xd1"), 100).await.unwrap(),
             None,
             "a1 expired"
         );
-        db.end_session(b"\xa1").await.unwrap();
-        assert_eq!(db.take_authorization_code(b"\xc1").await.unwrap(), None);
-        assert!(db.access_token(b"\xd2", 0).await.unwrap().is_some());
+        db.end_session(&hash(b"\xa1")).await.unwrap();
+        assert_eq!(
+            db.take_authorization_code(&hash(b"\xc1")).await.unwrap(),
+            None
+        );
+        assert!(db.access_token(&hash(b"\xd2"), 0).await.unwrap().is_some());
         db.end_sessions(&MemberName::new("alice")).await.unwrap();
-        assert_eq!(db.access_token(b"\xd2", 0).await.unwrap(), None);
+        assert_eq!(db.access_token(&hash(b"\xd2"), 0).await.unwrap(), None);
     }
 
     #[tokio::test]
     async fn a_token_needs_an_existing_session() {
         let (db, _dir) = with_sessions().await;
         assert!(
-            db.insert_access_token(&token(b"\xee", b"\xd1", 300))
+            db.insert_access_token(&token(&hash(b"\xee"), &hash(b"\xd1"), 300))
                 .await
                 .is_err()
         );
@@ -2877,7 +2928,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_removed_members_tokens_name_nobody() {
         let (db, _dir) = with_sessions().await;
-        db.insert_access_token(&token(b"\xa2", b"\xd1", 300))
+        db.insert_access_token(&token(&hash(b"\xa2"), &hash(b"\xd1"), 300))
             .await
             .unwrap();
         execute(
@@ -2886,7 +2937,7 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(db.access_token(b"\xd1", 0).await.unwrap(), None);
+        assert_eq!(db.access_token(&hash(b"\xd1"), 0).await.unwrap(), None);
     }
 
     /// luiz runs bender and dalek, alice runs Marvin; dalek was deleted.
@@ -3174,6 +3225,6 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(db.session(b"\xa2", 0).await.unwrap(), None);
+        assert_eq!(db.session(&hash(b"\xa2"), 0).await.unwrap(), None);
     }
 }

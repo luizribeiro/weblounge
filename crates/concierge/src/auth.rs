@@ -15,6 +15,7 @@ use crate::{
     db::{self, Member, NewSession},
     name::MemberName,
     routes::internal_error,
+    secret_hash::SessionHash,
     session::{self, Token},
 };
 
@@ -24,7 +25,7 @@ const MAX_NEXT_LENGTH: usize = 512;
 
 pub struct SignedIn {
     pub member: Member,
-    pub token_hash: Vec<u8>,
+    pub token_hash: SessionHash,
 }
 
 /// The visitor's session, if they're signed in.
