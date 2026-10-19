@@ -6,8 +6,6 @@ use std::marker::PhantomData;
 
 use sha2::{Digest, Sha256};
 
-use crate::sqlite_newtype::sqlite_newtype;
-
 /// The hash of a secret of the kind `K`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecretHash<K> {
@@ -83,7 +81,7 @@ impl<K: LinkCode> SecretHash<K> {
     }
 }
 
-sqlite_newtype!(SecretHash, bytes: Vec<u8>, SecretHash::from_bytes);
+common::sqlite_newtype!(SecretHash<K>, bytes: Vec<u8>, SecretHash::from_bytes);
 
 #[cfg(test)]
 mod tests {

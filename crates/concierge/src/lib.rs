@@ -29,7 +29,6 @@ pub mod reset_rules;
 mod routes;
 pub mod secret_hash;
 pub mod session;
-mod sqlite_newtype;
 pub mod status;
 pub mod tree;
 pub mod verification_mail;

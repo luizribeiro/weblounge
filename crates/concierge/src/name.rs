@@ -13,7 +13,7 @@ use std::{
 
 use ergo_api::AccountName;
 
-use crate::{nick::Nick, sqlite_newtype::sqlite_newtype};
+use crate::nick::Nick;
 
 /// The name of an account of the kind `K`, in the spelling it was
 /// registered under. Names compare and hash in any ASCII case, as Ergo
@@ -88,7 +88,7 @@ impl<K> From<Name<K>> for AccountName {
     }
 }
 
-sqlite_newtype!(Name, name: String, Name::new);
+common::sqlite_newtype!(Name<K>, name: String, Name::new);
 
 #[cfg(test)]
 mod tests {

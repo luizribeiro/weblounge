@@ -13,6 +13,62 @@ use sqlx::{
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
+#[doc(hidden)]
+pub use sqlx;
+
+/// Stores the newtype `$type`, generic over one kind or not, in SQLite as
+/// its field `$field` of type `$inner`: sqlx binds it as one, and given
+/// `$new`, which makes a `$type` of an `$inner`, reads it back as one too.
+#[macro_export]
+macro_rules! sqlite_newtype {
+    ($type:ident $(<$kind:ident>)?, $field:tt: $inner:ty) => {
+        impl $(<$kind>)? $crate::sqlite::sqlx::Type<$crate::sqlite::sqlx::Sqlite>
+            for $type $(<$kind>)?
+        {
+            fn type_info() -> $crate::sqlite::sqlx::sqlite::SqliteTypeInfo {
+                <$inner as $crate::sqlite::sqlx::Type<$crate::sqlite::sqlx::Sqlite>>::type_info()
+            }
+
+            fn compatible(ty: &$crate::sqlite::sqlx::sqlite::SqliteTypeInfo) -> bool {
+                <$inner as $crate::sqlite::sqlx::Type<$crate::sqlite::sqlx::Sqlite>>::compatible(
+                    ty,
+                )
+            }
+        }
+
+        impl<'q $(, $kind)?> $crate::sqlite::sqlx::Encode<'q, $crate::sqlite::sqlx::Sqlite>
+            for $type $(<$kind>)?
+        {
+            fn encode_by_ref(
+                &self,
+                args: &mut Vec<$crate::sqlite::sqlx::sqlite::SqliteArgumentValue<'q>>,
+            ) -> Result<$crate::sqlite::sqlx::encode::IsNull, $crate::sqlite::sqlx::error::BoxDynError>
+            {
+                <$inner as $crate::sqlite::sqlx::Encode<'q, $crate::sqlite::sqlx::Sqlite>>::encode_by_ref(
+                    &self.$field,
+                    args,
+                )
+            }
+        }
+    };
+    ($type:ident $(<$kind:ident>)?, $field:tt: $inner:ty, $new:expr) => {
+        $crate::sqlite_newtype!($type $(<$kind>)?, $field: $inner);
+
+        impl<'r $(, $kind)?> $crate::sqlite::sqlx::Decode<'r, $crate::sqlite::sqlx::Sqlite>
+            for $type $(<$kind>)?
+        {
+            fn decode(
+                value: $crate::sqlite::sqlx::sqlite::SqliteValueRef<'r>,
+            ) -> Result<Self, $crate::sqlite::sqlx::error::BoxDynError> {
+                <$inner as $crate::sqlite::sqlx::Decode<'r, $crate::sqlite::sqlx::Sqlite>>::decode(
+                    value,
+                )
+                .map($new)
+            }
+        }
+    };
+}
+
 /// The database at `path`, which `create` creates if it's missing.
 pub async fn connect(path: &Path, create: bool) -> anyhow::Result<SqlitePool> {
     let options = SqliteConnectOptions::new()

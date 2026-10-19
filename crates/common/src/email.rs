@@ -3,13 +3,6 @@
 
 use std::fmt;
 
-use sqlx::{
-    Decode, Encode, Sqlite, Type,
-    encode::IsNull,
-    error::BoxDynError,
-    sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef},
-};
-
 /// The longest address SMTP carries.
 pub const MAX_LENGTH: usize = 254;
 
@@ -66,33 +59,10 @@ impl Email {
     }
 }
 
-impl Type<Sqlite> for Email {
-    fn type_info() -> SqliteTypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-
-    fn compatible(ty: &SqliteTypeInfo) -> bool {
-        <String as Type<Sqlite>>::compatible(ty)
-    }
-}
-
-impl<'q> Encode<'q, Sqlite> for Email {
-    fn encode_by_ref(
-        &self,
-        args: &mut Vec<SqliteArgumentValue<'q>>,
-    ) -> Result<IsNull, BoxDynError> {
-        self.0.encode_by_ref(args)
-    }
-}
-
-/// Read back as stored, without parsing again: only addresses that parsed
-/// are ever stored, and a rule tightened since mustn't lock their members
-/// out of reading their own rows.
-impl<'r> Decode<'r, Sqlite> for Email {
-    fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
-        String::decode(value).map(Self)
-    }
-}
+// Read back as stored, without parsing again: only addresses that parsed
+// are ever stored, and a rule tightened since mustn't lock their members
+// out of reading their own rows.
+crate::sqlite_newtype!(Email, 0: String, Email);
 
 /// A dot with something on either side.
 fn has_inner_dot(domain: &str) -> bool {
