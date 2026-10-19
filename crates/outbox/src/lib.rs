@@ -72,14 +72,26 @@ impl Subject {
     }
 }
 
-/// A plain-text message to queue, as it is or sealed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A plain-text message to queue, as it is or sealed. Its `Debug` output
+/// leaves the body out: a sealed message's carries a secret link.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Message {
     /// The member it's for, if any, whose removal deletes it.
     pub account: Option<String>,
     pub to: Email,
     pub subject: Subject,
     pub body: String,
+}
+
+impl fmt::Debug for Message {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Message")
+            .field("account", &self.account)
+            .field("to", &self.to)
+            .field("subject", &self.subject)
+            .field("body", &format_args!("<redacted>"))
+            .finish()
+    }
 }
 
 /// What a queued message says.
@@ -552,6 +564,15 @@ mod tests {
     #[test]
     fn gives_up_two_days_after_queueing() {
         assert_eq!(given_up_before(NOW + 2 * DAY), NOW);
+    }
+
+    #[test]
+    fn a_messages_debug_output_leaves_the_body_out() {
+        let message = message(Some("bob"), "bob@example.org", "Verify your email");
+        let debug = format!("{message:?}");
+        assert!(!debug.contains("q7Hx2mZp9vLcT4wRfBa"), "{debug}");
+        assert!(debug.contains("body: <redacted>"), "{debug}");
+        assert!(debug.contains("bob@example.org"), "{debug}");
     }
 
     #[test]
