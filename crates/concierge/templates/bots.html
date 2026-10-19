@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}Bots{% endblock %}
+
+{% block content %}
+      <h1>Bots</h1>
+      <section class="card tab-card bots-card" aria-labelledby="bots-title">
+        <h2 class="eyebrow" id="bots-title">Your bots</h2>
+        {%- if let Some(unconfirmed) = unconfirmed %}
+        {%- call components::confirm_email_first(unconfirmed, "make bots") %}{% endcall %}
+        <div class="invite-actions">
+          <a class="button button-primary" href="{{ crate::routes::verify::ACCOUNT_EMAIL }}">Confirm your email</a>
+        </div>
+        {%- else %}
+        <p class="invite-count"><span class="invite-count-number">{{ bots.len() }} of {{ crate::bot_rules::MAX_LIVE }}</span> bots</p>
+        <div class="invite-meter" aria-hidden="true">
+          {%- for slot in 0..crate::bot_rules::MAX_LIVE %}<span{% if slot < bots.len() as i64 %} class="available"{% endif %}></span>{% endfor -%}
+        </div>
+        <p class="hint">{% if remaining == 0 %}That's as many as you can have. Delete one to make another.{% else %}You can have up to {{ crate::bot_rules::MAX_LIVE }} at a time.{% endif %}</p>
+        {%- endif %}
+        {%- if bots.is_empty() %}
+        <p class="bots-empty">No bots yet.</p>
+        {%- else %}
+        <ul class="bots">
+          {%- for bot in bots %}
+          <li><strong>{{ bot.account }}</strong>{% if let Some(note) = bot.note %} <span class="muted">· {{ note }}</span>{% endif %}</li>
+          {%- endfor %}
+        </ul>
+        {%- endif %}
+      </section>
+      <section class="card tab-card" aria-labelledby="about-bots-title">
+        <h2 class="eyebrow" id="about-bots-title">How bots work</h2>
+        <p class="hint">A bot is an IRC account of its own that a program of yours logs in to, with SASL like any client. Everyone sees it connect from <code>weblounge/bot/{{ nick }}</code>, and it stays out of #lounge. <a href="https://github.com/luizribeiro/weblounge/tree/main/templates/bot">Start from the bot template</a>.</p>
+      </section>
+{%- endblock %}

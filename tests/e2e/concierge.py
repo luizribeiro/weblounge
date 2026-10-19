@@ -257,8 +257,8 @@ with subtest("a bot made with concierge-admin logs in to IRC with SASL, but not 
     assert (settings["alwaysOn"], settings["autoAway"]) == ("off", "off"), body
     refused = Browser("bender").sign_in("bender", bot_password)
     assert refused == "401 ", refused
-    account = browser.get("/account", "-f")
-    assert "<strong>bender</strong>" in account and "answers !ping" in account, account
+    tab = browser.get("/bots", "-f")
+    assert "<strong>bender</strong>" in tab and "answers !ping" in tab, tab
 
 with subtest("concierge-admin bot delete erases the bot's account in Ergo"):
     deleted = concierge_admin("bot", "delete", "bender")

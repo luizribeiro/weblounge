@@ -93,14 +93,4 @@
         <p class="alert" role="alert">{{ error }}</p>
         {%- endmatch %}
       </section>
-      {%- if !bots.is_empty() %}
-      <section class="card tab-card" id="bots" aria-labelledby="bots-title">
-        <h2 class="eyebrow" id="bots-title">Bots</h2>
-        <ul class="bots">
-          {%- for bot in bots %}
-          <li><strong>{{ bot.account }}</strong>{% if let Some(note) = bot.note %} <span class="muted">· {{ note }}</span>{% endif %}</li>
-          {%- endfor %}
-        </ul>
-      </section>
-      {%- endif %}
 {%- endblock %}

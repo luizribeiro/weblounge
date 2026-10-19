@@ -1,4 +1,5 @@
 pub mod account;
+pub mod bots;
 pub mod certificates;
 pub mod checks;
 pub mod clients;
@@ -59,8 +60,8 @@ impl<'a> Layout<'a> {
     }
 
     /// The layout of `member`'s pages, reminding them to confirm their
-    /// email until they do. The Account and Invites tabs say so in their
-    /// own cards, so they use [`Layout::new`].
+    /// email until they do. The Account, Invites and Bots tabs say so in
+    /// their own cards, so they use [`Layout::new`].
     pub fn member(app: &'a App, member: &'a Member) -> Self {
         Self {
             unconfirmed: Unconfirmed::of(member, db::now()),
@@ -94,16 +95,18 @@ impl<'a> Layout<'a> {
 pub enum Tab {
     Home,
     Invites,
+    Bots,
     Account,
 }
 
 impl Tab {
-    pub const ALL: [Self; 3] = [Self::Home, Self::Invites, Self::Account];
+    pub const ALL: [Self; 4] = [Self::Home, Self::Invites, Self::Bots, Self::Account];
 
     pub fn path(self) -> &'static str {
         match self {
             Self::Home => "/",
             Self::Invites => "/invites",
+            Self::Bots => "/bots",
             Self::Account => "/account",
         }
     }
@@ -112,6 +115,7 @@ impl Tab {
         match self {
             Self::Home => "Home",
             Self::Invites => "Invites",
+            Self::Bots => "Bots",
             Self::Account => "Account",
         }
     }

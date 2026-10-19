@@ -1,9 +1,10 @@
 use crate::{Site, body_text, location};
 
 /// Each tab's path and label, in the row under the header.
-const TABS: [(&str, &str); 3] = [
+const TABS: [(&str, &str); 4] = [
     ("/", "Home"),
     ("/invites", "Invites"),
+    ("/bots", "Bots"),
     ("/account", "Account"),
 ];
 

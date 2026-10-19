@@ -118,6 +118,10 @@ pub fn router(app: App) -> Router {
                 .layer(map_response(routes::no_store)),
         )
         .route(
+            "/bots",
+            get(routes::bots::show).layer(map_response(routes::no_store)),
+        )
+        .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),
         )
