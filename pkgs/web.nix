@@ -21,6 +21,8 @@ let
       "--bundle"
       "--entry-names=${bundle.entryNames}"
       "--loader:.svg=copy"
+      "--loader:.png=file"
+      "--loader:.avif=file"
       "--target=es2022,chrome100,firefox100,safari15"
       "--define:DEV=${lib.boolToString dev}"
     ] ++ flags

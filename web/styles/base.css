@@ -5,11 +5,53 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image:
+    url("../images/felt-light-fibres.png"), url("../images/felt-light-nap.png"),
+    url("../images/felt-light-shade.png");
+  /* biome-ignore lint/suspicious/noDuplicateProperties: the url() list above is the fallback for browsers whose image-set doesn't take type() */
+  background-image:
+    image-set(
+      url("../images/felt-light-fibres.avif") type("image/avif"),
+      url("../images/felt-light-fibres.png") type("image/png")
+    ),
+    image-set(
+      url("../images/felt-light-nap.avif") type("image/avif"),
+      url("../images/felt-light-nap.png") type("image/png")
+    ),
+    image-set(
+      url("../images/felt-light-shade.avif") type("image/avif"),
+      url("../images/felt-light-shade.png") type("image/png")
+    );
+  /* The three repeats never line up; nap and shade are stored small. */
+  background-size:
+    307px 307px,
+    1226px 1226px,
+    2402px 2402px;
   color: var(--fg);
   font-family: var(--sans);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+
+  @media (prefers-color-scheme: dark) {
+    background-image:
+      url("../images/felt-dark-fibres.png"), url("../images/felt-dark-nap.png"),
+      url("../images/felt-dark-shade.png");
+    /* biome-ignore lint/suspicious/noDuplicateProperties: the url() list above is the fallback for browsers whose image-set doesn't take type() */
+    background-image:
+      image-set(
+        url("../images/felt-dark-fibres.avif") type("image/avif"),
+        url("../images/felt-dark-fibres.png") type("image/png")
+      ),
+      image-set(
+        url("../images/felt-dark-nap.avif") type("image/avif"),
+        url("../images/felt-dark-nap.png") type("image/png")
+      ),
+      image-set(
+        url("../images/felt-dark-shade.avif") type("image/avif"),
+        url("../images/felt-dark-shade.png") type("image/png")
+      );
+  }
 }
 
 a {
