@@ -1,10 +1,11 @@
 import json
 import re
+import shlex
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Account, add_member, concierge_admin, ergo_api, irc, irc_command, register
+    from helpers import Account, add_member, concierge_admin, confirm_email, ergo_api, irc, irc_command, register
 
 luiz: Account = {"account": "luiz", "password": "plain-old-vanilla"}
 alice: Account = {"account": "alice", "password": "correct-horse"}
@@ -42,6 +43,12 @@ def assert_kept_out_of_lounge():
     assert session.count(" 474 marvin #lounge ") == 1, session
     assert not re.search(r"^:marvin!\S+ JOIN #lounge", session, re.M), session
     assert re.search(r"^:marvin!~u@weblounge/bot/zoe JOIN #bots", session, re.M), session
+
+
+def bots_browser(owner: Account, action, name):
+    """Runs action on owner's bot name in a browser on the Bots tab, answering what it printed last."""
+    command = shlex.join(["bots-browser", owner["account"], owner["password"], action, name])
+    return client.succeed(command).strip().splitlines()[-1]
 
 
 def wait_for_bender_to_answer():
@@ -151,3 +158,34 @@ with subtest("apply-vhosts gives bots from before vhosts theirs, connected or no
     assert concierge_admin("bot", "apply-vhosts") == "bender\nmarvin\n"
     assert host_of("bender") == "weblounge/bot/luiz"
     assert_kept_out_of_lounge()
+
+robbie: Account = {"account": "robbie", "password": ""}
+
+with subtest("in a browser, a member makes a bot, and it logs in with the password shown once"):
+    confirm_email("zoe")
+    robbie["password"] = bots_browser(zoe, "create", "robbie")
+    assert re.fullmatch("[a-z2-9]{26}", robbie["password"]), robbie
+    session = irc("WHOIS robbie", **robbie)
+    assert " 903 " in session, session
+    assert re.search(r"^:\S+ 311 robbie robbie ~u weblounge/bot/zoe ", session, re.M), session
+    assert re.match(r"robbie zoe \d{4}-\d\d-\d\d$", concierge_admin("bot", "list", "zoe").splitlines()[-1])
+
+with subtest("a new password from the Bots tab replaces the old one for good"):
+    old = robbie["password"]
+    robbie["password"] = bots_browser(zoe, "reset", "robbie")
+    assert robbie["password"] != old
+    client.fail(irc_command(account="robbie", password=old))
+    session = irc(**robbie)
+    assert " 903 " in session, session
+
+with subtest("deleting a bot from the Bots tab disconnects it at once, and it can't log in again"):
+    log = "/tmp/robbie.log"
+    client.succeed(f"{irc_command(**robbie, linger='300')} > {log} 2>&1 &")
+    client.wait_until_succeeds(f"grep -q ' 001 robbie ' {log}", timeout=30)
+    assert bots_browser(zoe, "delete", "robbie") == "deleted"
+    client.wait_until_succeeds(f"grep -q '^ERROR :You are no longer authorized' {log}", timeout=30)
+    client.wait_until_fails("pgrep -f 'account=[r]obbie'", timeout=30)
+    client.fail(irc_command(**robbie))
+    body, _ = ergo_api("ns/info", accountName="robbie")
+    assert json.loads(body) == {"success": False}, body
+    assert "robbie" not in concierge_admin("bot", "list", "zoe")

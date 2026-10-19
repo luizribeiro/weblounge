@@ -1,10 +1,11 @@
 """Connect to an IRC server over TLS, or over a WebSocket the way a web
 client does, optionally logging in with SASL PLAIN, EXTERNAL or
 OAUTHBEARER, send COMMANDS once welcomed, and print every line the server
-sends."""
+sends until it goes quiet."""
 
 import argparse
 import base64
+import contextlib
 import os
 import socket
 import ssl
@@ -146,6 +147,13 @@ def main():
     parser.add_argument("--token", help="an OAuth 2.0 bearer token")
     parser.add_argument("--cert", help="a PEM file with the key and certificate to present")
     parser.add_argument("--websocket", metavar="NAME", help="connect to wss://NAME/socket at the host, as a web client")
+    parser.add_argument(
+        "--linger",
+        type=int,
+        default=QUIET_SECONDS,
+        metavar="SECONDS",
+        help="stay connected after the commands until the server is quiet this long or closes the connection",
+    )
     parser.add_argument("commands", nargs="*")
     args = parser.parse_args()
     if args.account and not (args.password or args.cert):
@@ -173,8 +181,9 @@ def main():
 
     for command in args.commands:
         conn.send(command)
-    conn.drain(QUIET_SECONDS)
-    conn.send("QUIT")
+    conn.drain(args.linger)
+    with contextlib.suppress(OSError):
+        conn.send("QUIT")
 
 
 if __name__ == "__main__":

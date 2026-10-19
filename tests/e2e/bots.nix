@@ -1,6 +1,7 @@
 { vmTest, ... }:
 
 vmTest {
+  browsers.bots-browser = ./clients/bots-browser.py;
   credenza = { lib, ... }: {
     # What a deploy that changes concierge switches credenza to.
     specialisation.changed-concierge.configuration = {
