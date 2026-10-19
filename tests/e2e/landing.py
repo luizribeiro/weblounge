@@ -36,6 +36,18 @@ with subtest("the page and its assets are cached briefly and revalidated by ETag
         assert "cache-control: max-age=3600" in headers, (path, headers)
         assert "etag:" in headers, (path, headers)
 
+with subtest("the hashed images the stylesheet loads are cached for good, typed and still guarded"):
+    [stylesheet] = [asset for asset in assets if asset.endswith(".css")]
+    css = client.succeed(f"curl -sfk https://credenza{stylesheet}")
+    textures = set(re.findall(r'url\("\./(felt-[^"]+)"\)', css))
+    assert {name.rsplit(".", 1)[1] for name in textures} == {"avif", "png"}, css
+    for name in textures:
+        headers = client.succeed(f"curl -sfkI https://credenza/assets/{name}").lower()
+        content_type = "image/avif" if name.endswith(".avif") else "image/png"
+        assert f"content-type: {content_type}" in headers, (name, headers)
+        assert "cache-control: public, max-age=31536000, immutable" in headers, (name, headers)
+        assert "max-age=3600" not in headers and "x-content-type-options: nosniff" in headers, (name, headers)
+
 with subtest("the release build carries no live-reload code"):
     for path in ["/", *assets]:
         client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")
