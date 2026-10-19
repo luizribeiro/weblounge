@@ -11,7 +11,7 @@ use std::{fmt, path::Path};
 
 use anyhow::Context;
 use common::{email::Email, sqlite};
-use sqlx::{SqliteExecutor, SqlitePool, migrate::Migrator, sqlite::SqliteQueryResult};
+use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 /// The public half of the mailer's key, which mail is sealed to.
 pub use age::x25519::Recipient as PublicKey;
@@ -208,9 +208,9 @@ impl Outbox {
         )
         .execute(&mut *transaction)
         .await?;
-        let deleted = delete_sealed_to_others(&mut *transaction, Some(&key)).await?;
+        let deleted = delete_sealed_to_others(&mut transaction, Some(&key)).await?;
         transaction.commit().await?;
-        Ok(self.erase(deleted.rows_affected()).await)
+        Ok(self.erase(deleted).await)
     }
 
     /// Withdraws the published key as its mailer stops, and deletes what
@@ -221,16 +221,26 @@ impl Outbox {
         sqlx::query!("DELETE FROM mailer_key")
             .execute(&mut *transaction)
             .await?;
-        let deleted = delete_sealed_to_others(&mut *transaction, None).await?;
+        let deleted = delete_sealed_to_others(&mut transaction, None).await?;
         transaction.commit().await?;
-        Ok(self.erase(deleted.rows_affected()).await)
+        Ok(self.erase(deleted).await)
     }
 
     /// Deletes the messages sealed to any key but `key`, which nobody can
     /// open any more.
     pub async fn delete_sealed_to_others(&self, key: &PublicKey) -> sqlx::Result<Deletion> {
-        let deleted = delete_sealed_to_others(&self.pool, Some(&key.to_string())).await?;
-        Ok(self.erase(deleted.rows_affected()).await)
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let deleted = delete_sealed_to_others(&mut transaction, Some(&key.to_string())).await?;
+        transaction.commit().await?;
+        Ok(self.erase(deleted).await)
+    }
+
+    /// The ids of the sealed messages deleted unsent since this was last
+    /// asked, forgetting them.
+    pub async fn take_unsent(&self) -> sqlx::Result<Vec<i64>> {
+        sqlx::query_scalar!("DELETE FROM unsent RETURNING id")
+            .fetch_all(&self.pool)
+            .await
     }
 
     /// The key the mailer published, if any.
@@ -358,17 +368,26 @@ async fn insert(
     .map(|inserted| inserted.last_insert_rowid())
 }
 
-/// Deletes what was sealed to any key but `key`, or to any key at all.
+/// Deletes what was sealed to any key but `key`, or to any key at all,
+/// noting it unsent; answers how many messages that was.
 async fn delete_sealed_to_others(
-    executor: impl SqliteExecutor<'_>,
+    transaction: &mut SqliteConnection,
     key: Option<&str>,
-) -> sqlx::Result<SqliteQueryResult> {
+) -> sqlx::Result<u64> {
     sqlx::query!(
+        "INSERT OR IGNORE INTO unsent (id)
+         SELECT id FROM outbox WHERE sealed_to IS NOT NULL AND sealed_to IS NOT ?",
+        key,
+    )
+    .execute(&mut *transaction)
+    .await?;
+    let deleted = sqlx::query!(
         "DELETE FROM outbox WHERE sealed_to IS NOT NULL AND sealed_to IS NOT ?",
         key,
     )
-    .execute(executor)
-    .await
+    .execute(&mut *transaction)
+    .await?;
+    Ok(deleted.rows_affected())
 }
 
 async fn published_key(executor: impl SqliteExecutor<'_>) -> sqlx::Result<Option<PublicKey>> {
@@ -645,6 +664,34 @@ mod tests {
         let error = outbox.queue_sealed(&carols, QUEUED).await.unwrap_err();
         assert_eq!(error.downcast_ref(), Some(&NoKey));
         assert_eq!(outbox.withdraw_key().await.unwrap().messages, 0);
+    }
+
+    #[tokio::test]
+    async fn only_sealed_mail_deleted_unsent_is_noted_unsent_until_taken() {
+        let (outbox, _dir) = with_outbox().await;
+        let alice = outbox.due(QUEUED).await.unwrap().remove(0);
+        outbox.delete(alice.id).await.unwrap();
+        TestKey::publish(&outbox).await;
+        let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
+        let mut sealed = Vec::new();
+        for publish in [true, false] {
+            sealed.push(outbox.queue_sealed(&carols, QUEUED).await.unwrap());
+            if publish {
+                outbox
+                    .publish_key(&TestKey::generate().public())
+                    .await
+                    .unwrap();
+            } else {
+                outbox.withdraw_key().await.unwrap();
+            }
+        }
+        TestKey::publish(&outbox).await;
+        sealed.push(outbox.queue_sealed(&carols, QUEUED).await.unwrap());
+        let other = TestKey::generate().public();
+        outbox.delete_sealed_to_others(&other).await.unwrap();
+
+        assert_eq!(outbox.take_unsent().await.unwrap(), sealed);
+        assert!(outbox.take_unsent().await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -85,8 +85,8 @@ pub fn message(
 }
 
 /// Issues `account` a new link, replacing their last, and queues the
-/// email of `kind` that carries it, sealed; answers whether they had an
-/// address to verify. Issuing starts the grace period, so the email goes
+/// email of `kind` that carries it, sealed; answers its id, unless they
+/// had no address to verify. Issuing starts the grace period, so the email goes
 /// out right after. Fails with [`NoKey`] while the mailer is down.
 pub async fn send(
     db: &Db,
@@ -95,16 +95,16 @@ pub async fn send(
     account: &str,
     kind: Kind,
     now: i64,
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<Option<i64>> {
     // Checked before issuing, so a mailer that's down doesn't cost the
     // member the link they have.
     if outbox.published_key().await?.is_none() {
         return Err(NoKey.into());
     }
     let Some(issued) = db.issue_verification_code(account, now).await? else {
-        return Ok(false);
+        return Ok(None);
     };
-    outbox
+    let id = outbox
         .queue_sealed(&message(&issued, public_url, kind, now)?, now)
         .await?;
     // Noted once queued: a failure in between leaves a reminder that may
@@ -112,7 +112,7 @@ pub async fn send(
     if kind == Kind::Reminder {
         db.record_reminder(&issued.account, now).await?;
     }
-    Ok(true)
+    Ok(Some(id))
 }
 
 /// [`send`]s a link of `kind` to each of `accounts` in turn, up to
@@ -127,7 +127,10 @@ pub async fn send_batch(
 ) -> anyhow::Result<Batch> {
     let mut sent = Vec::new();
     for account in accounts.iter().take(PER_RUN) {
-        if send(db, outbox, public_url, account, kind, now).await? {
+        if send(db, outbox, public_url, account, kind, now)
+            .await?
+            .is_some()
+        {
             sent.push(account.clone());
         }
     }
@@ -278,13 +281,10 @@ mod tests {
     async fn sending_queues_the_link_to_a_code_on_file_sealed() {
         let (db, outbox, key, _dirs) = with_bob().await;
 
-        assert!(
-            send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT)
-                .await
-                .unwrap()
-        );
+        let sent = send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT).await;
 
         let due = outbox.due(SENT).await.unwrap();
+        assert_eq!(sent.unwrap(), Some(due[0].id));
         assert!(matches!(due[0].body, Body::Sealed { .. }), "{due:?}");
         let [queued] = &key.open(due)[..] else {
             panic!("one message");
@@ -325,11 +325,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(
-            !send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT)
-                .await
-                .unwrap()
-        );
+        let sent = send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT).await;
+        assert_eq!(sent.unwrap(), None);
         assert!(outbox.due(SENT).await.unwrap().is_empty());
     }
 

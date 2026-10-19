@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO unsent (id)\n         SELECT id FROM outbox WHERE sealed_to IS NOT NULL AND sealed_to IS NOT ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "dd8dccffce1ba78be46717a7e7837d54aa67d1dd30f8ceebabd5ba9f01441888"
+}

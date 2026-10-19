@@ -389,6 +389,26 @@ async fn while_the_mailer_is_down_a_link_waits_and_the_last_one_keeps_working() 
 }
 
 #[tokio::test]
+async fn a_link_the_mailer_deleted_unsent_costs_no_wait() {
+    let (site, cookie, _) = with_a_code_mailed().await;
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+    assert_eq!(location(&response), "/account?sent#email-and-news");
+    let restarted = outbox::testing::TestKey::generate().public();
+    site.outbox.publish_key(&restarted).await.unwrap();
+    site.outbox
+        .publish_key(&site.mailer_key.public())
+        .await
+        .unwrap();
+
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+
+    assert_eq!(location(&response), "/account?sent#email-and-news");
+    assert_eq!(site.mail().await.len(), 1);
+    let response = site.post(RESEND, &[], Some(&cookie)).await;
+    assert_eq!(response.status(), 429);
+}
+
+#[tokio::test]
 async fn guests_and_other_sites_cannot_ask_for_links() {
     let (site, cookie, _) = with_a_code_mailed().await;
     let response = site.post(RESEND, &[], None).await;

@@ -124,6 +124,7 @@ impl Unconfirmed {
 /// Mails `account` a new verification link, replacing their last, if the
 /// limits on mail allow.
 pub async fn mail_link(app: &App, account: &str, recipient: Recipient) -> Mailed {
+    give_back_unsent_links(app).await;
     if let Err(refusal) = app.mailed_links.check(account, recipient, Instant::now()) {
         return Mailed::Refused(refusal);
     }
@@ -136,15 +137,24 @@ pub async fn mail_link(app: &App, account: &str, recipient: Recipient) -> Mailed
         db::now(),
     );
     match sent.await {
-        Ok(true) => {
-            app.mailed_links.record(account, Instant::now());
+        Ok(Some(id)) => {
+            app.mailed_links.record(account, id, Instant::now());
             Mailed::Sent
         }
-        Ok(false) => Mailed::NothingToVerify,
+        Ok(None) => Mailed::NothingToVerify,
         Err(error) => {
             eprintln!("Queueing a verification email failed: {error}");
             Mailed::Failed
         }
+    }
+}
+
+/// Stops counting the links the mailer deleted unsent against their
+/// members, who never got them.
+async fn give_back_unsent_links(app: &App) {
+    match app.outbox.take_unsent().await {
+        Ok(unsent) => app.mailed_links.refund(&unsent),
+        Err(error) => eprintln!("Reading the links deleted unsent failed: {error}"),
     }
 }
 

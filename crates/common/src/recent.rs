@@ -56,6 +56,19 @@ impl<K: Eq + Hash> Recent<K> {
         self.lock().remove(key);
     }
 
+    /// Forgets that `key` was seen `at`, once.
+    pub fn forget_one(&self, key: &K, at: Instant) {
+        let mut times = self.lock();
+        if let Some(seen) = times.get_mut(key) {
+            if let Some(index) = seen.iter().position(|&time| time == at) {
+                seen.remove(index);
+            }
+            if seen.is_empty() {
+                times.remove(key);
+            }
+        }
+    }
+
     #[cfg(test)]
     fn len(&self) -> usize {
         self.lock().len()
@@ -106,6 +119,11 @@ impl Quota {
     pub fn record(&self, now: Instant) {
         self.uses.record((), now);
     }
+
+    /// Gives back the use recorded `at`.
+    pub fn forget_one(&self, at: Instant) {
+        self.uses.forget_one(&(), at);
+    }
 }
 
 #[cfg(test)]
@@ -128,6 +146,24 @@ mod tests {
         assert!(quota.take(minute(60)));
         assert!(!quota.take(minute(69)));
         assert!(quota.take(minute(70)));
+    }
+
+    #[test]
+    fn forgetting_one_sighting_leaves_the_others() {
+        let (recent, start) = (Recent::new(MINUTE), Instant::now());
+        let later = start + Duration::from_secs(1);
+        for at in [start, later, later] {
+            recent.record("alice", at);
+        }
+
+        recent.forget_one(&"alice", later);
+        assert!(!recent.under(&"alice", 2, later));
+        recent.forget_one(&"alice", later);
+        assert!(recent.under(&"alice", 2, later));
+        recent.forget_one(&"alice", start);
+        recent.forget_one(&"bob", start);
+
+        assert_eq!(recent.len(), 0);
     }
 
     #[test]

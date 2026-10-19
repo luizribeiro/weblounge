@@ -3,8 +3,10 @@
 //! website attempts never lock anyone out of IRC.
 
 use std::{
+    collections::HashMap,
     fmt,
     net::{IpAddr, SocketAddr},
+    sync::{Mutex, MutexGuard},
     time::{Duration, Instant},
 };
 
@@ -176,6 +178,9 @@ pub struct MailLimiter {
     recent: Recent<Key>,
     today: Recent<Key>,
     overall: Quota,
+    /// Whose link each message queued in the last day carries, and when it
+    /// was queued, by message id.
+    links: Mutex<HashMap<i64, (Key, Instant)>>,
 }
 
 impl Default for MailLimiter {
@@ -184,6 +189,7 @@ impl Default for MailLimiter {
             recent: Recent::new(LINK_INTERVAL),
             today: Recent::new(DAY),
             overall: Quota::new(LINKS_PER_HOUR, HOUR),
+            links: Mutex::default(),
         }
     }
 }
@@ -208,13 +214,36 @@ impl MailLimiter {
         }
     }
 
-    /// Counts a link just mailed to `account`. Only links that went out
-    /// count, so a failure to queue one never makes the member wait.
-    pub fn record(&self, account: &str, now: Instant) {
+    /// Counts the link to `account` just queued as message `id`. Only links
+    /// that went out count, so a failure to queue one never makes the
+    /// member wait.
+    pub fn record(&self, account: &str, id: i64, now: Instant) {
         let key = account_key(account);
         self.recent.record(key.clone(), now);
-        self.today.record(key, now);
+        self.today.record(key.clone(), now);
         self.overall.record(now);
+        let mut links = self.links();
+        links.retain(|_, (_, queued_at)| now.duration_since(*queued_at) < DAY);
+        links.insert(id, (key, now));
+    }
+
+    /// Stops counting the links in messages `ids`, which the mailer deleted
+    /// unsent.
+    pub fn refund(&self, ids: &[i64]) {
+        let mut links = self.links();
+        for id in ids {
+            if let Some((key, queued_at)) = links.remove(id) {
+                self.recent.forget_one(&key, queued_at);
+                self.today.forget_one(&key, queued_at);
+                self.overall.forget_one(queued_at);
+            }
+        }
+    }
+
+    fn links(&self) -> MutexGuard<'_, HashMap<i64, (Key, Instant)>> {
+        self.links
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -321,10 +350,15 @@ mod tests {
         assert!(lookups.allows(HOME, start + WINDOW));
     }
 
-    fn mail(links: &MailLimiter, account: &str, now: Instant) -> Result<(), MailRefusal> {
+    /// Message ids, as the outbox gives each message its own.
+    static NEXT_ID: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1);
+
+    /// Mails `account` a link if the limits allow, answering its message id.
+    fn mail(links: &MailLimiter, account: &str, now: Instant) -> Result<i64, MailRefusal> {
         links.check(account, Recipient::SameAddress, now)?;
-        links.record(account, now);
-        Ok(())
+        let id = NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        links.record(account, id, now);
+        Ok(id)
     }
 
     #[test]
@@ -333,7 +367,7 @@ mod tests {
         for _ in 0..=LINKS_PER_DAY {
             assert_eq!(links.check("alice", Recipient::SameAddress, now), Ok(()));
         }
-        assert_eq!(mail(&links, "alice", now), Ok(()));
+        assert!(mail(&links, "alice", now).is_ok());
         assert_eq!(
             links.check("alice", Recipient::SameAddress, now),
             Err(MailRefusal::TooSoon)
@@ -343,19 +377,19 @@ mod tests {
     #[test]
     fn a_member_gets_one_link_every_few_minutes() {
         let (links, start) = (MailLimiter::default(), Instant::now());
-        assert_eq!(mail(&links, "alice", start), Ok(()));
+        assert!(mail(&links, "alice", start).is_ok());
         let soon = start + LINK_INTERVAL - Duration::from_secs(1);
         assert_eq!(mail(&links, "Alice", soon), Err(MailRefusal::TooSoon));
-        assert_eq!(mail(&links, "bob", soon), Ok(()));
-        assert_eq!(mail(&links, "alice", start + LINK_INTERVAL), Ok(()));
+        assert!(mail(&links, "bob", soon).is_ok());
+        assert!(mail(&links, "alice", start + LINK_INTERVAL).is_ok());
     }
 
     #[test]
     fn a_new_address_needs_no_wait_but_counts_toward_the_day() {
         let (links, now) = (MailLimiter::default(), Instant::now());
-        for _ in 0..LINKS_PER_DAY {
+        for id in 0..LINKS_PER_DAY as i64 {
             assert_eq!(links.check("alice", Recipient::NewAddress, now), Ok(()));
-            links.record("alice", now);
+            links.record("alice", id, now);
         }
         assert_eq!(
             links.check("alice", Recipient::NewAddress, now),
@@ -368,23 +402,60 @@ mod tests {
         let (links, start) = (MailLimiter::default(), Instant::now());
         let every = |n: u32| start + LINK_INTERVAL * n;
         for n in 0..LINKS_PER_DAY as u32 {
-            assert_eq!(mail(&links, "alice", every(n)), Ok(()));
+            assert!(mail(&links, "alice", every(n)).is_ok());
         }
         let last = every(LINKS_PER_DAY as u32);
         assert_eq!(mail(&links, "alice", last), Err(MailRefusal::TooManyToday));
-        assert_eq!(mail(&links, "alice", start + DAY), Ok(()));
+        assert!(mail(&links, "alice", start + DAY).is_ok());
     }
 
     #[test]
     fn all_members_together_get_a_quota_an_hour() {
         let (links, start) = (MailLimiter::default(), Instant::now());
         for n in 0..LINKS_PER_HOUR {
-            assert_eq!(mail(&links, &format!("member{n}"), start), Ok(()));
+            assert!(mail(&links, &format!("member{n}"), start).is_ok());
         }
         assert_eq!(mail(&links, "alice", start), Err(MailRefusal::Busy));
         let next = start + Duration::from_secs(1);
         assert_eq!(mail(&links, "alice", next), Err(MailRefusal::Busy));
-        assert_eq!(mail(&links, "alice", start + HOUR), Ok(()));
-        assert_eq!(mail(&links, "member0", start + HOUR), Ok(()));
+        assert!(mail(&links, "alice", start + HOUR).is_ok());
+        assert!(mail(&links, "member0", start + HOUR).is_ok());
+    }
+
+    #[test]
+    fn a_link_the_mailer_deleted_unsent_counts_against_nothing() {
+        let (links, start) = (MailLimiter::default(), Instant::now());
+        let busy: Vec<_> = (1..LINKS_PER_HOUR)
+            .map(|n| mail(&links, &format!("member{n}"), start).unwrap())
+            .collect();
+        let mut alices = Vec::new();
+        for _ in 0..2 * LINKS_PER_DAY {
+            alices.push(mail(&links, "alice", start).unwrap());
+            assert_eq!(mail(&links, "alice", start), Err(MailRefusal::TooSoon));
+            links.refund(&alices[alices.len() - 1..]);
+        }
+        assert!(mail(&links, "alice", start).is_ok());
+        assert_eq!(mail(&links, "bob", start), Err(MailRefusal::Busy));
+
+        links.refund(&busy[..1]);
+        links.refund(&busy[..1]);
+        links.refund(&[0, i64::MAX]);
+
+        assert!(mail(&links, "bob", start).is_ok());
+        assert_eq!(mail(&links, "carol", start), Err(MailRefusal::Busy));
+    }
+
+    #[test]
+    fn a_link_is_given_back_only_within_the_day_it_counts() {
+        let (links, start) = (MailLimiter::default(), Instant::now());
+        let first = mail(&links, "alice", start).unwrap();
+        let later = start + DAY;
+        let second = mail(&links, "alice", later).unwrap();
+
+        links.refund(&[first]);
+        assert_eq!(mail(&links, "alice", later), Err(MailRefusal::TooSoon));
+        links.refund(&[second]);
+
+        assert!(mail(&links, "alice", later).is_ok());
     }
 }

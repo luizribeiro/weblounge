@@ -137,10 +137,9 @@ with subtest("a verification link waits sealed while the mail server is down, an
     credenza.fail(f"grep -rqaF {code} /root/snapshot {outbox_directory}")
     credenza.fail(f"grep -qaF {code} {disk}")
 
-with subtest("restarting the mailer deletes the sealed link it never sent, and a new one goes out"):
-    clear_mail()
+with subtest("restarting the mailer deletes the sealed link it never sent, and the member gets another at once"):
     mail.succeed("systemctl stop mailpit-test")
-    assert concierge_admin("member", "send-verification", "judy") == "sent judy a link\n"
+    add_member("kate", "meadow-cobalt-28")
     wait_for_failed_attempt(queued_id())
     credenza.succeed("systemctl restart concierge-mailer")
     wait_for_log("Withdrew the mailer's key; deleted 1 messages sealed to it, unsent")
@@ -148,9 +147,14 @@ with subtest("restarting the mailer deletes the sealed link it never sent, and a
     mail.succeed("systemctl start mailpit-test")
     mail.wait_for_open_port(465)
     published_key()
-    assert concierge_admin("member", "send-verification", "judy") == "sent judy a link\n"
-    wait_for_mail("judy@example.org", verification_subject)
-    assert len(mails_to("judy@example.org")) == 1
+    kate = Browser("kate")
+    kate.sign_in("kate", "meadow-cobalt-28")
+    # Signing up queued a link moments ago, but it was never sent, so
+    # asking for another isn't too soon.
+    asked = kate.post("/verification-link")
+    assert asked.startswith(f"303 https://{members}/account?sent"), asked
+    wait_for_mail("kate@example.org", verification_subject)
+    assert len(mails_to("kate@example.org")) == 1
 
 with subtest("while the mailer is down, a new address gets no link, and the page says to try again"):
     judy = Browser("judy")
