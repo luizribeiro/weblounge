@@ -14,7 +14,14 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use super::invite;
-use crate::{app::AppState, invite_code, nick::Nick, password_rules, rate_limit::ClientAddress};
+use crate::{
+    app::AppState,
+    bots::{self, NameClaim},
+    invite_code,
+    nick::Nick,
+    password_rules,
+    rate_limit::ClientAddress,
+};
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -99,10 +106,11 @@ pub async fn invite(
     Json(answer).into_response()
 }
 
-/// Whether a member or a bot, removed or not, or an Ergo account holds
-/// the nick.
+/// Whether a member, removed or not, a bot or a deleted bot whose name
+/// isn't free yet, or an Ergo account holds the nick.
 async fn taken(app: &crate::app::App, nick: &Nick) -> anyhow::Result<bool> {
-    if app.db.name_held(nick.as_str()).await? {
+    let claim = bots::name_claim(&app.db, nick.as_str(), None, app.history_expiry).await?;
+    if claim == NameClaim::Held {
         return Ok(true);
     }
     Ok(app.ergo.info(nick.clone()).await?.is_some())

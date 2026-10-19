@@ -21,6 +21,7 @@ use super::{
 use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
+    bots::{self, NameClaim},
     clients::{self, CLIENTS, Client},
     config::IrcServer,
     db::{self, Claim, Invite, NewMember, Redemption},
@@ -133,9 +134,9 @@ pub async fn redeem(
         nick_error: Some(format!("{} is taken.", account.nick)),
         ..form_for(&signup)
     };
-    match app.db.name_held(account.nick.as_str()).await {
-        Ok(false) => {}
-        Ok(true) => return refuse(taken()),
+    match bots::name_claim(&app.db, account.nick.as_str(), None, app.history_expiry).await {
+        Ok(NameClaim::Free | NameClaim::Reuses(_)) => {}
+        Ok(NameClaim::Held) => return refuse(taken()),
         Err(error) => return internal_error("Looking up a name", error),
     }
     let email_taken = app

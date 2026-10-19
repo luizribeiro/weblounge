@@ -5,7 +5,7 @@ use concierge::{
 };
 use serde_json::Value;
 
-use crate::{PUBLIC_URL, Site, body_text};
+use crate::{HISTORY_EXPIRY, PUBLIC_URL, Site, body_text};
 
 async fn rules(site: &Site) -> Value {
     let response = site.get("/password-rules.json", None).await;
@@ -76,7 +76,9 @@ async fn says_whether_a_nick_is_free_and_nothing_more() {
     site.register("ergo-only").await;
     site.execute(
         "INSERT INTO members (account, joined_at, removed_at) VALUES ('gone', 0, 1);
-         INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('dalek', 'alice', 0, 1)",
+         INSERT INTO bots (account, owner, created_at) VALUES ('bender', 'alice', 0);
+         INSERT INTO bots (account, owner, created_at, removed_at)
+         VALUES ('dalek', 'alice', 0, unixepoch())",
     )
     .await;
     for (nick, answer) in [
@@ -84,11 +86,31 @@ async fn says_whether_a_nick_is_free_and_nothing_more() {
         ("ALICE", "taken"),
         ("ergo-only", "taken"),
         ("Gone", "taken"),
+        ("Bender", "taken"),
         ("DALEK", "taken"),
         ("2pac", "invalid"),
         ("NickServ", "invalid"),
         ("", "invalid"),
     ] {
+        assert_eq!(
+            lookup(&site, nick, "192.0.2.7").await,
+            (200, status(answer)),
+            "{nick}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_deleted_bots_name_is_free_once_its_history_expired() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    site.execute(&format!(
+        "INSERT INTO bots (account, owner, created_at, removed_at)
+         VALUES ('dalek', 'alice', 0, unixepoch() - {HISTORY_EXPIRY} + 60),
+                ('hal', 'alice', 0, unixepoch() - {HISTORY_EXPIRY})"
+    ))
+    .await;
+    for (nick, answer) in [("dalek", "taken"), ("hal", "available")] {
         assert_eq!(
             lookup(&site, nick, "192.0.2.7").await,
             (200, status(answer)),

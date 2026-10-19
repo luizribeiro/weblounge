@@ -10,7 +10,7 @@ use tokio::net::TcpListener;
 
 use concierge::verification_mail;
 
-use crate::{Site, body_text, execute, session_cookie, verification_link};
+use crate::{HISTORY_EXPIRY, Site, body_text, execute, session_cookie, verification_link};
 
 const CODE: &str = "q7Hx2mZp9vLcT4wRfBa-_w";
 const INVITE: &str = "/invite";
@@ -278,11 +278,12 @@ async fn a_removed_members_name_stays_taken_after_ergo_erased_it() {
 }
 
 #[tokio::test]
-async fn a_deleted_bots_name_stays_taken_after_ergo_erased_it() {
+async fn a_deleted_bots_name_stays_taken_until_its_history_expired() {
     let site = with_invite_from_alice().await;
-    site.execute(
-        "INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('bob', 'alice', 0, 1)",
-    )
+    site.execute(&format!(
+        "INSERT INTO bots (account, owner, created_at, removed_at)
+         VALUES ('bob', 'alice', 0, unixepoch() - {HISTORY_EXPIRY} + 60)"
+    ))
     .await;
 
     let response = site.post(INVITE, &bob(), None).await;
@@ -291,6 +292,23 @@ async fn a_deleted_bots_name_stays_taken_after_ergo_erased_it() {
     assert!(body_text(response).await.contains("Bob is taken."));
     assert!(site.ergo.client().info("bob").await.unwrap().is_none());
     assert!(invite_is_open(&site).await);
+}
+
+#[tokio::test]
+async fn a_deleted_bots_name_is_anyones_once_its_history_expired() {
+    let site = with_invite_from_alice().await;
+    site.execute(&format!(
+        "INSERT INTO bots (account, owner, created_at, removed_at)
+         VALUES ('bob', 'alice', 0, unixepoch() - {HISTORY_EXPIRY})"
+    ))
+    .await;
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_eq!(response.status(), 200);
+    assert!(site.ergo.client().info("bob").await.unwrap().is_some());
+    assert!(site.db.member("bob").await.unwrap().is_some());
+    assert!(!invite_is_open(&site).await);
 }
 
 #[tokio::test]

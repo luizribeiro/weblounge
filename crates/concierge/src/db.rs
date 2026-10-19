@@ -1064,13 +1064,6 @@ impl Db {
         .await
     }
 
-    /// Whether a member or a bot holds `account`, in any case. Removed
-    /// members and deleted bots keep their names, even once Ergo has erased
-    /// their accounts and would hand the names out again.
-    pub async fn name_held(&self, account: &str) -> sqlx::Result<bool> {
-        Ok(self.held_by_member(account).await? || self.bot(account).await?.is_some())
-    }
-
     /// Whether a member, removed or not, holds `account`, in any case.
     /// Removed members keep their names, even once Ergo has erased their
     /// accounts and would hand the names out again.
@@ -3029,7 +3022,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn members_and_bots_hold_their_names_in_any_case_even_once_gone() {
+    async fn members_hold_their_names_in_any_case_even_once_removed() {
         let (db, _dir) = with_bots().await;
         execute(
             &db,
@@ -3038,11 +3031,11 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        for name in ["luiz", "ALICE", "gone", "Bender", "marvin", "dalek"] {
-            assert!(db.name_held(name).await.unwrap(), "{name}");
+        for name in ["luiz", "ALICE", "gone"] {
+            assert!(db.held_by_member(name).await.unwrap(), "{name}");
         }
-        for name in ["bob", "bend", "luiz_"] {
-            assert!(!db.name_held(name).await.unwrap(), "{name}");
+        for name in ["bob", "luiz_", "Bender", "dalek"] {
+            assert!(!db.held_by_member(name).await.unwrap(), "{name}");
         }
     }
 
