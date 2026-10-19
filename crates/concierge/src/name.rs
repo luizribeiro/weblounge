@@ -12,14 +12,8 @@ use std::{
 };
 
 use ergo_api::AccountName;
-use sqlx::{
-    Decode, Encode, Sqlite, Type,
-    encode::IsNull,
-    error::BoxDynError,
-    sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef},
-};
 
-use crate::nick::Nick;
+use crate::{nick::Nick, sqlite_newtype::sqlite_newtype};
 
 /// The name of an account of the kind `K`, in the spelling it was
 /// registered under. Names compare and hash in any ASCII case, as Ergo
@@ -94,30 +88,7 @@ impl<K> From<Name<K>> for AccountName {
     }
 }
 
-impl<K> Type<Sqlite> for Name<K> {
-    fn type_info() -> SqliteTypeInfo {
-        <String as Type<Sqlite>>::type_info()
-    }
-
-    fn compatible(ty: &SqliteTypeInfo) -> bool {
-        <String as Type<Sqlite>>::compatible(ty)
-    }
-}
-
-impl<'q, K> Encode<'q, Sqlite> for Name<K> {
-    fn encode_by_ref(
-        &self,
-        args: &mut Vec<SqliteArgumentValue<'q>>,
-    ) -> Result<IsNull, BoxDynError> {
-        self.name.encode_by_ref(args)
-    }
-}
-
-impl<'r, K> Decode<'r, Sqlite> for Name<K> {
-    fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
-        String::decode(value).map(Self::new)
-    }
-}
+sqlite_newtype!(Name, name: String, Name::new);
 
 #[cfg(test)]
 mod tests {
