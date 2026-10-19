@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM outbox WHERE created_at < ? OR give_up_at <= ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "2d68c5807fa13e9eb1c584c74c9aec1431537ff73375045c08e7948567804cbc"
+}

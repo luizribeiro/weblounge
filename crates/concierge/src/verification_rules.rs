@@ -9,9 +9,9 @@ use crate::tree;
 const HOUR: i64 = 60 * 60;
 const DAY: i64 = 24 * HOUR;
 
-/// How long a verification link lasts. The mailer gives up on a message
-/// after as long, so it never delivers a dead link.
-pub const LIFETIME: i64 = outbox::GIVE_UP_AFTER;
+/// How long a verification link lasts. The mailer gives up on the email
+/// that carries it once it stops working.
+pub const LIFETIME: i64 = 2 * DAY;
 /// How long a member has to verify, from the first verification email.
 pub const GRACE_PERIOD: i64 = 7 * DAY;
 /// When the one reminder goes out, after the first verification email.

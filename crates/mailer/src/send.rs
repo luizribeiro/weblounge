@@ -290,7 +290,9 @@ mod tests {
     use crate::config::SMTP_PASSWORD_CREDENTIAL;
     use outbox::{
         GIVE_UP_AFTER, Message,
-        testing::{QUEUED, TestKey, VERIFY_SUBJECT, execute, message, temp_outbox, with_outbox},
+        testing::{
+            NO_SOONER, QUEUED, TestKey, VERIFY_SUBJECT, execute, message, temp_outbox, with_outbox,
+        },
     };
     use tempfile::TempDir;
 
@@ -399,7 +401,11 @@ mod tests {
     /// Queues carol's verification email, sealed to the key published.
     async fn queue_carols(mailer: &Mailer<FakeServer>) {
         let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
-        mailer.outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        mailer
+            .outbox
+            .queue_sealed(&carols, QUEUED, NO_SOONER)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -454,7 +460,11 @@ mod tests {
     async fn once_told_to_stop_sends_what_is_due_and_returns() {
         let (mailer, carols, _dir) = stopping_mailer(FakeServer::default()).await;
         let stop = async {
-            mailer.outbox.queue_sealed(&carols, now()).await.unwrap();
+            mailer
+                .outbox
+                .queue_sealed(&carols, now(), NO_SOONER)
+                .await
+                .unwrap();
         };
 
         mailer.run(stop).await.unwrap();
@@ -469,7 +479,11 @@ mod tests {
         let (mut mailer, carols, _dir) = stopping_mailer(server).await;
         mailer.drain_time = Duration::from_millis(100);
         let stop = async {
-            mailer.outbox.queue_sealed(&carols, now()).await.unwrap();
+            mailer
+                .outbox
+                .queue_sealed(&carols, now(), NO_SOONER)
+                .await
+                .unwrap();
         };
         let started = Instant::now();
 

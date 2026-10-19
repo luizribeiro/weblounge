@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, recipient, subject, body, sealed_to, sealed_body, created_at, attempts\n             FROM outbox\n             WHERE next_attempt_at <= ? AND created_at >= ?\n             ORDER BY created_at, id",
+  "query": "SELECT id, recipient, subject, body, sealed_to, sealed_body, created_at, attempts\n             FROM outbox\n             WHERE next_attempt_at <= ? AND created_at >= ? AND (give_up_at IS NULL OR give_up_at > ?)\n             ORDER BY created_at, id",
   "describe": {
     "columns": [
       {
@@ -45,7 +45,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       false,
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "282517426914cf356a4714390a37a1943b77efa5bebe62187095942d0863fd98"
+  "hash": "f343f8f1c467823722f19bce213d508507e2949e4871e6c5893bcae233474e0f"
 }

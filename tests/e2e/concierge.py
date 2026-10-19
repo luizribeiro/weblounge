@@ -79,7 +79,7 @@ with subtest("concierge-admin runs concierge as the service does, with its state
 with subtest("concierge-migrate brings both databases up to date before concierge or its mailer open them"):
     migrated = credenza.succeed("journalctl -o cat -u concierge-migrate")
     assert "/var/lib/concierge/concierge.db is at migration 20261024120000" in migrated, migrated
-    assert "/var/lib/concierge-outbox/outbox.db is at migration 20261027120000" in migrated, migrated
+    assert "/var/lib/concierge-outbox/outbox.db is at migration 20261028120000" in migrated, migrated
     credenza.succeed("systemctl stop concierge-migrate")
     stopped = credenza.succeed("systemctl is-active concierge concierge-mailer || true").split()
     assert stopped == ["inactive", "inactive"], stopped

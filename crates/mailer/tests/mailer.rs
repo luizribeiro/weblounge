@@ -11,7 +11,7 @@ use std::{
 
 use common::{email::Email, now};
 use mailer::config::SMTP_PASSWORD_CREDENTIAL;
-use outbox::{Message, Outbox, Subject};
+use outbox::{Message, Outbox, Subject, testing::NO_SOONER};
 use tempfile::TempDir;
 
 const LOG_TIMEOUT: Duration = Duration::from_secs(30);
@@ -191,7 +191,10 @@ async fn withdrawing_its_key_needs_only_the_outbox_and_deletes_only_sealed_mail(
         subject: Subject::parse("Verify your email for weblounge").unwrap(),
         body: "Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa\n".into(),
     };
-    outbox.queue_sealed(&message, now()).await.unwrap();
+    outbox
+        .queue_sealed(&message, now(), NO_SOONER)
+        .await
+        .unwrap();
     outbox.queue(&message, now()).await.unwrap();
 
     let output = mailer_command(&fixture, &["--withdraw-key"])

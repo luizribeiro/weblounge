@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO outbox\n             (account, recipient, subject, body, sealed_to, sealed_body, created_at, next_attempt_at,\n              give_up_at)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "7db39ac9debf761c5108cba67793e002e0bbdfdd783dba859bd3845985aad166"
+}

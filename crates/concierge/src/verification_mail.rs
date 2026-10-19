@@ -105,7 +105,11 @@ pub async fn send(
         return Ok(None);
     };
     let id = outbox
-        .queue_sealed(&message(&issued, public_url, kind, now)?, now)
+        .queue_sealed(
+            &message(&issued, public_url, kind, now)?,
+            now,
+            issued.expires_at,
+        )
         .await?;
     // Noted once queued: a failure in between leaves a reminder that may
     // go out twice, two days apart, rather than one that never does.
@@ -291,6 +295,9 @@ mod tests {
         };
         assert_eq!(queued.recipient, "bob@example.org");
         assert_eq!(queued.subject, SUBJECT);
+        let lapsed = verification_rules::expires_at(SENT);
+        assert_eq!(outbox.due(lapsed - 1).await.unwrap().len(), 1);
+        assert!(outbox.due(lapsed).await.unwrap().is_empty());
         let prefix = format!("{PUBLIC_URL}/verify#");
         let code = queued
             .text()

@@ -27,10 +27,9 @@ const DAY: i64 = 24 * HOUR;
 pub const FIRST_RETRY: i64 = MINUTE;
 /// The longest wait between attempts.
 pub const MAX_RETRY: i64 = HOUR;
-/// How long a message waits to be sent before the mailer gives up on it.
-/// Verification links last this long, so a later message would carry a
-/// dead link; and an address that can't be reached in two days is not
-/// worth keeping on the disk.
+/// How long a message waits to be sent before the mailer gives up on it,
+/// unless it was queued to be given up on sooner: an address that can't
+/// be reached in two days is not worth keeping on the disk.
 pub const GIVE_UP_AFTER: i64 = 2 * DAY;
 
 /// When to try a message again after its `attempts`th failure at `now`.
@@ -252,20 +251,27 @@ impl Outbox {
     /// answers its id, which the mailer logs it by.
     pub async fn queue(&self, message: &Message, now: i64) -> sqlx::Result<i64> {
         let body = Body::Plain(message.body.clone());
-        insert(&self.pool, message, &body, now).await
+        insert(&self.pool, message, &body, now, None).await
     }
 
     /// [`queue`](Self::queue)s `message` sealed to the mailer's key, so the
-    /// disk never holds what it says. Fails with [`NoKey`] while the mailer
-    /// has published none, rather than leave the message as it is.
-    pub async fn queue_sealed(&self, message: &Message, now: i64) -> anyhow::Result<i64> {
+    /// disk never holds what it says, for the mailer to give up on by
+    /// `give_up_at` at the latest, when the secret it carries stops
+    /// working. Fails with [`NoKey`] while the mailer has published none,
+    /// rather than leave the message as it is.
+    pub async fn queue_sealed(
+        &self,
+        message: &Message,
+        now: i64,
+        give_up_at: i64,
+    ) -> anyhow::Result<i64> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let key = published_key(&mut *transaction).await?.ok_or(NoKey)?;
         let body = Body::Sealed {
             to: key.to_string(),
             ciphertext: age::encrypt(&key, message.body.as_bytes())?,
         };
-        let id = insert(&mut *transaction, message, &body, now).await?;
+        let id = insert(&mut *transaction, message, &body, now, Some(give_up_at)).await?;
         transaction.commit().await?;
         Ok(id)
     }
@@ -278,10 +284,11 @@ impl Outbox {
             Row,
             "SELECT id, recipient, subject, body, sealed_to, sealed_body, created_at, attempts
              FROM outbox
-             WHERE next_attempt_at <= ? AND created_at >= ?
+             WHERE next_attempt_at <= ? AND created_at >= ? AND (give_up_at IS NULL OR give_up_at > ?)
              ORDER BY created_at, id",
             now,
             given_up_before,
+            now,
         )
         .fetch_all(&self.pool)
         .await?;
@@ -334,9 +341,13 @@ impl Outbox {
     /// Deletes the messages the mailer has given up on by `now`.
     pub async fn delete_given_up(&self, now: i64) -> sqlx::Result<Deletion> {
         let given_up_before = given_up_before(now);
-        let deleted = sqlx::query!("DELETE FROM outbox WHERE created_at < ?", given_up_before)
-            .execute(&self.pool)
-            .await?;
+        let deleted = sqlx::query!(
+            "DELETE FROM outbox WHERE created_at < ? OR give_up_at <= ?",
+            given_up_before,
+            now,
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(self.erase(deleted.rows_affected()).await)
     }
 
@@ -362,6 +373,7 @@ async fn insert(
     message: &Message,
     body: &Body,
     now: i64,
+    give_up_at: Option<i64>,
 ) -> sqlx::Result<i64> {
     let (recipient, subject) = (message.to.as_str(), message.subject.as_str());
     let (text, sealed_to, sealed_body) = match body {
@@ -370,8 +382,9 @@ async fn insert(
     };
     sqlx::query!(
         "INSERT INTO outbox
-             (account, recipient, subject, body, sealed_to, sealed_body, created_at, next_attempt_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             (account, recipient, subject, body, sealed_to, sealed_body, created_at, next_attempt_at,
+              give_up_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         message.account,
         recipient,
         subject,
@@ -380,6 +393,7 @@ async fn insert(
         sealed_body,
         now,
         now,
+        give_up_at,
     )
     .execute(executor)
     .await
@@ -425,6 +439,9 @@ pub mod testing {
     use super::*;
 
     pub const QUEUED: i64 = 1_760_000_000;
+    /// A time to give up on sealed mail that's no sooner than the outbox
+    /// gives up on any.
+    pub const NO_SOONER: i64 = i64::MAX;
     pub const VERIFY_SUBJECT: &str = "Verify your email for weblounge";
 
     pub async fn temp_outbox() -> (Outbox, tempfile::TempDir) {
@@ -594,7 +611,10 @@ mod tests {
         let key = TestKey::publish(&outbox).await;
         let alices = message(Some("alice"), "alice@example.org", VERIFY_SUBJECT);
 
-        outbox.queue_sealed(&alices, QUEUED).await.unwrap();
+        outbox
+            .queue_sealed(&alices, QUEUED, NO_SOONER)
+            .await
+            .unwrap();
 
         let due = outbox.due(QUEUED).await.unwrap();
         let Body::Sealed { to, .. } = &due[0].body else {
@@ -617,7 +637,10 @@ mod tests {
         let (outbox, dir) = temp_outbox().await;
         let alices = message(Some("alice"), "alice@example.org", VERIFY_SUBJECT);
 
-        let error = outbox.queue_sealed(&alices, QUEUED).await.unwrap_err();
+        let error = outbox
+            .queue_sealed(&alices, QUEUED, NO_SOONER)
+            .await
+            .unwrap_err();
 
         assert_eq!(error.downcast_ref(), Some(&NoKey));
         assert!(outbox.due(QUEUED).await.unwrap().is_empty());
@@ -629,7 +652,10 @@ mod tests {
         let (outbox, _dir) = with_outbox().await;
         let old = TestKey::publish(&outbox).await;
         let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
-        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        outbox
+            .queue_sealed(&carols, QUEUED, NO_SOONER)
+            .await
+            .unwrap();
         let new = TestKey::generate().public();
 
         let deletion = outbox.publish_key(&new).await.unwrap();
@@ -643,7 +669,10 @@ mod tests {
         );
         let due = outbox.due(QUEUED + 60).await.unwrap();
         assert_eq!(recipients(&due), ["alice@example.org", "bob@example.org"]);
-        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        outbox
+            .queue_sealed(&carols, QUEUED, NO_SOONER)
+            .await
+            .unwrap();
         assert_eq!(
             outbox
                 .delete_sealed_to_others(&old.public())
@@ -652,7 +681,10 @@ mod tests {
                 .messages,
             1
         );
-        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        outbox
+            .queue_sealed(&carols, QUEUED, NO_SOONER)
+            .await
+            .unwrap();
         assert_eq!(
             outbox.delete_sealed_to_others(&new).await.unwrap().messages,
             0
@@ -665,7 +697,10 @@ mod tests {
         let (outbox, _dir) = with_outbox().await;
         TestKey::publish(&outbox).await;
         let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
-        outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        outbox
+            .queue_sealed(&carols, QUEUED, NO_SOONER)
+            .await
+            .unwrap();
 
         let deletion = outbox.withdraw_key().await.unwrap();
 
@@ -679,7 +714,10 @@ mod tests {
         assert_eq!(outbox.published_key().await.unwrap(), None);
         let due = outbox.due(QUEUED + 60).await.unwrap();
         assert_eq!(recipients(&due), ["alice@example.org", "bob@example.org"]);
-        let error = outbox.queue_sealed(&carols, QUEUED).await.unwrap_err();
+        let error = outbox
+            .queue_sealed(&carols, QUEUED, NO_SOONER)
+            .await
+            .unwrap_err();
         assert_eq!(error.downcast_ref(), Some(&NoKey));
         assert_eq!(outbox.withdraw_key().await.unwrap().messages, 0);
     }
@@ -693,7 +731,12 @@ mod tests {
         let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
         let mut sealed = Vec::new();
         for publish in [true, false] {
-            sealed.push(outbox.queue_sealed(&carols, QUEUED).await.unwrap());
+            sealed.push(
+                outbox
+                    .queue_sealed(&carols, QUEUED, NO_SOONER)
+                    .await
+                    .unwrap(),
+            );
             if publish {
                 outbox
                     .publish_key(&TestKey::generate().public())
@@ -704,7 +747,12 @@ mod tests {
             }
         }
         TestKey::publish(&outbox).await;
-        sealed.push(outbox.queue_sealed(&carols, QUEUED).await.unwrap());
+        sealed.push(
+            outbox
+                .queue_sealed(&carols, QUEUED, NO_SOONER)
+                .await
+                .unwrap(),
+        );
         let other = TestKey::generate().public();
         outbox.delete_sealed_to_others(&other).await.unwrap();
 
@@ -717,7 +765,10 @@ mod tests {
         let (outbox, _dir) = with_outbox().await;
         TestKey::publish(&outbox).await;
         let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
-        let sealed = outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        let sealed = outbox
+            .queue_sealed(&carols, QUEUED, NO_SOONER)
+            .await
+            .unwrap();
         let alice = outbox.due(QUEUED).await.unwrap().remove(0);
 
         for id in [sealed, alice.id] {
@@ -746,7 +797,7 @@ mod tests {
         let alices = message(Some("alice"), "alice@example.org", VERIFY_SUBJECT);
         let sealing = {
             let outbox = outbox.clone();
-            tokio::spawn(async move { outbox.queue_sealed(&alices, QUEUED).await })
+            tokio::spawn(async move { outbox.queue_sealed(&alices, QUEUED, NO_SOONER).await })
         };
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
@@ -851,6 +902,51 @@ mod tests {
         assert_eq!(recipients(&due), ["bob@example.org"]);
         let deletion = outbox.delete_given_up(alices_end).await.unwrap();
         assert_eq!(deletion.messages, 0);
+    }
+
+    #[tokio::test]
+    async fn a_sealed_message_is_given_up_on_when_its_secret_stops_working() {
+        let (outbox, _dir) = with_outbox().await;
+        TestKey::publish(&outbox).await;
+        let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
+        let lapses_at = QUEUED + HOUR;
+        outbox
+            .queue_sealed(&carols, QUEUED + 60, lapses_at)
+            .await
+            .unwrap();
+        let later = message(Some("dave"), "dave@example.org", VERIFY_SUBJECT);
+        let never_sooner = QUEUED + GIVE_UP_AFTER + DAY;
+        outbox
+            .queue_sealed(&later, QUEUED + 60, never_sooner)
+            .await
+            .unwrap();
+        let all = [
+            "alice@example.org",
+            "bob@example.org",
+            "carol@example.org",
+            "dave@example.org",
+        ];
+        assert_eq!(recipients(&outbox.due(lapses_at - 1).await.unwrap()), all);
+        assert_eq!(
+            outbox
+                .delete_given_up(lapses_at - 1)
+                .await
+                .unwrap()
+                .messages,
+            0
+        );
+
+        let due = outbox.due(lapses_at).await.unwrap();
+        let deletion = outbox.delete_given_up(lapses_at).await.unwrap();
+
+        assert_eq!(
+            recipients(&due),
+            ["alice@example.org", "bob@example.org", "dave@example.org"]
+        );
+        assert_eq!(deletion.messages, 1);
+        let daves_end = QUEUED + 60 + GIVE_UP_AFTER + 1;
+        assert!(outbox.due(daves_end).await.unwrap().is_empty());
+        assert_eq!(outbox.delete_given_up(daves_end).await.unwrap().messages, 3);
     }
 
     #[tokio::test]
