@@ -109,8 +109,12 @@ accounts are bots and whose they are. Members make, reset and delete
 their own on the members' site's Bots tab, three at a time once they've
 confirmed their email; admins use `concierge-admin bot …`, which shares
 its code and isn't held to the three. A bot's generated password is
-shown once. Deleting a bot erases its Ergo account, disconnecting it,
-and its name stays taken. Bots set mode `+B` on themselves.
+shown once. Deleting a bot erases its Ergo account, disconnecting it.
+Its owner may make a bot under its name again at once; anyone else,
+member or newcomer, once Ergo's chat history has expired for it, so
+nobody passes for it in the scrollback. Concierge is handed that
+period, `history.restrictions.expire-time`, from Ergo's settings. Bots
+set mode `+B` on themselves.
 
 `templates/bot` is a Go bot to start from (`nix flake init -t
 github:luizribeiro/weblounge#bot`); its README covers running it with and
@@ -201,7 +205,7 @@ machine. They print plain lines a script can read:
 | `bot create <owner> <name> [--note …]`          | Registers a member's bot, prints its generated password once     |
 | `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
 | `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |
-| `bot delete <name>`                             | Erases a bot's account, disconnecting it; its name stays taken   |
+| `bot delete <name>`                             | Erases a bot's account, disconnecting it, and frees its name     |
 | `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password; `-` is stdin |
 
 After `member delete`, an oper still runs `/NS ERASE <account>`. `bot
