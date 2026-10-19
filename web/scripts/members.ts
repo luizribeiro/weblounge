@@ -1,11 +1,11 @@
 import { animateChair } from "./chair/animate";
 import "./dialog";
 import "./invite";
+import "./link-code";
 import "./needed-to-change";
 import "./password";
 import "./signup";
 import "./unsaved";
-import "./verify";
 
 const FEEDBACK_MS = 1500;
 

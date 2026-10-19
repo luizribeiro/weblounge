@@ -86,6 +86,15 @@
             </ul>
 {%- endmacro %}
 
+{# The script fills the code in from the link's fragment, and hides the field. #}
+{% macro link_code_field(code_pattern, code) %}
+          <div class="field" data-link-code>
+            <label for="code">Code</label>
+            <input id="code" name="code" required pattern="{{ code_pattern }}"{% if !code.is_empty() %} value="{{ code }}"{% endif %} autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="code-hint">
+            <p class="hint" id="code-hint" data-cut-short="This link looks cut short. Paste the whole link from your email.">From the link in your email: the part after the #. Pasting the whole link works too.</p>
+          </div>
+{%- endmacro %}
+
 {% macro revoke_invites(open) %}
         <p id="revoke-invites-question">Revoke your {{ crate::invite_rules::unused_in_words(*open) }}? The links you shared stop working right away, and you can make new ones.</p>
         <form method="post" action="/invites/revoke">

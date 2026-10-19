@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "components.html" as components %}
 
 {% block title %}Confirm your email{% endblock %}
 
@@ -8,11 +9,7 @@
         <h1 id="verify-title">Confirm your email.</h1>
         <p>One press confirms the address this link was sent to.</p>
         <form class="form" method="post" action="/verify" data-verify>
-          <div class="field" data-link-code>
-            <label for="code">Code</label>
-            <input id="code" name="code" required pattern="{{ code_pattern }}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="code-hint">
-            <p class="hint" id="code-hint" data-cut-short="This link looks cut short. Paste the whole link from your email.">From the link in your email: the part after the #. Pasting the whole link works too.</p>
-          </div>
+          {%- call components::link_code_field(code_pattern, "") %}{% endcall %}
           <button class="button button-primary" type="submit">Confirm my email</button>
         </form>
       </section>
