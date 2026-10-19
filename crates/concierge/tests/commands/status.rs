@@ -17,7 +17,7 @@ async fn reports_the_url_state_key_database_and_ergo() {
             "public url: https://members.weblounge.localhost:10443\n\
              state directory: {} (writable by uid {})\n\
              session key: 64 bytes\n\
-             database: {}/concierge.db (migration 20261024120000, 0 members)\n\
+             database: {}/concierge.db (migration 20261029120000, 0 members)\n\
              ergo: {} answers, version 2.19.1-fake\n",
             state.display(),
             fs::metadata(state).unwrap().uid(),

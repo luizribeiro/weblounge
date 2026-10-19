@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM password_reset_codes WHERE expires_at <= ? OR account = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "8f5d714ff3fae3ff499699649ed34fc5e28239b292fbeaed8d897226b83da4b0"
+}

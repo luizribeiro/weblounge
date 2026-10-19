@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM password_reset_codes WHERE account = ? AND email IS NOT ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "51d5c16abb405d8aa77daacd3232143d855c5b8e70b780a509e6c89559533b4e"
+}

@@ -5,7 +5,11 @@ use common::sqlite;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 use crate::{
-    invite_code, invite_rules, link_code, oauth::CodeChallenge, tree::Branch, verification_rules,
+    invite_code, invite_rules, link_code,
+    oauth::CodeChallenge,
+    reset_rules::{self, Lookup},
+    tree::Branch,
+    verification_rules,
 };
 
 static MIGRATOR: Migrator = sqlx::migrate!();
@@ -252,6 +256,34 @@ pub enum Verification {
     AddressTaken,
 }
 
+/// A current member with a confirmed email, which a reset link may go to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recoverable {
+    /// Ergo's canonical spelling of the member's account name.
+    pub account: String,
+    pub email: String,
+}
+
+/// A code just issued to reset a member's password, to mail to them once.
+pub struct IssuedReset {
+    pub code: String,
+    pub member: Recoverable,
+    pub expires_at: i64,
+}
+
+/// A reset code taken out of the database by its one use, which
+/// [`Db::restore_reset_code`] puts back if the reset fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TakenReset {
+    code_hash: Vec<u8>,
+    /// Ergo's canonical spelling of the member's account name.
+    pub account: String,
+    /// The confirmed address it went to.
+    pub email: String,
+    created_at: i64,
+    expires_at: i64,
+}
+
 /// Concierge's SQLite database, migrated to the schema this build knows.
 #[derive(Clone)]
 pub struct Db {
@@ -325,6 +357,13 @@ impl Db {
         .await?;
         sqlx::query!(
             "DELETE FROM verification_codes WHERE account = ? AND email IS NOT ?",
+            account,
+            email,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query!(
+            "DELETE FROM password_reset_codes WHERE account = ? AND email IS NOT ?",
             account,
             email,
         )
@@ -494,6 +533,141 @@ impl Db {
         .map(drop)
     }
 
+    /// The current member with a confirmed email that `lookup` names, by
+    /// their nick or that address, in any case.
+    pub async fn recoverable_member(&self, lookup: &Lookup) -> sqlx::Result<Option<Recoverable>> {
+        match lookup {
+            Lookup::Nick(nick) => {
+                sqlx::query_as!(
+                    Recoverable,
+                    r#"SELECT account AS "account!", email AS "email!" FROM members
+                       WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NOT NULL"#,
+                    nick
+                )
+                .fetch_optional(&self.pool)
+                .await
+            }
+            Lookup::Email(email) => {
+                sqlx::query_as!(
+                    Recoverable,
+                    r#"SELECT account AS "account!", email AS "email!" FROM members
+                       WHERE lower(email) = lower(?) AND removed_at IS NULL
+                         AND email_verified_at IS NOT NULL"#,
+                    email
+                )
+                .fetch_optional(&self.pool)
+                .await
+            }
+        }
+    }
+
+    /// Issues a code that resets `account`'s password, to be mailed at
+    /// `now` to their confirmed email, replacing any code they had, and
+    /// cleans up everyone's expired codes while at it. Answers `None`
+    /// unless `account` is a current member with a confirmed email.
+    pub async fn issue_reset_code(
+        &self,
+        account: &str,
+        now: i64,
+    ) -> sqlx::Result<Option<IssuedReset>> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let member = sqlx::query_as!(
+            Recoverable,
+            r#"SELECT account AS "account!", email AS "email!" FROM members
+               WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NOT NULL"#,
+            account
+        )
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(member) = member else {
+            return Ok(None);
+        };
+        sqlx::query!(
+            "DELETE FROM password_reset_codes WHERE expires_at <= ? OR account = ?",
+            now,
+            member.account,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        let code = link_code::generate(link_code::MAILED_LENGTH);
+        let code_hash = link_code::hash(&code);
+        let expires_at = reset_rules::expires_at(now);
+        sqlx::query!(
+            "INSERT INTO password_reset_codes (code_hash, account, email, created_at, expires_at)
+             VALUES (?, ?, ?, ?, ?)",
+            code_hash,
+            member.account,
+            member.email,
+            now,
+            expires_at,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(Some(IssuedReset {
+            code,
+            member,
+            expires_at,
+        }))
+    }
+
+    /// Takes `code` out of the database, if it's a reset code that works at
+    /// `now`: unexpired, and sent to the address that's still its member's
+    /// confirmed one. A code that doesn't work goes too.
+    pub async fn take_reset_code(&self, code: &str, now: i64) -> sqlx::Result<Option<TakenReset>> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let code_hash = link_code::hash(code);
+        let taken = sqlx::query!(
+            "DELETE FROM password_reset_codes WHERE code_hash = ?
+             RETURNING account, email, created_at, expires_at",
+            code_hash,
+        )
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(taken) = taken else {
+            return Ok(None);
+        };
+        let still_theirs = sqlx::query_scalar!(
+            r#"SELECT EXISTS (
+                   SELECT 1 FROM members
+                   WHERE account = ? AND email = ? AND email_verified_at IS NOT NULL
+                     AND removed_at IS NULL
+               ) AS "still_theirs!: bool""#,
+            taken.account,
+            taken.email,
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(
+            (still_theirs && now < taken.expires_at).then_some(TakenReset {
+                code_hash,
+                account: taken.account,
+                email: taken.email,
+                created_at: taken.created_at,
+                expires_at: taken.expires_at,
+            }),
+        )
+    }
+
+    /// Puts back a code [`Db::take_reset_code`] took, unless a newer one
+    /// replaced it meanwhile.
+    pub async fn restore_reset_code(&self, taken: &TakenReset) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT OR IGNORE INTO password_reset_codes
+                 (code_hash, account, email, created_at, expires_at)
+             VALUES (?, ?, ?, ?, ?)",
+            taken.code_hash,
+            taken.account,
+            taken.email,
+            taken.created_at,
+            taken.expires_at,
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
     /// Every member's account, removed ones included.
     pub async fn member_accounts(&self) -> sqlx::Result<Vec<MemberAccount>> {
         sqlx::query_as!(
@@ -584,8 +758,8 @@ impl Db {
         Ok(deleted.rows_affected())
     }
 
-    /// Clears everything personal about a member, their verification codes
-    /// included, ends their sessions and revokes their open invites. Their row stays as their place in the
+    /// Clears everything personal about a member, their verification and
+    /// reset codes included, ends their sessions and revokes their open invites. Their row stays as their place in the
     /// invite tree, so the people they invited stay attached. Mail waiting
     /// for them is in the outbox's own database.
     pub async fn remove_member(&self, account: &str, now: i64) -> sqlx::Result<Removal> {
@@ -602,6 +776,12 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         delete_verification_codes(&mut *transaction, account).await?;
+        sqlx::query!(
+            "DELETE FROM password_reset_codes WHERE account = ?",
+            account
+        )
+        .execute(&mut *transaction)
+        .await?;
         let sessions_ended = delete_sessions(&mut *transaction, account).await?;
         let invites_revoked = revoke_open_invites(&mut *transaction, account, now).await?;
         transaction.commit().await?;
@@ -2180,6 +2360,221 @@ pub(crate) mod tests {
 
         for (account, progress) in &progress[..2] {
             assert_eq!(progress.last_sent_at, None, "{account}");
+        }
+    }
+
+    mod reset {
+        use super::*;
+
+        /// carol, as `with_unverified_members` confirmed her email.
+        fn carol() -> Recoverable {
+            Recoverable {
+                account: "carol".into(),
+                email: "carol@example.org".into(),
+            }
+        }
+
+        async fn issue(db: &Db, account: &str, now: i64) -> IssuedReset {
+            db.issue_reset_code(account, now).await.unwrap().unwrap()
+        }
+
+        #[tokio::test]
+        async fn finds_a_confirmed_member_by_nick_or_email_in_any_case() {
+            let (db, _dir) = with_unverified_members().await;
+            for input in ["carol", "CAROL", "carol@example.org", "Carol@EXAMPLE.org"] {
+                let lookup = Lookup::parse(input).unwrap();
+                let found = db.recoverable_member(&lookup).await.unwrap();
+                assert_eq!(found, Some(carol()), "{input}");
+            }
+        }
+
+        #[tokio::test]
+        async fn unconfirmed_removed_and_unknown_members_are_not_found_or_issued_a_code() {
+            let (db, _dir) = with_unverified_members().await;
+            execute(
+                &db,
+                "INSERT INTO members (account, email, email_verified_at, joined_at)
+                 VALUES ('dave', 'dave@example.org', 1, 0)",
+            )
+            .await
+            .unwrap();
+            db.remove_member("dave", MAILED).await.unwrap();
+            for input in [
+                "alice",
+                "alice@example.org",
+                "dave",
+                "dave@example.org",
+                "nobody",
+                "nobody@example.org",
+                "carol+irc@example.org",
+            ] {
+                let lookup = Lookup::parse(input).unwrap();
+                assert_eq!(
+                    db.recoverable_member(&lookup).await.unwrap(),
+                    None,
+                    "{input}"
+                );
+            }
+            for account in ["alice", "dave", "nobody"] {
+                let issued = db.issue_reset_code(account, MAILED).await.unwrap();
+                assert!(issued.is_none(), "{account}");
+            }
+        }
+
+        #[tokio::test]
+        async fn a_code_goes_to_the_confirmed_address_and_only_its_hash_is_kept() {
+            let (db, dir) = with_unverified_members().await;
+
+            let issued = issue(&db, "CAROL", MAILED).await;
+
+            assert_eq!(issued.member, carol());
+            assert_eq!(issued.code.len(), link_code::MAILED_LENGTH);
+            assert_eq!(issued.expires_at, reset_rules::expires_at(MAILED));
+            assert!(!files_contain(&dir, issued.code.as_bytes()));
+        }
+
+        #[tokio::test]
+        async fn a_code_works_once_for_its_member() {
+            let (db, _dir) = with_unverified_members().await;
+            let issued = issue(&db, "carol", MAILED).await;
+
+            let taken = db.take_reset_code(&issued.code, MAILED).await.unwrap();
+
+            let taken = taken.unwrap();
+            assert_eq!(
+                (taken.account.as_str(), taken.email.as_str()),
+                ("carol", "carol@example.org")
+            );
+            assert_eq!(
+                db.take_reset_code(&issued.code, MAILED).await.unwrap(),
+                None
+            );
+        }
+
+        async fn reset_codes(db: &Db) -> i64 {
+            sqlx::query_scalar("SELECT count(*) FROM password_reset_codes")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap()
+        }
+
+        #[tokio::test]
+        async fn a_new_code_replaces_the_last() {
+            let (db, _dir) = with_unverified_members().await;
+            let first = issue(&db, "carol", MAILED).await;
+
+            let second = issue(&db, "carol", MAILED + 60).await;
+
+            assert_eq!(reset_codes(&db).await, 1);
+            assert_eq!(
+                db.take_reset_code(&first.code, MAILED + 60).await.unwrap(),
+                None
+            );
+            assert!(
+                db.take_reset_code(&second.code, MAILED + 60)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+        }
+
+        #[tokio::test]
+        async fn a_code_works_until_it_expires_and_expired_ones_are_cleaned_up() {
+            let (db, _dir) = with_unverified_members().await;
+            execute(
+                &db,
+                "UPDATE members SET email_verified_at = 1 WHERE account = 'bob'",
+            )
+            .await
+            .unwrap();
+            let carols = issue(&db, "carol", MAILED).await;
+            let bobs = issue(&db, "bob", MAILED).await;
+
+            let just_before = db
+                .take_reset_code(&carols.code, carols.expires_at - 1)
+                .await;
+            let at_expiry = db.take_reset_code(&bobs.code, bobs.expires_at).await;
+
+            assert!(just_before.unwrap().is_some());
+            assert_eq!(at_expiry.unwrap(), None);
+            issue(&db, "bob", MAILED).await;
+            issue(&db, "carol", reset_rules::expires_at(MAILED)).await;
+            assert_eq!(reset_codes(&db).await, 1);
+        }
+
+        #[tokio::test]
+        async fn a_code_stops_working_once_its_address_changes_or_its_member_goes() {
+            let (db, _dir) = with_unverified_members().await;
+            let changed = issue(&db, "carol", MAILED).await;
+            execute(
+                &db,
+                "UPDATE members SET email = 'carol@example.net' WHERE account = 'carol'",
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                db.take_reset_code(&changed.code, MAILED).await.unwrap(),
+                None
+            );
+
+            db.update_settings("carol", "carol@example.org", false)
+                .await
+                .unwrap();
+            execute(
+                &db,
+                "UPDATE members SET email_verified_at = 1 WHERE account = 'carol'",
+            )
+            .await
+            .unwrap();
+            let saved = issue(&db, "carol", MAILED).await;
+            db.update_settings("carol", "carol@example.net", false)
+                .await
+                .unwrap();
+            db.update_settings("carol", "carol@example.org", false)
+                .await
+                .unwrap();
+            execute(
+                &db,
+                "UPDATE members SET email_verified_at = 1 WHERE account = 'carol'",
+            )
+            .await
+            .unwrap();
+            assert_eq!(db.take_reset_code(&saved.code, MAILED).await.unwrap(), None);
+
+            let removed = issue(&db, "carol", MAILED).await;
+            db.remove_member("carol", MAILED).await.unwrap();
+            assert_eq!(
+                db.take_reset_code(&removed.code, MAILED).await.unwrap(),
+                None
+            );
+        }
+
+        #[tokio::test]
+        async fn a_taken_code_can_be_put_back_unless_a_newer_one_replaced_it() {
+            let (db, _dir) = with_unverified_members().await;
+            let issued = issue(&db, "carol", MAILED).await;
+            let taken = db
+                .take_reset_code(&issued.code, MAILED)
+                .await
+                .unwrap()
+                .unwrap();
+
+            db.restore_reset_code(&taken).await.unwrap();
+
+            let again = db.take_reset_code(&issued.code, MAILED).await.unwrap();
+            assert_eq!(again.as_ref(), Some(&taken));
+            let newer = issue(&db, "carol", MAILED + 60).await;
+            db.restore_reset_code(&taken).await.unwrap();
+            assert_eq!(
+                db.take_reset_code(&issued.code, MAILED).await.unwrap(),
+                None
+            );
+            assert!(
+                db.take_reset_code(&newer.code, MAILED)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
         }
     }
 

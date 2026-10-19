@@ -71,14 +71,14 @@ with subtest("concierge-admin runs concierge as the service does, with its state
         "public url: https://members.weblounge.org\n"
         f"state directory: /var/lib/concierge (writable by uid {service_uid})\n"
         "session key: 64 bytes\n"
-        "database: /var/lib/concierge/concierge.db (migration 20261024120000, 0 members)\n"
+        "database: /var/lib/concierge/concierge.db (migration 20261029120000, 0 members)\n"
         "ergo: http://127.0.0.1:8089/ answers, version 2.19.1\n"
     ), (service_uid, status)
     credenza.fail(concierge_admin_command("no-such-command"))
 
 with subtest("concierge-migrate brings both databases up to date before concierge or its mailer open them"):
     migrated = credenza.succeed("journalctl -o cat -u concierge-migrate")
-    assert "/var/lib/concierge/concierge.db is at migration 20261024120000" in migrated, migrated
+    assert "/var/lib/concierge/concierge.db is at migration 20261029120000" in migrated, migrated
     assert "/var/lib/concierge-outbox/outbox.db is at migration 20261028120000" in migrated, migrated
     credenza.succeed("systemctl stop concierge-migrate")
     stopped = credenza.succeed("systemctl is-active concierge concierge-mailer || true").split()
@@ -135,7 +135,7 @@ with subtest("an admin's root invite brings the network's first member in"):
     dana: Account = {"account": "Dana", "password": "an-old-password-of-hers"}
     add_member(**dana, admin=True)
     status = concierge_admin("status")
-    assert "(migration 20261024120000, 1 members)" in status, status
+    assert "(migration 20261029120000, 1 members)" in status, status
 
 with subtest("concierge-admin member reset-password replaces the IRC password and prints the new one"):
     password = concierge_admin("member", "reset-password", "dana").strip()

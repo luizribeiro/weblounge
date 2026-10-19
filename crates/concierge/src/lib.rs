@@ -17,6 +17,7 @@ pub mod password_rules;
 pub mod platform;
 pub mod qr;
 pub mod rate_limit;
+pub mod reset_rules;
 mod routes;
 pub mod session;
 pub mod status;

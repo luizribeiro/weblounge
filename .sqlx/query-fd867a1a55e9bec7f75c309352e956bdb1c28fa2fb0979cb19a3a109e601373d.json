@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (\n                   SELECT 1 FROM members\n                   WHERE account = ? AND email = ? AND email_verified_at IS NOT NULL\n                     AND removed_at IS NULL\n               ) AS \"still_theirs!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "still_theirs!: bool",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fd867a1a55e9bec7f75c309352e956bdb1c28fa2fb0979cb19a3a109e601373d"
+}

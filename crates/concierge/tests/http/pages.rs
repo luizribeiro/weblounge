@@ -55,7 +55,10 @@ async fn privacy_says_how_long_mail_and_its_links_last() {
     );
     assert!(page.contains("until it's sent, 2 days at most;"), "{page}");
     assert!(
-        page.contains("only as a hash, and they expire after 2 days."),
+        page.contains(
+            "only as a hash: links to confirm your address expire after 2 days, \
+             and links to reset your password after 1 hour."
+        ),
         "{page}"
     );
 }

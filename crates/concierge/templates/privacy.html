@@ -14,7 +14,7 @@
         <p>Channel messages and direct messages are kept on the server for two weeks, so you can scroll back after a restart, and then deleted. You can delete a message you sent, if your app offers it. Remember that other people's apps may keep their own copy of what you send, for as long as they like.</p>
         <h2>Email</h2>
         <p>We send email through MXroute, our mail provider. A message waits on our server only until it's sent, {{ outbox_wait }} at most; replies and bounces land in our mailbox there.</p>
-        <p>We keep links to confirm your address only as a hash, and they expire after {{ link_lifetime }}. Emails about new features and planned downtime are opt-in, and you can turn them off on your account page.</p>
+        <p>We keep the links we email you only as a hash: links to confirm your address expire after {{ link_lifetime }}, and links to reset your password after {{ reset_lifetime }}. Emails about new features and planned downtime are opt-in, and you can turn them off on your account page.</p>
         <h2>Leaving</h2>
         <p>Ask an admin and they'll delete your account: your email and sessions go, and your password stops working. Your nick stays in the invite tree, so the people you invited stay attached.</p>
       </article>
