@@ -27,7 +27,16 @@
         {%- else %}
         <ul class="bots">
           {%- for bot in bots %}
-          <li><strong>{{ bot.account }}</strong>{% if let Some(note) = bot.note %} <span class="muted">· {{ note }}</span>{% endif %}</li>
+          <li class="bot">
+            <span class="bot-name"><strong>{{ bot.account }}</strong>{% if let Some(note) = bot.note %} <span class="muted">· {{ note }}</span>{% endif %}</span>
+            <span class="bot-actions">
+              <a class="button button-small" href="/bots/{{ bot.account }}/password" data-dialog="reset-{{ bot.account }}">New password</a>
+            </span>
+            <dialog class="card" id="reset-{{ bot.account }}" aria-labelledby="reset-{{ bot.account }}-title" aria-describedby="reset-{{ bot.account }}-question">
+              <h2 class="eyebrow" id="reset-{{ bot.account }}-title">New password for {{ bot.account }}</h2>
+              {%- call components::reset_bot_password(bot.account) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep it</button>{% endcall %}
+            </dialog>
+          </li>
           {%- endfor %}
         </ul>
         {%- endif %}

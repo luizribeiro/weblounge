@@ -82,16 +82,11 @@ async fn bots_tab(site: &Site, cookie: &str) -> String {
     body_text(response).await
 }
 
-/// The bots a page lists, as each item reads.
-fn listed(page: &str) -> Vec<&str> {
-    let Some(list) = page.split(r#"<ul class="bots">"#).nth(1) else {
-        return Vec::new();
-    };
-    let list = &list[..list.find("</ul>").unwrap()];
-    list.split("<li>")
-        .skip(1)
-        .map(|item| item.split("</li>").next().unwrap())
-        .collect()
+/// The bots a page lists, as each one's name and note read.
+fn listed(page: &str) -> Vec<String> {
+    let name =
+        Regex::new(r#"<span class="bot-name">(.*?)</span>\s*<span class="bot-actions">"#).unwrap();
+    name.captures_iter(page).map(|c| c[1].to_owned()).collect()
 }
 
 /// How the tab counts `n` bots out of the most a member may have.
@@ -239,7 +234,7 @@ async fn making_a_bot_shows_its_password_once_in_a_dialog() {
     let later = bots_tab(&site, &cookie).await;
     assert!(passwords(&later).is_empty(), "{later}");
     assert!(
-        !later.contains(&password) && !later.contains("<dialog"),
+        !later.contains(&password) && !later.contains(r#"id="bot-password""#),
         "{later}"
     );
     assert_eq!(listed(&later), ["<strong>Bender</strong>"]);
@@ -459,4 +454,142 @@ async fn says_so_when_ergo_makes_the_bot_but_doesnt_set_it_up() {
     );
     assert!(passwords(&page).is_empty(), "{page}");
     assert_eq!(listed(&page), ["<strong>bender</strong>"]);
+}
+
+/// alice, confirmed and signed in with the answered cookie, with the bot
+/// bender and its password.
+async fn alice_with_bender(site: &Site) -> (String, String) {
+    site.add_verified_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let (status, page) = make(site, &cookie, "bender").await;
+    assert_eq!(status, 200, "{page}");
+    (cookie, shown_password(&page))
+}
+
+#[tokio::test]
+async fn a_new_password_replaces_the_old_and_is_shown_once() {
+    let site = Site::start().await;
+    let (cookie, old) = alice_with_bender(&site).await;
+    let client = site.ergo.client();
+    client.set_vhost("bender", "").await.unwrap();
+
+    let response = site.post("/bots/BENDER/password", &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let page = body_text(response).await;
+    let new = shown_password(&page);
+    assert_ne!(new, old);
+    assert!(
+        page.contains("<h2 class=\"eyebrow\" id=\"bot-password-title\">bender's password</h2>"),
+        "{page}"
+    );
+    assert!(signs_in_to_ergo(&site, "bender", &new).await);
+    assert!(!signs_in_to_ergo(&site, "bender", &old).await);
+    assert_eq!(
+        site.ergo.vhost("bender").as_deref(),
+        Some("weblounge/bot/alice")
+    );
+    let later = bots_tab(&site, &cookie).await;
+    assert!(
+        passwords(&later).is_empty() && !later.contains(&new),
+        "{later}"
+    );
+}
+
+#[tokio::test]
+async fn the_tab_asks_before_making_a_new_password() {
+    let site = Site::start().await;
+    let (cookie, _) = alice_with_bender(&site).await;
+    let question = "Make bender a new password? Its current one stops working. \
+                    If it's connected, it stays connected until it reconnects.";
+
+    let tab = bots_tab(&site, &cookie).await;
+    assert!(
+        tab.contains(r#"<a class="button button-small" href="/bots/bender/password" data-dialog="reset-bender">New password</a>"#),
+        "{tab}"
+    );
+    assert!(
+        tab.contains(r#"<dialog class="card" id="reset-bender""#),
+        "{tab}"
+    );
+    assert!(tab.contains(question), "{tab}");
+
+    let response = site.get("/bots/bender/password", Some(&cookie)).await;
+    assert_eq!(response.status(), 200);
+    let page = body_text(response).await;
+    assert!(page.contains(question), "{page}");
+    assert!(
+        page.contains(
+            r#"<form class="dialog-actions" method="post" action="/bots/bender/password">"#
+        ),
+        "{page}"
+    );
+    assert!(
+        page.contains(r#"<a class="button" href="/bots">Keep it</a>"#),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn an_unconfirmed_member_still_resets_their_bots() {
+    let site = Site::start().await;
+    let (cookie, old) = alice_with_bender(&site).await;
+    site.execute("UPDATE members SET email_verified_at = NULL")
+        .await;
+
+    let response = site.post("/bots/bender/password", &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 200);
+    let new = shown_password(&body_text(response).await);
+    assert_ne!(new, old);
+}
+
+#[tokio::test]
+async fn someone_elses_or_a_deleted_bot_is_not_found() {
+    let site = Site::start().await;
+    let (_, bender) = alice_with_bender(&site).await;
+    site.add_member("bob").await;
+    site.execute(
+        "INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('dalek', 'bob', 0, 1)",
+    )
+    .await;
+    let cookie = site.sign_in("bob").await;
+
+    for name in ["bender", "BENDER", "dalek", "nobody", "alice"] {
+        let path = format!("/bots/{name}/password");
+        assert_eq!(site.get(&path, Some(&cookie)).await.status(), 404, "{name}");
+        let response = site.post(&path, &[], Some(&cookie)).await;
+        assert_eq!(response.status(), 404, "{name}");
+    }
+    assert!(signs_in_to_ergo(&site, "bender", &bender).await);
+}
+
+#[tokio::test]
+async fn resetting_from_another_origin_is_refused() {
+    let site = Site::start().await;
+    let (cookie, password) = alice_with_bender(&site).await;
+    let headers = [(header::ORIGIN.as_str(), "https://evil.example")];
+
+    let response = site
+        .post_with("/bots/bender/password", &[], Some(&cookie), &headers)
+        .await;
+
+    assert_eq!(response.status(), 403);
+    assert!(signs_in_to_ergo(&site, "bender", &password).await);
+}
+
+#[tokio::test]
+async fn the_old_password_stays_when_ergo_fails() {
+    let site = Site::start().await;
+    let (cookie, password) = alice_with_bender(&site).await;
+    site.ergo.fail_next(Failure::UnknownError);
+
+    let response = site.post("/bots/bender/password", &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 503);
+    let page = body_text(response).await;
+    assert!(page.contains("Can&#39;t reach the chat server."), "{page}");
+    assert!(passwords(&page).is_empty(), "{page}");
+    assert!(signs_in_to_ergo(&site, "bender", &password).await);
 }

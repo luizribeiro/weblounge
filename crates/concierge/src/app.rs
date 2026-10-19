@@ -126,6 +126,12 @@ pub fn router(app: App) -> Router {
                 .layer(map_response(routes::no_store)),
         )
         .route(
+            "/bots/{name}/password",
+            get(routes::bots::confirm_reset)
+                .post(routes::bots::reset)
+                .layer(map_response(routes::no_store)),
+        )
+        .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),
         )

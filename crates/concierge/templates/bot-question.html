@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}Bots{% endblock %}
+
+{% block content %}
+      <h1>Bots</h1>
+      <section class="card tab-card" aria-labelledby="question-title">
+        <h2 class="eyebrow" id="question-title">New password for {{ bot }}</h2>
+        {%- call components::reset_bot_password(bot) %}<a class="button" href="/bots">Keep it</a>{% endcall %}
+      </section>
+{%- endblock %}

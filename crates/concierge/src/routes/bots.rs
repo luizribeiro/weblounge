@@ -1,15 +1,23 @@
 //! The Bots tab: the bots a member owns, and making, resetting and
 //! deleting them. A bot's password is shown once, in the answer to making
-//! it, and nowhere else.
+//! it or resetting it, and nowhere else. Members act on their own bots
+//! only; anyone else's are not found.
 
 use std::time::Instant;
 
 use askama::Template;
-use axum::{Form, extract::State, http::StatusCode, response::Response};
+use axum::{
+    Form,
+    extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use ergo_api::Passphrase;
 use serde::Deserialize;
 
-use super::{ERGO_UNAVAILABLE, Layout, Tab, internal_error, render_with, verify::Unconfirmed};
+use super::{
+    ERGO_UNAVAILABLE, Layout, Tab, internal_error, render, render_with, verify::Unconfirmed,
+};
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
@@ -53,6 +61,15 @@ struct Forms<'a> {
 struct Shown {
     bot: String,
     password: Passphrase,
+}
+
+/// What a bot's owner is asked before a change they can't take back, for
+/// browsers that can't open the tab's dialog.
+#[derive(Template)]
+#[template(path = "bot-question.html")]
+struct QuestionPage<'a> {
+    layout: Layout<'a>,
+    bot: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -137,6 +154,63 @@ pub async fn create(
                 _ => ERGO_UNAVAILABLE.into(),
             };
             refuse(StatusCode::SERVICE_UNAVAILABLE, None, Some(alert)).await
+        }
+    }
+}
+
+/// Asks before resetting a bot's password.
+pub async fn confirm_reset(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    Path(name): Path<String>,
+) -> Response {
+    let bot = match owned_bot(&app, &me.member, &name).await {
+        Ok(Some(bot)) => bot,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return internal_error("Looking up a bot", error),
+    };
+    render(&QuestionPage {
+        layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Bots),
+        bot: bot.account,
+    })
+}
+
+/// Gives the member's bot `name` a new generated password and shows it
+/// once. Its current one stops working; Ergo keeps a connected bot
+/// connected until it reconnects.
+pub async fn reset(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    address: ClientAddress,
+    Path(name): Path<String>,
+) -> Response {
+    let member = &me.member;
+    let alert = |status, alert: &str| {
+        let forms = Forms {
+            alert: Some(alert.to_owned()),
+            ..Forms::default()
+        };
+        page(&app, member, status, forms)
+    };
+    let bot = match owned_bot(&app, member, &name).await {
+        Ok(Some(bot)) => bot,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(error) => return internal_error("Looking up a bot", error),
+    };
+    if !app.bot_changes.allows(address.0, Instant::now()) {
+        return alert(StatusCode::TOO_MANY_REQUESTS, TRY_LATER).await;
+    }
+    match bots(&app).reset_password(&bot.account, &bot.owner).await {
+        Ok(password) => {
+            let shown = Shown {
+                bot: bot.account,
+                password,
+            };
+            show_password(&app, member, shown).await
+        }
+        Err(error) => {
+            eprintln!("Resetting a bot's password failed: {error:#}");
+            alert(StatusCode::SERVICE_UNAVAILABLE, ERGO_UNAVAILABLE).await
         }
     }
 }

@@ -453,6 +453,33 @@ dialog.card {
   line-height: 1.35;
 }
 
+.bots .bot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.bot-name {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.bot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 1rem;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+}
+
 .bot-form {
   margin-top: 1.5rem;
   padding-top: 1.25rem;
