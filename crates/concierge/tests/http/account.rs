@@ -591,6 +591,26 @@ async fn a_wrong_or_missing_password_changes_no_email_and_keeps_what_was_typed()
     email_unchanged(&site).await;
 }
 
+/// A crafted POST with no `current` key at all, not even an empty one,
+/// which a form the server owns would never send.
+#[tokio::test]
+async fn an_email_change_with_no_current_field_changes_nothing() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+
+    let form = [("email", "alice@example.net")];
+    let response = site.post("/settings", &form, Some(&cookie)).await;
+
+    assert_eq!(response.status(), 422);
+    let page = body_text(response).await;
+    assert_eq!(
+        password_error(&page),
+        "Enter your password to change your email."
+    );
+    email_unchanged(&site).await;
+}
+
 #[tokio::test]
 async fn wrong_passwords_for_the_email_count_against_signing_in() {
     let site = Site::start().await;
