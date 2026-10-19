@@ -898,7 +898,8 @@ impl Db {
     pub async fn invite_tree(&self) -> sqlx::Result<Vec<Branch>> {
         sqlx::query_as!(
             Branch,
-            r#"SELECT account AS "account!", invited_by, joined_at,
+            r#"SELECT account AS "account!: MemberName", invited_by AS "invited_by: MemberName",
+                      joined_at,
                       removed_at IS NOT NULL AS "removed!: bool"
                FROM members"#
         )

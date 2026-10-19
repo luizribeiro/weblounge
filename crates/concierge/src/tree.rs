@@ -2,11 +2,13 @@
 
 use std::collections::HashMap;
 
+use crate::name::MemberName;
+
 /// A member's place in the tree, as the database keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Branch {
-    pub account: String,
-    pub invited_by: Option<String>,
+    pub account: MemberName,
+    pub invited_by: Option<MemberName>,
     pub joined_at: i64,
     pub removed: bool,
 }
@@ -30,11 +32,14 @@ pub enum Line {
 /// Lays `branches` out from the roots, the members nobody invited, down;
 /// everyone in the order they joined.
 pub fn lines(mut branches: Vec<Branch>) -> Vec<Line> {
-    branches.sort_by(|a, b| (a.joined_at, &a.account).cmp(&(b.joined_at, &b.account)));
-    let mut invitees: HashMap<Option<String>, Vec<Branch>> = HashMap::new();
+    branches
+        .sort_by(|a, b| (a.joined_at, a.account.as_str()).cmp(&(b.joined_at, b.account.as_str())));
+    let mut invitees: HashMap<Option<MemberName>, Vec<Branch>> = HashMap::new();
     for branch in branches {
-        let inviter = branch.invited_by.as_ref().map(|name| name.to_lowercase());
-        invitees.entry(inviter).or_default().push(branch);
+        invitees
+            .entry(branch.invited_by.clone())
+            .or_default()
+            .push(branch);
     }
     let mut lines = Vec::new();
     lay_out(&mut invitees, None, &mut lines);
@@ -44,16 +49,16 @@ pub fn lines(mut branches: Vec<Branch>) -> Vec<Line> {
 /// Members whose inviter isn't on the way down from a root can't be
 /// reached, and are left out rather than looped over.
 fn lay_out(
-    invitees: &mut HashMap<Option<String>, Vec<Branch>>,
-    inviter: Option<String>,
+    invitees: &mut HashMap<Option<MemberName>, Vec<Branch>>,
+    inviter: Option<MemberName>,
     lines: &mut Vec<Line>,
 ) {
     for branch in invitees.remove(&inviter).unwrap_or_default() {
-        let key = Some(branch.account.to_lowercase());
+        let key = Some(branch.account.clone());
         let has_invitees = invitees.contains_key(&key);
         lines.push(Line::Member {
             joined_on: date(branch.joined_at),
-            account: branch.account,
+            account: branch.account.to_string(),
             removed: branch.removed,
             has_invitees,
         });
@@ -97,8 +102,8 @@ mod tests {
 
     fn branch(account: &str, invited_by: Option<&str>, joined_at: i64) -> Branch {
         Branch {
-            account: account.into(),
-            invited_by: invited_by.map(Into::into),
+            account: MemberName::new(account),
+            invited_by: invited_by.map(MemberName::new),
             joined_at,
             removed: false,
         }

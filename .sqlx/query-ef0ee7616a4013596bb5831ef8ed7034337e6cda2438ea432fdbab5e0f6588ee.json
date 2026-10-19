@@ -1,15 +1,15 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT account AS \"account!\", invited_by, joined_at,\n                      removed_at IS NOT NULL AS \"removed!: bool\"\n               FROM members",
+  "query": "SELECT account AS \"account!: MemberName\", invited_by AS \"invited_by: MemberName\",\n                      joined_at,\n                      removed_at IS NOT NULL AS \"removed!: bool\"\n               FROM members",
   "describe": {
     "columns": [
       {
-        "name": "account!",
+        "name": "account!: MemberName",
         "ordinal": 0,
         "type_info": "Text"
       },
       {
-        "name": "invited_by",
+        "name": "invited_by: MemberName",
         "ordinal": 1,
         "type_info": "Text"
       },
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "b0bdb22a81bad34dd40bac5da7ad40476f8b640422206db50e65a7a0ab6a9397"
+  "hash": "ef0ee7616a4013596bb5831ef8ed7034337e6cda2438ea432fdbab5e0f6588ee"
 }
