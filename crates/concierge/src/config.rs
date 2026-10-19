@@ -7,6 +7,7 @@ use axum::http::Uri;
 use common::config::{invalid, read_credential, required};
 use ergo_api::{Client, Url};
 
+use crate::history;
 pub use crate::routes::presence::Presence;
 pub use common::config::ConfigError;
 
@@ -35,6 +36,9 @@ pub struct Config {
     /// Ergo's multiclient always-on and auto-away, as what members get
     /// until they choose.
     pub presence_defaults: Presence,
+    /// How long Ergo keeps chat history, in seconds: its
+    /// `history.restrictions.expire-time`.
+    pub history_expiry: i64,
 }
 
 /// The databases `concierge migrate` brings up to date: concierge's own in
@@ -97,6 +101,7 @@ impl Config {
                 )
             })
         };
+        let history_expiry = require("CONCIERGE_HISTORY_EXPIRE_TIME")?;
         let public_url = origin("CONCIERGE_PUBLIC_URL", public_url)?;
         let join_url = join_url
             .map(|url| origin("CONCIERGE_JOIN_URL", url))
@@ -134,6 +139,13 @@ impl Config {
                 always_on: multiclient_default("CONCIERGE_ALWAYS_ON_DEFAULT")?,
                 auto_away: multiclient_default("CONCIERGE_AUTO_AWAY_DEFAULT")?,
             },
+            history_expiry: history::parse_expire_time(&history_expiry).ok_or_else(|| {
+                invalid(
+                    "CONCIERGE_HISTORY_EXPIRE_TIME",
+                    history_expiry.clone(),
+                    "expected an Ergo duration longer than 0, such as 2w or 14d",
+                )
+            })?,
         })
     }
 
@@ -259,7 +271,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 11] = [
+    const PRODUCTION: [(&str, &str); 12] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
@@ -267,6 +279,7 @@ mod tests {
         ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
         ("CONCIERGE_ALWAYS_ON_DEFAULT", "opt-out"),
         ("CONCIERGE_AUTO_AWAY_DEFAULT", "opt-out"),
+        ("CONCIERGE_HISTORY_EXPIRE_TIME", "2w"),
         (
             "CONCIERGE_ASSETS",
             "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members",
@@ -317,7 +330,31 @@ mod tests {
                     always_on: true,
                     auto_away: true,
                 },
+                history_expiry: 14 * 24 * 60 * 60,
             })
+        );
+    }
+
+    #[test]
+    fn reads_the_history_expiry_in_ergos_format_and_refuses_forever() {
+        let expiry = |setting| {
+            parse_with(&[("CONCIERGE_HISTORY_EXPIRE_TIME", Some(setting))])
+                .map(|config| config.history_expiry)
+        };
+        assert_eq!(expiry("7d"), Ok(7 * 24 * 60 * 60));
+        assert_eq!(expiry("24h"), Ok(24 * 60 * 60));
+        let error = expiry("0").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            r#"CONCIERGE_HISTORY_EXPIRE_TIME="0" is invalid: expected an Ergo duration longer than 0, such as 2w or 14d"#
+        );
+        assert!(matches!(
+            expiry("2 weeks"),
+            Err(ConfigError::Invalid { .. })
+        ));
+        assert_eq!(
+            parse_with(&[("CONCIERGE_HISTORY_EXPIRE_TIME", None)]),
+            Err(ConfigError::Missing("CONCIERGE_HISTORY_EXPIRE_TIME"))
         );
     }
 

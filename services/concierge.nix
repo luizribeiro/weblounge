@@ -7,6 +7,7 @@ let
   joinHostName = "join.${config.weblounge.domain}";
   concierge = lib.getExe pkgs.weblounge.concierge;
   multiclient = config.weblounge.ergo.settings.accounts.multiclient;
+  historyExpireTime = config.weblounge.ergo.settings.history.restrictions.expire-time;
 
   # concierge-admin runs with the rest of the unit's serviceConfig, so admin
   # commands see exactly the identity, state and secrets the service does.
@@ -161,6 +162,7 @@ in
             "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"
             "CONCIERGE_ALWAYS_ON_DEFAULT=${multiclient.always-on}"
             "CONCIERGE_AUTO_AWAY_DEFAULT=${multiclient.auto-away}"
+            "CONCIERGE_HISTORY_EXPIRE_TIME=${historyExpireTime}"
           ];
         };
       }

@@ -1,4 +1,4 @@
-{ pkgs, gitHooks, multiclient }:
+{ pkgs, gitHooks, ergoSettings }:
 
 pkgs.mkShell ({
   shellHook = gitHooks.shellHook + ''
@@ -27,6 +27,8 @@ pkgs.mkShell ({
   ]);
   RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
   # `just concierge dev` gives its Ergo these too, so both follow the network.
-  CONCIERGE_ALWAYS_ON_DEFAULT = multiclient.always-on;
-  CONCIERGE_AUTO_AWAY_DEFAULT = multiclient.auto-away;
+  CONCIERGE_ALWAYS_ON_DEFAULT = ergoSettings.accounts.multiclient.always-on;
+  CONCIERGE_AUTO_AWAY_DEFAULT = ergoSettings.accounts.multiclient.auto-away;
+
+  CONCIERGE_HISTORY_EXPIRE_TIME = ergoSettings.history.restrictions.expire-time;
 } // pkgs.weblounge.concierge.ergoContractTestEnv)

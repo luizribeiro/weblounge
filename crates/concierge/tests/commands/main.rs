@@ -24,6 +24,9 @@ use tempfile::TempDir;
 /// The password [`Fixture::register`] gives accounts.
 const OLD_PASSWORD: &str = "correct-horse-battery";
 
+/// Ergo's `2w`, as production configures it.
+const HISTORY_EXPIRY: i64 = 14 * 24 * 60 * 60;
+
 struct Fixture {
     config: Config,
     ergo: FakeErgo,
@@ -60,6 +63,7 @@ impl Fixture {
                 always_on: true,
                 auto_away: true,
             },
+            history_expiry: HISTORY_EXPIRY,
         };
         Db::migrate(&config.database_path()).await.unwrap();
         let migrated = Outbox::migrate(&config.outbox_path).await.unwrap();

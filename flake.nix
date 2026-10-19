@@ -72,7 +72,7 @@
         default = import ./shell.nix {
           inherit pkgs;
           gitHooks = gitHooks.${pkgs.stdenv.hostPlatform.system};
-          inherit (weblounge.hosts.credenza.config.weblounge.ergo.settings.accounts) multiclient;
+          ergoSettings = weblounge.hosts.credenza.config.weblounge.ergo.settings;
         };
       });
     };
