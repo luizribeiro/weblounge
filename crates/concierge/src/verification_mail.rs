@@ -70,7 +70,7 @@ pub fn message(
     now: i64,
 ) -> anyhow::Result<Message> {
     let body = Body {
-        nick: &issued.account,
+        nick: issued.account.as_str(),
         link: format!("{public_url}/verify#{}", issued.code),
         lifetime: invite_rules::in_words(verification_rules::LIFETIME),
         grace_period: invite_rules::in_words(verification_rules::GRACE_PERIOD),

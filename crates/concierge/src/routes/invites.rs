@@ -57,8 +57,8 @@ pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember)
         Err(error) => return internal_error("Reading the invite tree", error),
     };
     render(&InvitesPage {
-        layout: Layout::new(&app, Some(&member.account)).on(Tab::Invites),
-        nick: &member.account,
+        layout: Layout::new(&app, Some(member.account.as_str())).on(Tab::Invites),
+        nick: member.account.as_str(),
         invites,
         lifetime: invite_rules::lifetime_in_words(),
         lines: tree::lines(branches),
@@ -84,7 +84,7 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
         Ok(true) => {
             let url = config::invite_url(&app.invite_links, &code);
             render(&NewInvitePage {
-                layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Invites),
+                layout: Layout::new(&app, Some(me.member.account.as_str())).on(Tab::Invites),
                 svg: qr::svg(&url),
                 url,
                 lifetime: invite_rules::lifetime_in_words(),
@@ -108,7 +108,7 @@ pub async fn confirm_revoke(
         return Redirect::to("/invites").into_response();
     }
     render(&RevokeInvitesPage {
-        layout: Layout::new(&app, Some(&me.member.account)).on(Tab::Invites),
+        layout: Layout::new(&app, Some(me.member.account.as_str())).on(Tab::Invites),
         invites,
     })
 }

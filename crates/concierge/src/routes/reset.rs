@@ -248,7 +248,7 @@ pub async fn reset(
             unavailable,
         );
     }
-    app.limiter.record_success(&taken.account);
+    app.limiter.record_success(taken.account.as_str());
     if let Err(error) = app.db.end_sessions(&taken.account).await {
         return internal_error("Ending a reset member's sessions", error);
     }

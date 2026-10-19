@@ -38,7 +38,7 @@ struct ChangedBody<'a> {
 /// The email that carries `issued`'s link.
 pub fn link_message(issued: &IssuedReset, public_url: &str) -> anyhow::Result<Message> {
     let body = LinkBody {
-        nick: &issued.member.account,
+        nick: issued.member.account.as_str(),
         link: format!("{public_url}{RESET_PATH}#{}", issued.code),
         lifetime: invite_rules::in_words(reset_rules::LIFETIME),
     };
@@ -58,7 +58,7 @@ pub fn changed_message(
     public_url: &str,
 ) -> anyhow::Result<Message> {
     let body = ChangedBody {
-        nick: account,
+        nick: account.as_str(),
         forgot_link: format!("{public_url}{FORGOT_PATH}"),
     };
     message(account, email, CHANGED_SUBJECT, body.render()?)

@@ -1529,7 +1529,10 @@ pub(crate) mod tests {
         assert!(alice.is_admin);
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(
-            (bob.invited_by.as_deref(), bob.removed_at),
+            (
+                bob.invited_by.as_ref().map(MemberName::as_str),
+                bob.removed_at
+            ),
             (Some("alice"), Some(3))
         );
         assert!(db.invite("open").await.unwrap().is_some());
@@ -1559,7 +1562,10 @@ pub(crate) mod tests {
         let db = Db::migrate(&path).await.unwrap();
 
         let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
-        assert_eq!(invite.created_by.as_deref(), Some("alice"));
+        assert_eq!(
+            invite.created_by.as_ref().map(MemberName::as_str),
+            Some("alice")
+        );
         assert!(db.invite("v0Ri8dEa2kWnL5yTcHq-_x").await.unwrap().is_some());
         let kept: Vec<Vec<u8>> = sqlx::query_scalar("SELECT code_hash FROM invites ORDER BY rowid")
             .fetch_all(&db.pool)
@@ -1785,11 +1791,18 @@ pub(crate) mod tests {
             ("to-bob", Some("bob"), None),
         ] {
             let invite = db.invite(code).await.unwrap().unwrap();
-            assert_eq!(invite.redeemed_by.as_deref(), redeemed_by, "{code}");
+            assert_eq!(
+                invite.redeemed_by.as_ref().map(MemberName::as_str),
+                redeemed_by,
+                "{code}"
+            );
             assert_eq!(invite.revoked_at, revoked_at, "{code}");
         }
         let bob = db.member("bob").await.unwrap().unwrap();
-        assert_eq!(bob.invited_by.as_deref(), Some("alice"));
+        assert_eq!(
+            bob.invited_by.as_ref().map(MemberName::as_str),
+            Some("alice")
+        );
         assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
     }
 
@@ -2014,11 +2027,17 @@ pub(crate) mod tests {
 
         assert_eq!(redeemed.unwrap(), Redemption::Redeemed);
         let bob = db.member("bob").await.unwrap().unwrap();
-        assert_eq!(bob.invited_by.as_deref(), Some("alice"));
+        assert_eq!(
+            bob.invited_by.as_ref().map(MemberName::as_str),
+            Some("alice")
+        );
         assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
         assert!(bob.news_opt_in);
         let invite = db.invite("open").await.unwrap().unwrap();
-        assert_eq!(invite.redeemed_by.as_deref(), Some("Bob"));
+        assert_eq!(
+            invite.redeemed_by.as_ref().map(MemberName::as_str),
+            Some("Bob")
+        );
         assert_eq!(invite.status(now), invite_rules::Status::Redeemed);
         db.release_claim(&claim).await.unwrap();
         assert_eq!(db.claim_invite("open", now + 1_000).await.unwrap(), None);

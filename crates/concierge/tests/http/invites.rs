@@ -1,5 +1,5 @@
 use axum::http::header;
-use concierge::invite_rules::MAX_OPEN;
+use concierge::{invite_rules::MAX_OPEN, name::MemberName};
 use regex::Regex;
 
 use crate::{JOIN_URL, PASSWORD, Site, body_text, location};
@@ -47,7 +47,10 @@ async fn a_new_invite_shows_its_link_and_qr_code_once() {
     assert!(tab.contains(&available(2)), "{tab}");
     let code = link.rsplit('#').next().unwrap();
     let invite = site.db.invite(code).await.unwrap().unwrap();
-    assert_eq!(invite.created_by.as_deref(), Some("alice"));
+    assert_eq!(
+        invite.created_by.as_ref().map(MemberName::as_str),
+        Some("alice")
+    );
 }
 
 /// How the Invites tab says `n` more invites may be made.

@@ -65,7 +65,7 @@ impl<'a> Layout<'a> {
     pub fn member(app: &'a App, member: &'a Member) -> Self {
         Self {
             unconfirmed: Unconfirmed::of(member, db::now()),
-            ..Self::new(app, Some(&member.account))
+            ..Self::new(app, Some(member.account.as_str()))
         }
     }
 

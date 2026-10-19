@@ -24,7 +24,9 @@ use crate::{
     bot_rules,
     bots::{Bots, Refusal},
     db::{self, Bot, Member},
-    invite_rules, nick, password,
+    invite_rules,
+    name::BotName,
+    nick, password,
     rate_limit::{ClientAddress, TRY_LATER},
 };
 
@@ -192,7 +194,7 @@ async fn ask(app: &App, member: &Member, name: &str, question: Question) -> Resp
         Err(response) => return response,
     };
     render(&QuestionPage {
-        layout: Layout::new(app, Some(&member.account)).on(Tab::Bots),
+        layout: Layout::new(app, Some(member.account.as_str())).on(Tab::Bots),
         bot: bot.account.to_string(),
         question,
         history_kept: invite_rules::in_words(app.history_expiry),
@@ -274,7 +276,7 @@ pub async fn reset(
 const TOO_MANY: &str = "That's as many bots as you can have. Delete one to make another.";
 
 /// What the tab says when Ergo made a bot but didn't finish setting it up.
-fn half_made(bot: &str) -> String {
+fn half_made(bot: &BotName) -> String {
     format!(
         "Made {bot}, but the chat server didn't finish setting it up. \
          Make it a new password in a minute to try again."
@@ -330,8 +332,8 @@ async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) 
     };
     let verified = member.email_verified_at.is_some();
     let page = BotsPage {
-        layout: Layout::new(app, Some(&member.account)).on(Tab::Bots),
-        nick: &member.account,
+        layout: Layout::new(app, Some(member.account.as_str())).on(Tab::Bots),
+        nick: member.account.as_str(),
         remaining: bot_rules::remaining(verified, bots.len() as i64),
         bots,
         unconfirmed: Unconfirmed::of(member, db::now()),

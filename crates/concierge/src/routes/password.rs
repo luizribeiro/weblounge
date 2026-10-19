@@ -19,6 +19,7 @@ use super::{
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
+    name::MemberName,
     password_rules,
     rate_limit::{self, ClientAddress},
 };
@@ -44,7 +45,7 @@ pub struct Refused {
 /// against the limits on signing in.
 pub async fn check_current(
     app: &App,
-    account: &str,
+    account: &MemberName,
     address: &ClientAddress,
     current: &str,
 ) -> Result<(), Refused> {
@@ -53,16 +54,16 @@ pub async fn check_current(
         return refused(StatusCode::UNAUTHORIZED, WRONG);
     }
     let now = Instant::now();
-    if !app.limiter.allows(account, address.0, now) {
+    if !app.limiter.allows(account.as_str(), address.0, now) {
         return refused(StatusCode::TOO_MANY_REQUESTS, rate_limit::TRY_LATER);
     }
     match app.ergo.check_auth(account, current).await {
         Ok(Some(_)) => {
-            app.limiter.record_success(account);
+            app.limiter.record_success(account.as_str());
             Ok(())
         }
         Ok(None) => {
-            app.limiter.record_failure(account, address.0, now);
+            app.limiter.record_failure(account.as_str(), address.0, now);
             refused(StatusCode::UNAUTHORIZED, WRONG)
         }
         Err(error) => {

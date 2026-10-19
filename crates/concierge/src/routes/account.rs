@@ -22,6 +22,7 @@ use crate::{
     auth::CurrentMember,
     db::{self, Member},
     email::{self, Email},
+    name::MemberName,
     password_rules::FieldErrors,
     rate_limit::{ClientAddress, Recipient},
 };
@@ -175,7 +176,7 @@ pub async fn update(
         return Redirect::to("/account?saved#email-and-news").into_response();
     }
     let mailed = verify::mail_link(&app, account, Recipient::NewAddress).await;
-    match app.db.member(account).await {
+    match app.db.member(account.as_str()).await {
         Ok(Some(saved)) => answer_link(&app, &saved, mailed, true).await,
         Ok(None) => internal_error("Reading back saved settings", "no member"),
         Err(error) => internal_error("Reading back saved settings", error),
@@ -185,7 +186,7 @@ pub async fn update(
 /// Checks the password a change of email came with, which it needs.
 async fn check_password(
     app: &App,
-    account: &str,
+    account: &MemberName,
     address: &ClientAddress,
     current: &str,
 ) -> Result<(), Refused> {
@@ -248,8 +249,8 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         }
     };
     let page = Account {
-        layout: Layout::new(app, Some(&member.account)).on(Tab::Account),
-        nick: &member.account,
+        layout: Layout::new(app, Some(member.account.as_str())).on(Tab::Account),
+        nick: member.account.as_str(),
         flash: forms.flash,
         link_error: forms.link_error,
         saved_email,

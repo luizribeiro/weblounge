@@ -8,7 +8,7 @@ use ergo_api::fake::Failure;
 use serde_json::json;
 use tokio::net::TcpListener;
 
-use concierge::verification_mail;
+use concierge::{name::MemberName, verification_mail};
 
 use crate::{HISTORY_EXPIRY, Site, body_text, execute, session_cookie, verification_link};
 
@@ -61,12 +61,18 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
 
     let member = site.db.member("bob").await.unwrap().unwrap();
     assert_eq!(member.account.as_str(), "Bob");
-    assert_eq!(member.invited_by.as_deref(), Some("alice"));
+    assert_eq!(
+        member.invited_by.as_ref().map(MemberName::as_str),
+        Some("alice")
+    );
     assert_eq!(member.email.as_deref(), Some("bob@example.org"));
     assert!(member.news_opt_in);
     assert!(!member.is_admin);
     let invite = site.db.invite(CODE).await.unwrap().unwrap();
-    assert_eq!(invite.redeemed_by.as_deref(), Some("Bob"));
+    assert_eq!(
+        invite.redeemed_by.as_ref().map(MemberName::as_str),
+        Some("Bob")
+    );
     let ergo = site.ergo.client();
     let account = ergo.check_auth("bob", NEW_PASSWORD).await.unwrap();
     assert_eq!(account.unwrap().as_str(), "Bob");

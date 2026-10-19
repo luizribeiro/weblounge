@@ -287,11 +287,12 @@ async fn release(app: &App, claim: &Claim) {
 /// outlives the visit.
 fn welcome(
     app: &App,
-    nick: &str,
+    name: &MemberName,
     mailed_to: Option<&str>,
     VisitorPlatform(platform): VisitorPlatform,
     cookie: Option<HeaderValue>,
 ) -> Response {
+    let nick = name.as_str();
     let page = Welcome {
         layout: Layout::new(app, cookie.as_ref().map(|_| nick)),
         nick,

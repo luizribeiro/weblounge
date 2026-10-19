@@ -112,7 +112,10 @@ mod delete {
         assert!(alice.removed_at.is_some());
         assert_eq!((alice.email, alice.is_admin), (None, false));
         let bob = db.member("bob").await.unwrap().unwrap();
-        assert_eq!(bob.invited_by.as_deref(), Some("alice"));
+        assert_eq!(
+            bob.invited_by.as_ref().map(MemberName::as_str),
+            Some("alice")
+        );
         let invite = db.invite("q7Hx2mZp9vLcT4wRfBa-_w").await.unwrap().unwrap();
         assert!(invite.revoked_at.is_some());
         assert_eq!(db.end_sessions(&MemberName::new("alice")).await.unwrap(), 0);
