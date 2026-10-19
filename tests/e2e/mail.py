@@ -166,6 +166,17 @@ with subtest("while the mailer is down, a new address gets no link, and the page
     published_key()
     assert outbox_size() == 0
 
+with subtest("the mailer sends what's due as it stops, so stopping loses no sealed link"):
+    stopping = f'journalctl --sync && {mailer_log} | grep -cxF "Stopping; sending what\'s due first"'
+    stopped_before = int(credenza.succeed(stopping))
+    assert concierge_admin("member", "send-verification", "judy") == "sent judy a link\n"
+    credenza.succeed("systemctl stop concierge-mailer")
+    assert int(credenza.succeed(stopping)) == stopped_before + 1
+    assert outbox_size() == 0
+    wait_for_mail("judy@example.net", verification_subject)
+    credenza.succeed("systemctl start concierge-mailer")
+    published_key()
+
 with subtest("concierge remind runs hourly from a timer that catches up on missed runs"):
     credenza.succeed("systemctl is-active concierge-remind.timer")
     assert credenza.succeed("systemctl show -P Persistent concierge-remind.timer").strip() == "yes"

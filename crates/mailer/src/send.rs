@@ -31,6 +31,10 @@ pub const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// leaves room for mail sent from the mailbox by hand.
 pub const SENDS_PER_HOUR: usize = 300;
 pub const HOUR: Duration = Duration::from_secs(60 * 60);
+/// How long the mailer goes on sending what's due once told to stop: a
+/// restart then loses only the sealed mail an outage held back, well
+/// within systemd's stop timeout.
+pub const DRAIN_TIME: Duration = Duration::from_secs(5);
 const MESSAGE_ID_LENGTH: usize = 22;
 
 /// Why a message wasn't sent.
@@ -136,6 +140,7 @@ pub struct Mailer<T> {
     pub from: Mailbox,
     pub quota: Quota,
     pub key: Key,
+    pub drain_time: Duration,
 }
 
 impl<T: Transport> Mailer<T> {
@@ -147,6 +152,7 @@ impl<T: Transport> Mailer<T> {
             from,
             quota: Quota::new(SENDS_PER_HOUR, HOUR),
             key: Key::generate(),
+            drain_time: DRAIN_TIME,
         }
     }
 
@@ -158,11 +164,27 @@ impl<T: Transport> Mailer<T> {
         Ok(deletion)
     }
 
-    /// Sends the outbox, round after round, until the outbox fails.
-    pub async fn run(&self) -> anyhow::Result<()> {
+    /// Sends the outbox, round after round, until the outbox fails or
+    /// `stop` completes; then sends what's due, for up to the drain time.
+    /// A round already under way finishes first, so no message is cut off
+    /// mid-send and sent again later.
+    pub async fn run(&self, stop: impl Future<Output = ()>) -> anyhow::Result<()> {
+        let mut stop = std::pin::pin!(stop);
         loop {
             self.round(now(), Instant::now()).await?;
-            tokio::time::sleep(POLL_INTERVAL).await;
+            tokio::select! {
+                () = tokio::time::sleep(POLL_INTERVAL) => {}
+                () = &mut stop => break,
+            }
+        }
+        eprintln!("Stopping; sending what's due first");
+        let drain = self.round(now(), Instant::now());
+        match tokio::time::timeout(self.drain_time, drain).await {
+            Ok(round) => round.map(drop),
+            Err(_) => {
+                eprintln!("Stopped with mail still to send");
+                Ok(())
+            }
         }
     }
 
@@ -267,14 +289,17 @@ mod tests {
     use super::*;
     use crate::config::SMTP_PASSWORD_CREDENTIAL;
     use outbox::{
-        GIVE_UP_AFTER,
-        testing::{QUEUED, TestKey, VERIFY_SUBJECT, execute, message, with_outbox},
+        GIVE_UP_AFTER, Message,
+        testing::{QUEUED, TestKey, VERIFY_SUBJECT, execute, message, temp_outbox, with_outbox},
     };
+    use tempfile::TempDir;
 
     /// An SMTP server that takes everything but what it's told to refuse.
     #[derive(Default)]
     struct FakeServer {
         refusals: HashMap<&'static str, Failure>,
+        /// The recipient whose message it never answers.
+        hanging: Option<&'static str>,
         delivered: Mutex<Vec<lettre::Message>>,
     }
 
@@ -282,6 +307,13 @@ mod tests {
         fn refusing(recipient: &'static str, failure: Failure) -> Self {
             Self {
                 refusals: HashMap::from([(recipient, failure)]),
+                ..Self::default()
+            }
+        }
+
+        fn hanging_on(recipient: &'static str) -> Self {
+            Self {
+                hanging: Some(recipient),
                 ..Self::default()
             }
         }
@@ -298,7 +330,11 @@ mod tests {
 
     impl Transport for FakeServer {
         async fn send(&self, message: lettre::Message) -> Result<(), Failure> {
-            if let Some(failure) = self.refusals.get(recipient(&message).as_str()) {
+            let to = recipient(&message);
+            if self.hanging == Some(to.as_str()) {
+                std::future::pending::<()>().await;
+            }
+            if let Some(failure) = self.refusals.get(to.as_str()) {
                 return Err(failure.clone());
             }
             self.delivered.lock().unwrap().push(message);
@@ -401,6 +437,47 @@ mod tests {
         queue_carols(&mailer).await;
         assert_eq!(mailer.publish_key().await.unwrap().messages, 1);
         assert!(due(&mailer, QUEUED + 60).await.is_empty());
+    }
+
+    /// A mailer with its key published, on an empty outbox, and carol's
+    /// verification email to queue sealed to it.
+    async fn stopping_mailer(server: FakeServer) -> (Mailer<FakeServer>, Message, TempDir) {
+        let (outbox, dir) = temp_outbox().await;
+        let from = "weblounge <noreply@weblounge.org>".parse().unwrap();
+        let mailer = Mailer::new(outbox, server, from);
+        mailer.publish_key().await.unwrap();
+        let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
+        (mailer, carols, dir)
+    }
+
+    #[tokio::test]
+    async fn once_told_to_stop_sends_what_is_due_and_returns() {
+        let (mailer, carols, _dir) = stopping_mailer(FakeServer::default()).await;
+        let stop = async {
+            mailer.outbox.queue_sealed(&carols, now()).await.unwrap();
+        };
+
+        mailer.run(stop).await.unwrap();
+
+        assert_eq!(mailer.transport.recipients(), ["carol@example.org"]);
+        assert!(mailer.outbox.due(now()).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn sends_for_no_longer_than_the_drain_time_once_told_to_stop() {
+        let server = FakeServer::hanging_on("carol@example.org");
+        let (mut mailer, carols, _dir) = stopping_mailer(server).await;
+        mailer.drain_time = Duration::from_millis(100);
+        let stop = async {
+            mailer.outbox.queue_sealed(&carols, now()).await.unwrap();
+        };
+        let started = Instant::now();
+
+        mailer.run(stop).await.unwrap();
+
+        assert!(started.elapsed() < POLL_INTERVAL, "{:?}", started.elapsed());
+        assert!(mailer.transport.recipients().is_empty());
+        assert_eq!(mailer.outbox.due(now()).await.unwrap().len(), 1);
     }
 
     #[tokio::test]

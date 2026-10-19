@@ -71,26 +71,40 @@ fn start_mailer(fixture: &Fixture) -> Child {
     command.stderr(Stdio::piped()).spawn().unwrap()
 }
 
-/// What `mailer` logs, up to and including the first line `until` accepts.
-fn log_until(mailer: &mut Child, until: impl Fn(&str) -> bool) -> Vec<String> {
-    let (lines, receive) = mpsc::channel();
-    let stderr = BufReader::new(mailer.stderr.take().unwrap());
-    std::thread::spawn(move || {
-        for line in stderr.lines() {
-            if lines.send(line.unwrap()).is_err() {
-                break;
+/// What a mailer logs, line by line as it logs them.
+struct Log(mpsc::Receiver<String>);
+
+impl Log {
+    fn of(mailer: &mut Child) -> Self {
+        let (lines, receive) = mpsc::channel();
+        let stderr = BufReader::new(mailer.stderr.take().unwrap());
+        std::thread::spawn(move || {
+            for line in stderr.lines() {
+                if lines.send(line.unwrap()).is_err() {
+                    break;
+                }
+            }
+        });
+        Self(receive)
+    }
+
+    /// The lines up to and including the next one `until` accepts.
+    fn until(&self, until: impl Fn(&str) -> bool) -> Vec<String> {
+        let mut log = Vec::new();
+        while let Ok(line) = self.0.recv_timeout(LOG_TIMEOUT) {
+            let done = until(&line);
+            log.push(line);
+            if done {
+                return log;
             }
         }
-    });
-    let mut log = Vec::new();
-    while let Ok(line) = receive.recv_timeout(LOG_TIMEOUT) {
-        let done = until(&line);
-        log.push(line);
-        if done {
-            return log;
-        }
+        panic!("the mailer stopped or went quiet: {log:?}");
     }
-    panic!("the mailer stopped or went quiet: {log:?}");
+}
+
+/// What `mailer` logs, up to and including the first line `until` accepts.
+fn log_until(mailer: &mut Child, until: impl Fn(&str) -> bool) -> Vec<String> {
+    Log::of(mailer).until(until)
 }
 
 #[tokio::test]
@@ -143,6 +157,23 @@ async fn publishes_a_new_key_each_time_it_starts() {
         panic!("a key each time: {published:?}");
     };
     assert_ne!(first, second);
+}
+
+#[tokio::test]
+async fn stops_cleanly_when_told_to() {
+    let fixture = Fixture::start().await;
+    write_smtp_password(&fixture);
+    let mut mailer = start_mailer(&fixture);
+    let log = Log::of(&mut mailer);
+    log.until(|line| line.starts_with("Sending mail through"));
+    let pid = libc::pid_t::try_from(mailer.id()).unwrap();
+
+    // SAFETY: kill takes a pid and a signal number, and touches no memory.
+    assert_eq!(unsafe { libc::kill(pid, libc::SIGTERM) }, 0);
+
+    let log = log.until(|line| line.starts_with("Stopping"));
+    assert_eq!(log, ["Stopping; sending what's due first"]);
+    assert!(mailer.wait().unwrap().success());
 }
 
 #[tokio::test]

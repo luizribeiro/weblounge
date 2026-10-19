@@ -6,6 +6,7 @@ use mailer::{
 };
 use outbox::Outbox;
 use std::path::Path;
+use tokio::signal::unix::{SignalKind, signal};
 
 /// Send the mail concierge queues in CONCIERGE_OUTBOX, through
 /// CONCIERGE_SMTP_HOST.
@@ -49,9 +50,14 @@ async fn send_mail(config: MailerConfig) -> anyhow::Result<()> {
     let outbox = Outbox::open(&config.outbox_path).await?;
     let mailer = Mailer::new(outbox, send::smtp(&config)?, config.from.clone());
     mailer.publish_key().await?;
+    let mut terminate = signal(SignalKind::terminate())?;
     eprintln!(
         "Sending mail through {}:{}",
         config.smtp_host, config.smtp_port
     );
-    mailer.run().await
+    mailer
+        .run(async move {
+            terminate.recv().await;
+        })
+        .await
 }
