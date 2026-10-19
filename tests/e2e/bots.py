@@ -189,3 +189,8 @@ with subtest("deleting a bot from the Bots tab disconnects it at once, and it ca
     body, _ = ergo_api("ns/info", accountName="robbie")
     assert json.loads(body) == {"success": False}, body
     assert "robbie" not in concierge_admin("bot", "list", "zoe")
+
+with subtest("the passwords the Bots tab showed never reach the journal"):
+    credenza.succeed("journalctl --sync")
+    for secret in [old, robbie["password"]]:
+        credenza.fail(f"journalctl | grep -qF {secret}")
