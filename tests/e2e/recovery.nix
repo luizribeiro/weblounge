@@ -1,3 +1,6 @@
 { vmTest, ... }:
 
-vmTest { mail = true; }
+vmTest {
+  mail = true;
+  browsers.recovery-browser = ./clients/recovery-browser.py;
+}

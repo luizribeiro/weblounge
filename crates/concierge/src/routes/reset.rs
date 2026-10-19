@@ -6,17 +6,24 @@
 use std::time::Instant;
 
 use askama::Template;
-use axum::{Form, extract::State, http::StatusCode, response::Response};
+use axum::{
+    Form,
+    extract::State,
+    http::{StatusCode, header},
+    response::{IntoResponse, Response},
+};
 use serde::Deserialize;
 
-use super::{Layout, Link, UNSENT, internal_error, render, render_with};
+use super::{ERGO_UNAVAILABLE, Layout, Link, UNSENT, internal_error, render, render_with};
 use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
-    db, invite_rules,
+    db, invite_rules, link_code,
+    password_rules::{self, FieldErrors},
     rate_limit::{self, ClientAddress, MailRefusal, Recipient},
     reset_mail,
     reset_rules::{self, Lookup},
+    session,
 };
 
 #[derive(Template)]
@@ -147,6 +154,177 @@ fn sent(app: &App, visitor: &Visitor) -> Response {
         Some(Link {
             href: auth::SIGN_IN_PATH,
             label: "Back to sign in",
+        }),
+    )
+}
+
+#[derive(Template)]
+#[template(path = "reset.html")]
+struct ResetPage<'a> {
+    layout: Layout<'a>,
+    /// The code a refused form came with; the link's fragment otherwise.
+    code: &'a str,
+    code_pattern: String,
+    password: FieldErrors,
+    alert: Option<&'static str>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+pub struct NewPassword {
+    code: String,
+    password: String,
+    confirmation: String,
+}
+
+/// The page a reset link opens. Links carry the code in their fragment,
+/// which no server sees, and mail scanners open links, so the page uses
+/// nothing until its form posts the code.
+pub async fn show(State(app): State<AppState>, visitor: Visitor) -> Response {
+    render(&reset_page(
+        &app,
+        &visitor,
+        "",
+        FieldErrors::default(),
+        None,
+    ))
+}
+
+/// Sets the new password of the member the posted code was mailed to,
+/// ends every session and web client token of theirs, and tells their
+/// confirmed address. Never signs anyone in: it sends them to sign in.
+pub async fn reset(
+    State(app): State<AppState>,
+    visitor: Visitor,
+    address: ClientAddress,
+    Form(form): Form<NewPassword>,
+) -> Response {
+    if !app.recoveries.allows(address.0, Instant::now()) {
+        return message(
+            &app,
+            StatusCode::TOO_MANY_REQUESTS,
+            rate_limit::TRY_LATER,
+            &[],
+            None,
+        );
+    }
+    let Some(code) = link_code::parse(&form.code, link_code::MAILED_LENGTH) else {
+        return lapsed(&app);
+    };
+    let refuse = |status, password, alert| {
+        render_with(status, &reset_page(&app, &visitor, code, password, alert))
+    };
+    let new = match password_rules::check(&form.password, &form.confirmation) {
+        Ok(new) => new,
+        Err(refusal) => return refuse(StatusCode::UNPROCESSABLE_ENTITY, refusal.into(), None),
+    };
+    let taken = match app.db.take_reset_code(code, db::now()).await {
+        Ok(Some(taken)) => taken,
+        Ok(None) => return lapsed(&app),
+        Err(error) => return internal_error("Taking a reset code", error),
+    };
+    if let Err(error) = app.ergo.set_password(taken.account.as_str(), &new).await {
+        eprintln!("Resetting a password failed: {error}");
+        if let Err(error) = app.db.restore_reset_code(&taken).await {
+            return internal_error("Putting a reset code back", error);
+        }
+        let unavailable = Some(ERGO_UNAVAILABLE);
+        return refuse(
+            StatusCode::SERVICE_UNAVAILABLE,
+            FieldErrors::default(),
+            unavailable,
+        );
+    }
+    app.limiter.record_success(&taken.account);
+    if let Err(error) = app.db.end_sessions(&taken.account).await {
+        return internal_error("Ending a reset member's sessions", error);
+    }
+    notify(&app, &taken.account, &taken.email).await;
+    let cookie = [(header::SET_COOKIE, session::removal_cookie())];
+    (cookie, changed(&app)).into_response()
+}
+
+/// Tells `account`'s confirmed address their password changed, in mail
+/// that carries no secret, so it waits for the mailer as it is.
+async fn notify(app: &App, account: &str, email: &str) {
+    let queued = match reset_mail::changed_message(account, email, &app.public_url) {
+        Ok(message) => app
+            .outbox
+            .queue(&message, db::now())
+            .await
+            .map_err(Into::into),
+        Err(error) => Err(error),
+    };
+    if let Err(error) = queued {
+        eprintln!("Queueing a password-changed email failed: {error}");
+    }
+}
+
+fn reset_page<'a>(
+    app: &'a App,
+    visitor: &'a Visitor,
+    code: &'a str,
+    password: FieldErrors,
+    alert: Option<&'static str>,
+) -> ResetPage<'a> {
+    ResetPage {
+        layout: Layout::visitor(app, visitor),
+        code,
+        code_pattern: link_code::html_pattern(link_code::MAILED_LENGTH),
+        password,
+        alert,
+    }
+}
+
+/// A page that only says something, to someone shown as signed out:
+/// whoever reset a password signs in afresh.
+fn message(
+    app: &App,
+    status: StatusCode,
+    title: &str,
+    lines: &[&str],
+    next: Option<Link>,
+) -> Response {
+    let signed_out = Visitor::default();
+    super::message_with_link(app, &signed_out, status, "Password", title, lines, next)
+}
+
+const SIGN_IN: Link = Link {
+    href: auth::SIGN_IN_PATH,
+    label: "Sign in",
+};
+
+fn changed(app: &App) -> Response {
+    message(
+        app,
+        StatusCode::OK,
+        "Your password is changed.",
+        &[
+            "You're signed out of this site and the web client everywhere. \
+             Sign in with your new password.",
+            "IRC apps that were connected stay connected, and logins with a \
+             client certificate keep working.",
+        ],
+        Some(SIGN_IN),
+    )
+}
+
+/// The one answer for unknown, used, expired, replaced and malformed
+/// codes alike.
+fn lapsed(app: &App) -> Response {
+    let lifetime = format!(
+        "Links work once and expire after {}, and only the newest one works. \
+         If you set a new password with it already, there's nothing more to do.",
+        invite_rules::in_words(reset_rules::LIFETIME)
+    );
+    message(
+        app,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "This link doesn't work any more.",
+        &[&lifetime, "Otherwise, ask for a new one."],
+        Some(Link {
+            href: reset_mail::FORGOT_PATH,
+            label: "Get a new link",
         }),
     )
 }

@@ -1,12 +1,13 @@
-use axum::http::header;
+use axum::{http::header, response::Response};
 use concierge::{
     db,
-    rate_limit::{LINKS_PER_HOUR, RECOVERIES_PER_ADDRESS},
+    rate_limit::{LINKS_PER_HOUR, PER_ACCOUNT, RECOVERIES_PER_ADDRESS},
     reset_mail,
 };
+use ergo_api::fake::Failure;
 use outbox::{Body, QueuedMessage};
 
-use crate::{PUBLIC_URL, Site, body_text};
+use crate::{PASSWORD, PUBLIC_URL, Site, body_text};
 
 const FORGOT: &str = "/forgot-password";
 const SENT: &str = "<h1>Check your email.</h1>";
@@ -284,4 +285,280 @@ async fn other_sites_cannot_ask_for_links() {
         .await;
     assert_eq!(response.status(), 403);
     assert!(site.mail().await.is_empty());
+}
+
+const NEW_PASSWORD: &str = "lantern-orchard-71";
+const LAPSED: &str = "<h1>This link doesn&#39;t work any more.</h1>";
+
+impl Site {
+    /// Issues `account` a reset code, as mailing them a link does.
+    async fn reset_code_of(&self, account: &str) -> String {
+        let issued = self.db.issue_reset_code(account, db::now()).await;
+        issued.unwrap().expect("a confirmed member").code
+    }
+
+    async fn reset_code(&self) -> String {
+        self.reset_code_of("carol").await
+    }
+
+    /// Posts the reset page's form, as its button does.
+    async fn reset_with(&self, code: &str, password: &str, confirmation: &str) -> Response {
+        let form = [
+            ("code", code),
+            ("password", password),
+            ("confirmation", confirmation),
+        ];
+        let headers = [
+            (header::ORIGIN.as_str(), PUBLIC_URL),
+            ("x-real-ip", "192.0.2.7"),
+        ];
+        self.post_with("/reset", &form, None, &headers).await
+    }
+
+    async fn reset(&self, code: &str) -> (u16, String) {
+        let response = self.reset_with(code, NEW_PASSWORD, NEW_PASSWORD).await;
+        assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        (response.status().as_u16(), body_text(response).await)
+    }
+
+    async fn carols_password_is(&self, password: &str) -> bool {
+        let checked = self.ergo.client().check_auth("carol", password).await;
+        checked.unwrap().is_some()
+    }
+
+    async fn reset_codes(&self) -> i64 {
+        self.query_scalar("SELECT count(*) FROM password_reset_codes")
+            .await
+    }
+}
+
+#[tokio::test]
+async fn the_link_opens_a_form_for_a_new_password_under_the_signup_rules() {
+    let site = Site::start().await;
+
+    let response = site.get("/reset", None).await;
+
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+    let page = body_text(response).await;
+    for part in [
+        r#"<h1 id="reset-title">Choose a new password.</h1>"#,
+        r#"<form class="form" method="post" action="/reset">"#,
+        r#"<input id="code" name="code" required pattern="\s*(?:.*[#\/])?[A-Za-z0-9_\-]{43}\s*" autocomplete="off""#,
+        r#"<label for="password">New password</label>"#,
+        r#"<label for="confirmation">Confirm new password</label>"#,
+        r#"data-password-rules="/password-rules.json""#,
+        "IRC apps that are connected now stay connected, and logins with a client certificate keep working.",
+        r#"<button class="button button-primary" type="submit">Set my password</button>"#,
+    ] {
+        assert!(page.contains(part), "{part}: {page}");
+    }
+}
+
+#[tokio::test]
+async fn opening_the_link_uses_nothing_whatever_the_url_carries() {
+    let site = with_members().await;
+    let code = site.reset_code().await;
+
+    for path in ["/reset".to_owned(), format!("/reset?code={code}")] {
+        assert_eq!(site.get(&path, None).await.status(), 200, "{path}");
+    }
+
+    assert_eq!(site.reset_codes().await, 1);
+    assert_eq!(site.reset(&code).await.0, 200);
+}
+
+#[tokio::test]
+async fn resetting_sets_the_password_ends_every_session_and_token_and_mails_a_notice() {
+    let site = with_members().await;
+    let laptop = site.sign_in("carol").await;
+    let phone = site.sign_in("carol").await;
+    let token = site.access_token(&phone).await;
+    site.add_confirmed_member("erin").await;
+    let erins = site.sign_in("erin").await;
+    let code = site.reset_code().await;
+
+    let response = site.reset_with(&code, NEW_PASSWORD, NEW_PASSWORD).await;
+
+    assert_eq!(response.status(), 200);
+    let set_cookie = response.headers()[header::SET_COOKIE].to_str().unwrap();
+    assert!(set_cookie.contains("Max-Age=0"), "{set_cookie}");
+    let page = body_text(response).await;
+    assert!(
+        page.contains("<h1>Your password is changed.</h1>"),
+        "{page}"
+    );
+    assert!(
+        page.contains(r#"<a class="button button-primary" href="/signin">Sign in</a>"#),
+        "{page}"
+    );
+    assert!(
+        page.contains("logins with a client certificate keep working"),
+        "{page}"
+    );
+    assert!(site.carols_password_is(NEW_PASSWORD).await);
+    assert!(!site.carols_password_is(PASSWORD).await);
+    for cookie in [&laptop, &phone] {
+        assert_eq!(site.session_expiry(cookie).await, None);
+    }
+    assert_eq!(site.introspect(&token).await["active"], false);
+    assert!(site.session_expiry(&erins).await.is_some());
+    let due = site.outbox.due(db::now()).await.unwrap();
+    let notice = due
+        .iter()
+        .find(|message| message.subject == reset_mail::CHANGED_SUBJECT)
+        .expect("a notice");
+    assert_eq!(notice.recipient, "carol@example.org");
+    assert!(matches!(notice.body, Body::Plain(_)), "{notice:?}");
+    assert_eq!(site.sign_in_form("carol", NEW_PASSWORD).await.status(), 303);
+}
+
+#[tokio::test]
+async fn a_used_unknown_expired_replaced_or_malformed_code_gets_the_same_answer() {
+    let site = with_members().await;
+    let replaced = site.reset_code().await;
+    let used = site.reset_code().await;
+    site.reset(&used).await;
+    site.execute(
+        "UPDATE members SET email_verified_at = 1, email = 'dave@example.org' WHERE account = 'dave'",
+    )
+    .await;
+    let expired = site.reset_code_of("dave").await;
+    site.execute("UPDATE password_reset_codes SET expires_at = 0")
+        .await;
+    let unknown = "A".repeat(43);
+
+    let mut answers = Vec::new();
+    for code in [
+        &used,
+        &replaced,
+        &expired,
+        &unknown,
+        &unknown[1..],
+        "",
+        "short",
+    ] {
+        answers.push(site.reset(code).await);
+    }
+
+    assert!(
+        answers.windows(2).all(|pair| pair[0] == pair[1]),
+        "{answers:?}"
+    );
+    let (status, page) = &answers[0];
+    assert_eq!(*status, 422);
+    assert!(page.contains(LAPSED), "{page}");
+    assert!(page.contains("expire after 1 hour"), "{page}");
+    assert!(
+        page.contains(r#"href="/forgot-password">Get a new link</a>"#),
+        "{page}"
+    );
+    assert!(site.carols_password_is(NEW_PASSWORD).await);
+    let dave = site.ergo.client().check_auth("dave", PASSWORD).await;
+    assert!(dave.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_code_stops_working_once_the_address_changes() {
+    let site = with_members().await;
+    let code = site.reset_code().await;
+    site.execute("UPDATE members SET email = 'carol@example.net' WHERE account = 'carol'")
+        .await;
+
+    let (status, page) = site.reset(&code).await;
+
+    assert_eq!(status, 422);
+    assert!(page.contains(LAPSED), "{page}");
+    assert!(site.carols_password_is(PASSWORD).await);
+}
+
+#[tokio::test]
+async fn the_new_password_follows_the_signup_rules_and_the_form_keeps_the_code() {
+    let site = with_members().await;
+    let code = site.reset_code().await;
+    for (new, confirmation, error) in [
+        (
+            "short-one",
+            "short-one",
+            "Passwords have at least 12 characters.",
+        ),
+        (
+            "qwerty123456",
+            "qwerty123456",
+            "That password is too common.",
+        ),
+        (
+            NEW_PASSWORD,
+            "lantern-orchard-72",
+            "The passwords don&#39;t match.",
+        ),
+    ] {
+        let response = site.reset_with(&code, new, confirmation).await;
+
+        assert_eq!(response.status(), 422, "{new}");
+        let page = body_text(response).await;
+        assert!(
+            page.contains(&format!(r#"<p class="field-error">{error}</p>"#)),
+            "{new}: {page}"
+        );
+        assert!(page.contains(&format!(r#"value="{code}""#)), "{page}");
+        assert!(!page.contains(new), "{page}");
+    }
+    assert!(site.carols_password_is(PASSWORD).await);
+    assert_eq!(site.reset(&code).await.0, 200);
+}
+
+#[tokio::test]
+async fn when_ergo_fails_nothing_changes_and_the_link_keeps_working() {
+    let site = with_members().await;
+    let code = site.reset_code().await;
+    site.ergo.fail_next(Failure::UnknownError);
+
+    let (status, page) = site.reset(&code).await;
+
+    assert_eq!(status, 503);
+    assert!(page.contains("Nothing changed"), "{page}");
+    assert!(site.carols_password_is(PASSWORD).await);
+    assert_eq!(site.reset(&code).await.0, 200);
+    assert!(site.carols_password_is(NEW_PASSWORD).await);
+}
+
+#[tokio::test]
+async fn resetting_clears_the_wrong_guesses_that_locked_the_member_out() {
+    let site = with_members().await;
+    for _ in 0..PER_ACCOUNT {
+        site.sign_in_form("carol", "a-wrong-guess").await;
+    }
+    assert_eq!(site.sign_in_form("carol", PASSWORD).await.status(), 429);
+    let code = site.reset_code().await;
+
+    site.reset(&code).await;
+
+    assert_eq!(site.sign_in_form("carol", NEW_PASSWORD).await.status(), 303);
+}
+
+#[tokio::test]
+async fn one_address_gets_a_few_posts_of_the_form() {
+    let site = with_members().await;
+    for _ in 0..RECOVERIES_PER_ADDRESS {
+        site.reset_with("short", NEW_PASSWORD, NEW_PASSWORD).await;
+    }
+    let response = site.reset_with("short", NEW_PASSWORD, NEW_PASSWORD).await;
+    assert_eq!(response.status(), 429);
+    assert!(body_text(response).await.contains("Too many attempts."));
+}
+
+#[tokio::test]
+async fn other_sites_cannot_post_the_form() {
+    let site = with_members().await;
+    let code = site.reset_code().await;
+    let evil = [(header::ORIGIN.as_str(), "https://evil.example")];
+    let form = [
+        ("code", code.as_str()),
+        ("password", NEW_PASSWORD),
+        ("confirmation", NEW_PASSWORD),
+    ];
+    let response = site.post_with("/reset", &form, None, &evil).await;
+    assert_eq!(response.status(), 403);
+    assert!(site.carols_password_is(PASSWORD).await);
 }

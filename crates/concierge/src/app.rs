@@ -143,6 +143,12 @@ pub fn router(app: App) -> Router {
                 .layer(map_response(routes::no_store)),
         )
         .route(
+            reset_mail::RESET_PATH,
+            get(routes::reset::show)
+                .post(routes::reset::reset)
+                .layer(map_response(routes::no_store)),
+        )
+        .route(
             reset_mail::FORGOT_PATH,
             get(routes::reset::forgot)
                 .post(routes::reset::ask)
