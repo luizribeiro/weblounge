@@ -280,6 +280,7 @@ fn bots(app: &App) -> Bots<'_> {
     Bots {
         db: &app.db,
         ergo: &app.ergo,
+        history_expiry: app.history_expiry,
     }
 }
 

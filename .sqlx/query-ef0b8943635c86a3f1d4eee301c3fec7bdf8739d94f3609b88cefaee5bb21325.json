@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM bots WHERE account = ? AND removed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "ef0b8943635c86a3f1d4eee301c3fec7bdf8739d94f3609b88cefaee5bb21325"
+}

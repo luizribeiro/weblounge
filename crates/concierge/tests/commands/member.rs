@@ -284,7 +284,7 @@ mod reconcile {
             note: None,
             created_at: 1_760_000_000,
         };
-        db.insert_bot(&ghost).await.unwrap();
+        db.insert_bot(&ghost, None, None).await.unwrap();
         db.remove_member("carol", db::now()).await.unwrap();
 
         let output = fixture.run(&["member", "reconcile"]).await.unwrap();

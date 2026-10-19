@@ -6,7 +6,7 @@ use concierge::{
 use ergo_api::fake::Failure;
 use regex::Regex;
 
-use crate::{PUBLIC_URL, Site, body_text, is_tab, location};
+use crate::{HISTORY_EXPIRY, PUBLIC_URL, Site, body_text, is_tab, location};
 
 /// Posts a form from our own pages, from the client address `address`.
 async fn post_from(
@@ -303,7 +303,8 @@ async fn a_name_a_member_or_bot_holds_is_taken_even_once_ergo_forgot_it() {
     site.register("orphan").await;
     site.execute(
         "INSERT INTO members (account, joined_at, removed_at) VALUES ('gone', 0, 1);
-         INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('dalek', 'luiz', 0, 1)",
+         INSERT INTO bots (account, owner, created_at, removed_at)
+         VALUES ('dalek', 'luiz', 0, unixepoch())",
     )
     .await;
     let cookie = site.sign_in("alice").await;
@@ -597,7 +598,7 @@ async fn resetting_from_another_origin_is_refused() {
 }
 
 #[tokio::test]
-async fn deleting_a_bot_erases_its_account_and_keeps_its_name() {
+async fn deleting_a_bot_erases_its_account_and_its_owner_can_remake_it_at_once() {
     let site = Site::start().await;
     let (cookie, password) = alice_with_bender(&site).await;
 
@@ -612,9 +613,50 @@ async fn deleting_a_bot_erases_its_account_and_keeps_its_name() {
     let page = bots_tab(&site, &cookie).await;
     assert!(listed(&page).is_empty(), "{page}");
     assert!(page.contains(&count(0)), "{page}");
+
     let (status, page) = make(&site, &cookie, "bender").await;
+
+    assert_eq!(status, 200, "{page}");
+    assert!(
+        signs_in_to_ergo(&site, "bender", &shown_password(&page)).await,
+        "{page}"
+    );
+    assert_eq!(
+        site.ergo.vhost("bender").as_deref(),
+        Some("weblounge/bot/alice")
+    );
+    assert_eq!(
+        listed(&bots_tab(&site, &cookie).await),
+        ["<strong>bender</strong>"]
+    );
+}
+
+#[tokio::test]
+async fn another_member_takes_a_deleted_bots_name_once_its_history_expired() {
+    let site = Site::start().await;
+    site.add_member("luiz").await;
+    site.add_verified_member("alice").await;
+    site.execute(&format!(
+        "INSERT INTO bots (account, owner, created_at, removed_at)
+         VALUES ('dalek', 'luiz', 0, unixepoch() - {HISTORY_EXPIRY} + 60),
+                ('hal', 'luiz', 0, unixepoch() - {HISTORY_EXPIRY})"
+    ))
+    .await;
+    let cookie = site.sign_in("alice").await;
+
+    let (status, page) = make(&site, &cookie, "dalek").await;
     assert_eq!(status, 422, "{page}");
-    assert!(page.contains(&name_error("bender is taken.")), "{page}");
+    assert!(page.contains(&name_error("dalek is taken.")), "{page}");
+
+    let (status, page) = make(&site, &cookie, "hal").await;
+    assert_eq!(status, 200, "{page}");
+    assert!(signs_in_to_ergo(&site, "hal", &shown_password(&page)).await);
+    let hal = site.db.bot("hal").await.unwrap().unwrap();
+    assert_eq!((hal.owner.as_str(), hal.removed_at), ("alice", None));
+    assert_eq!(
+        site.ergo.vhost("hal").as_deref(),
+        Some("weblounge/bot/alice")
+    );
 }
 
 #[tokio::test]

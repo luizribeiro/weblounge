@@ -1,7 +1,7 @@
 use concierge::db::{self, Bot, NewBot};
 use ergo_api::{Preference, fake::Failure};
 
-use crate::Fixture;
+use crate::{Fixture, HISTORY_EXPIRY};
 
 impl Fixture {
     /// luiz, a member, and alice, who was removed.
@@ -33,13 +33,22 @@ impl Fixture {
             note,
             created_at: 1_760_000_000,
         };
-        self.db().await.insert_bot(&bot).await.unwrap();
+        let inserted = self.db().await.insert_bot(&bot, None, None).await;
+        assert_eq!(inserted.unwrap(), db::BotInsertion::Inserted);
     }
 
-    /// A bot of luiz's that was deleted and that Ergo has since erased.
+    /// A bot of luiz's that was deleted long ago and that Ergo has since
+    /// erased.
     async fn insert_deleted_bot(&self, name: &str) {
-        self.insert_bot(name, "luiz", None).await;
-        let removed = self.db().await.remove_bot(name, 1_760_100_000).await;
+        self.insert_bot_deleted_at(name, "luiz", 1_760_100_000)
+            .await;
+    }
+
+    /// A bot of `owner`'s deleted at `removed_at`, which Ergo has since
+    /// erased.
+    async fn insert_bot_deleted_at(&self, name: &str, owner: &str, removed_at: i64) {
+        self.insert_bot(name, owner, None).await;
+        let removed = self.db().await.remove_bot(name, removed_at).await;
         assert!(removed.unwrap());
     }
 }
@@ -180,7 +189,10 @@ mod create {
     async fn refuses_names_members_and_bots_hold_even_once_ergo_forgot_them() {
         let fixture = Fixture::with_owners().await;
         fixture.insert_member("Gone", Some("luiz")).await;
-        fixture.insert_deleted_bot("dalek").await;
+        fixture.add_member("zoe", Some("luiz")).await;
+        fixture
+            .insert_bot_deleted_at("dalek", "zoe", db::now())
+            .await;
         fixture.register("Orphan").await;
 
         for name in ["LUIZ", "alice", "gone", "Dalek", "orphan"] {
@@ -194,6 +206,35 @@ mod create {
         assert!(!fixture.in_ergo("dalek").await);
         assert_eq!(fixture.bot("orphan").await, None);
         assert_eq!(fixture.db().await.bots(None).await.unwrap(), []);
+    }
+
+    #[tokio::test]
+    async fn reuses_a_deleted_bots_name_for_its_owner_and_for_others_once_its_history_expired() {
+        let fixture = Fixture::with_owners().await;
+        fixture.add_member("zoe", Some("luiz")).await;
+        let lately = db::now() - HISTORY_EXPIRY + 60;
+        fixture.insert_bot_deleted_at("dalek", "zoe", lately).await;
+        fixture
+            .insert_bot_deleted_at("hal", "zoe", db::now() - HISTORY_EXPIRY)
+            .await;
+
+        let error = fixture
+            .run(&["bot", "create", "luiz", "dalek"])
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "dalek is taken");
+        for (owner, name) in [("zoe", "dalek"), ("luiz", "HAL")] {
+            let output = fixture.run(&["bot", "create", owner, name]).await.unwrap();
+            assert!(
+                fixture
+                    .signs_in_to_ergo(name, printed_password(&output))
+                    .await
+            );
+            let bot = fixture.bot(name).await.unwrap();
+            assert_eq!((bot.owner.as_str(), bot.removed_at), (owner, None));
+            let vhost = format!("weblounge/bot/{owner}");
+            assert_eq!(fixture.vhost(name), Some(vhost));
+        }
     }
 
     #[tokio::test]
@@ -212,6 +253,27 @@ mod create {
              Ergo refused the request: UNKNOWN_ERROR (simulated failure)"
         );
         assert_eq!(fixture.bot("bender").await, None);
+    }
+
+    #[tokio::test]
+    async fn keeps_the_deleted_bot_a_name_was_reused_from_when_ergo_fails() {
+        let fixture = Fixture::with_owners().await;
+        fixture
+            .insert_bot_deleted_at("dalek", "luiz", db::now())
+            .await;
+        let deleted = fixture.bot("dalek").await;
+        fixture.ergo.fail_next(Failure::UnknownError);
+
+        let error = fixture.run(&["bot", "create", "luiz", "dalek"]).await;
+
+        assert!(error.is_err());
+        assert_eq!(fixture.bot("dalek").await, deleted);
+        fixture.add_member("zoe", Some("luiz")).await;
+        let error = fixture
+            .run(&["bot", "create", "zoe", "dalek"])
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "dalek is taken");
     }
 
     #[tokio::test]
@@ -342,7 +404,7 @@ mod delete {
     use super::*;
 
     #[tokio::test]
-    async fn erases_the_account_and_keeps_its_name() {
+    async fn erases_the_account_and_frees_its_name_for_its_owner_alone() {
         let fixture = Fixture::with_owners().await;
         let output = fixture
             .run(&["bot", "create", "luiz", "Bender"])
@@ -357,11 +419,21 @@ mod delete {
         assert!(!fixture.in_ergo("bender").await);
         assert!(fixture.bot("bender").await.unwrap().removed_at.is_some());
         assert_eq!(fixture.db().await.bots(None).await.unwrap(), []);
+        fixture.add_member("zoe", Some("luiz")).await;
         let error = fixture
-            .run(&["bot", "create", "luiz", "bender"])
+            .run(&["bot", "create", "zoe", "bender"])
             .await
             .unwrap_err();
         assert_eq!(error.to_string(), "bender is taken");
+        let output = fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap();
+        assert!(
+            fixture
+                .signs_in_to_ergo("bender", printed_password(&output))
+                .await
+        );
     }
 
     #[tokio::test]

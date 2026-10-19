@@ -5,7 +5,8 @@ use anyhow::Context;
 use ergo_api::{Client, Erasure, Passphrase, Preference, Registration, SettingsChanges};
 
 use crate::{
-    db::{self, Db, NewBot},
+    bot_rules,
+    db::{self, Bot, BotInsertion, Db, NewBot},
     nick::{self, InvalidNick, Nick},
     password,
 };
@@ -14,16 +15,59 @@ use crate::{
 pub struct Bots<'a> {
     pub db: &'a Db,
     pub ergo: &'a Client,
+    /// How long Ergo keeps chat history, in seconds, which deleted bots'
+    /// names wait out before others may take them.
+    pub history_expiry: i64,
 }
 
 /// Why a bot wasn't created, in terms its owner can act on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     InvalidName(InvalidNick),
-    /// A member or a bot holds the name, or once did.
+    /// A member holds the name or once did, or a bot does or did lately.
     Taken,
     /// The owner has as many live bots as they may.
     TooMany,
+}
+
+/// Whether someone may take a name, as far as concierge knows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NameClaim {
+    Free,
+    /// A deleted bot's name, free to the claimant; a new bot takes its row.
+    Reuses(Bot),
+    Held,
+}
+
+/// Whether `claimant`, a member making a bot, or None for someone signing
+/// up, may take `name`, as far as concierge knows: members' names stay
+/// theirs, and deleted bots' follow [`bot_rules::deleted_name_free`].
+pub async fn name_claim(
+    db: &Db,
+    name: &str,
+    claimant: Option<&str>,
+    history_expiry: i64,
+) -> sqlx::Result<NameClaim> {
+    if db.held_by_member(name).await? {
+        return Ok(NameClaim::Held);
+    }
+    let Some(bot) = db.bot(name).await? else {
+        return Ok(NameClaim::Free);
+    };
+    Ok(match bot.removed_at {
+        Some(removed_at)
+            if bot_rules::deleted_name_free(
+                &bot.owner,
+                removed_at,
+                claimant,
+                db::now(),
+                history_expiry,
+            ) =>
+        {
+            NameClaim::Reuses(bot)
+        }
+        _ => NameClaim::Held,
+    })
 }
 
 impl Bots<'_> {
@@ -42,33 +86,34 @@ impl Bots<'_> {
             Ok(nick) => nick,
             Err(invalid) => return Ok(Err(Refusal::InvalidName(invalid))),
         };
-        if self.db.name_held(nick.as_str()).await? {
-            return Ok(Err(Refusal::Taken));
-        }
+        let replacing =
+            match name_claim(self.db, nick.as_str(), Some(owner), self.history_expiry).await? {
+                NameClaim::Free => None,
+                NameClaim::Reuses(deleted) => Some(deleted),
+                NameClaim::Held => return Ok(Err(Refusal::Taken)),
+            };
         // Recorded first, so an account Ergo creates always has its row; the
-        // row goes again if Ergo creates nothing.
+        // row is taken back if Ergo creates nothing.
         let bot = NewBot {
             account: nick.as_str(),
             owner,
             note,
             created_at: db::now(),
         };
-        let inserted = match max_live {
-            Some(max_live) => self.db.insert_bot_within(&bot, max_live).await,
-            None => self.db.insert_bot(&bot).await.map(|()| true),
-        };
-        let inserted = match inserted {
-            Err(sqlx::Error::Database(error)) if error.is_unique_violation() => {
-                return Ok(Err(Refusal::Taken));
-            }
-            inserted => inserted?,
-        };
-        if !inserted {
-            return Ok(Err(Refusal::TooMany));
+        match self
+            .db
+            .insert_bot(&bot, replacing.as_ref(), max_live)
+            .await?
+        {
+            BotInsertion::Inserted => {}
+            BotInsertion::NameTaken => return Ok(Err(Refusal::Taken)),
+            BotInsertion::TooMany => return Ok(Err(Refusal::TooMany)),
         }
         let registration = self.ergo.register(nick.clone(), password).await;
         if !matches!(registration, Ok(Registration::Created)) {
-            self.db.forget_bot(nick.as_str()).await?;
+            self.db
+                .take_back_bot(nick.as_str(), replacing.as_ref())
+                .await?;
         }
         match registration.with_context(|| format!("Ergo didn't create {nick}"))? {
             Registration::Created => {}
@@ -87,9 +132,9 @@ impl Bots<'_> {
         password::set_generated(self.ergo, account).await
     }
 
-    /// Erases the live bot `account` in Ergo, which disconnects it, and
-    /// marks it deleted. An account Ergo has no record of was erased
-    /// already.
+    /// Erases the live bot `account` in Ergo, which disconnects it and
+    /// frees the name there, and marks it deleted. An account Ergo has no
+    /// record of was erased already.
     pub async fn remove(&self, account: &str) -> anyhow::Result<()> {
         let _: Erasure = self
             .ergo

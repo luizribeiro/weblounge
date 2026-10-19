@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT EXISTS (SELECT 1 FROM members WHERE account = ?1)\n                   OR EXISTS (SELECT 1 FROM bots WHERE account = ?1) AS \"held!: bool\"",
+  "query": "SELECT EXISTS (SELECT 1 FROM members WHERE account = ?) AS \"held!: bool\"",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "f1aaeb18f216ea5697f6beb284f1e2e26b79112ecc7f79653a14b4946ffbd289"
+  "hash": "30126e13c636d381121f4215921b7f88866be91b3cd0ca5b8fdacc1db46adbdb"
 }

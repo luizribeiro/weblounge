@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT COUNT(*) AS \"live!: i64\" FROM bots\n               WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL",
+  "query": "SELECT COUNT(*) AS \"live!: i64\" FROM bots\n                   WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "0d1d87007d6f43394ce07f080fe0c918c33f40a5e23a1955a168a066ecba14b1"
+  "hash": "1e3563846c392ac087e8481e1ecfdfb9d86be26a5d0311609bcd5a6cc1d062c9"
 }

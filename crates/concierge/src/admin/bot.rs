@@ -73,6 +73,7 @@ impl Admin {
         Bots {
             db: &self.db,
             ergo: &self.ergo,
+            history_expiry: self.config.history_expiry,
         }
     }
 }

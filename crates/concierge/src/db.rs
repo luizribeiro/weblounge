@@ -185,7 +185,8 @@ pub struct NewBot<'a> {
     pub created_at: i64,
 }
 
-/// A bot, or the row a deleted bot leaves to keep its name.
+/// A bot, or the row a deleted bot leaves to hold its name until it's
+/// free again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bot {
     pub account: String,
@@ -193,6 +194,16 @@ pub struct Bot {
     pub note: Option<String>,
     pub created_at: i64,
     pub removed_at: Option<i64>,
+}
+
+/// What became of inserting a bot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BotInsertion {
+    Inserted,
+    /// Another bot holds the name.
+    NameTaken,
+    /// Its owner has as many live bots as they may.
+    TooMany,
 }
 
 /// A bot's name and owner, and which of the two is gone.
@@ -1057,37 +1068,67 @@ impl Db {
     /// members and deleted bots keep their names, even once Ergo has erased
     /// their accounts and would hand the names out again.
     pub async fn name_held(&self, account: &str) -> sqlx::Result<bool> {
+        Ok(self.held_by_member(account).await? || self.bot(account).await?.is_some())
+    }
+
+    /// Whether a member, removed or not, holds `account`, in any case.
+    /// Removed members keep their names, even once Ergo has erased their
+    /// accounts and would hand the names out again.
+    pub async fn held_by_member(&self, account: &str) -> sqlx::Result<bool> {
         sqlx::query_scalar!(
-            r#"SELECT EXISTS (SELECT 1 FROM members WHERE account = ?1)
-                   OR EXISTS (SELECT 1 FROM bots WHERE account = ?1) AS "held!: bool""#,
+            r#"SELECT EXISTS (SELECT 1 FROM members WHERE account = ?) AS "held!: bool""#,
             account
         )
         .fetch_one(&self.pool)
         .await
     }
 
-    pub async fn insert_bot(&self, bot: &NewBot<'_>) -> sqlx::Result<()> {
-        insert_bot(&self.pool, bot).await
-    }
-
-    /// Inserts `bot` unless its owner has `max_live` live bots already;
-    /// answers whether it did. Concurrent calls take turns, so they can't
-    /// both see room for one more.
-    pub async fn insert_bot_within(&self, bot: &NewBot<'_>, max_live: i64) -> sqlx::Result<bool> {
+    /// Inserts `bot`, taking the row of `replacing`, the deleted bot whose
+    /// name it reuses, unless its owner has `max_live` live bots already.
+    /// Concurrent calls take turns, so they can't both see room for one
+    /// more, and a name another bot took, or a deleted bot that changed,
+    /// since the caller looked stays theirs.
+    pub async fn insert_bot(
+        &self,
+        bot: &NewBot<'_>,
+        replacing: Option<&Bot>,
+        max_live: Option<i64>,
+    ) -> sqlx::Result<BotInsertion> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let live = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) AS "live!: i64" FROM bots
-               WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL"#,
-            bot.owner,
-        )
-        .fetch_one(&mut *transaction)
-        .await?;
-        if live >= max_live {
-            return Ok(false);
+        if let Some(max_live) = max_live {
+            let live = sqlx::query_scalar!(
+                r#"SELECT COUNT(*) AS "live!: i64" FROM bots
+                   WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL"#,
+                bot.owner,
+            )
+            .fetch_one(&mut *transaction)
+            .await?;
+            if live >= max_live {
+                return Ok(BotInsertion::TooMany);
+            }
         }
-        insert_bot(&mut *transaction, bot).await?;
+        let replaced_owner = replacing.map(|replaced| replaced.owner.as_str());
+        let replaced_at = replacing.and_then(|replaced| replaced.removed_at);
+        let inserted = sqlx::query!(
+            "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)
+             ON CONFLICT (account) DO UPDATE
+             SET owner = excluded.owner, note = excluded.note,
+                 created_at = excluded.created_at, removed_at = NULL
+             WHERE bots.owner = ? AND bots.removed_at = ?",
+            bot.account,
+            bot.owner,
+            bot.note,
+            bot.created_at,
+            replaced_owner,
+            replaced_at,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        if inserted.rows_affected() == 0 {
+            return Ok(BotInsertion::NameTaken);
+        }
         transaction.commit().await?;
-        Ok(true)
+        Ok(BotInsertion::Inserted)
     }
 
     /// The bot whose account is `account`, in any case, deleted or not.
@@ -1116,12 +1157,34 @@ impl Db {
         .await
     }
 
-    /// Drops the row of a bot Ergo never created, freeing its name.
-    pub async fn forget_bot(&self, account: &str) -> sqlx::Result<()> {
-        sqlx::query!("DELETE FROM bots WHERE account = ?", account)
-            .execute(&self.pool)
-            .await
-            .map(drop)
+    /// Takes back the insertion of the bot `account` Ergo never created:
+    /// drops its row, freeing its name, or puts back the deleted bot it
+    /// replaced, which holds the name as it did.
+    pub async fn take_back_bot(&self, account: &str, replaced: Option<&Bot>) -> sqlx::Result<()> {
+        match replaced {
+            None => {
+                sqlx::query!(
+                    "DELETE FROM bots WHERE account = ? AND removed_at IS NULL",
+                    account
+                )
+                .execute(&self.pool)
+                .await?
+            }
+            Some(replaced) => {
+                sqlx::query!(
+                    "UPDATE bots SET owner = ?, note = ?, created_at = ?, removed_at = ?
+                     WHERE account = ? AND removed_at IS NULL",
+                    replaced.owner,
+                    replaced.note,
+                    replaced.created_at,
+                    replaced.removed_at,
+                    account,
+                )
+                .execute(&self.pool)
+                .await?
+            }
+        };
+        Ok(())
     }
 
     /// Every bot's account, deleted ones included.
@@ -1138,8 +1201,8 @@ impl Db {
         .await
     }
 
-    /// Marks a bot deleted, keeping its row so its name stays taken;
-    /// answers whether it was live.
+    /// Marks a bot deleted, keeping its row so its name stays held until
+    /// it's free; answers whether it was live.
     pub async fn remove_bot(&self, account: &str, now: i64) -> sqlx::Result<bool> {
         let removed = sqlx::query!(
             "UPDATE bots SET removed_at = ? WHERE account = ? AND removed_at IS NULL",
@@ -1217,19 +1280,6 @@ async fn insert_invite(
         invite.created_at,
         invite.expires_at,
         invite.makes_admin,
-    )
-    .execute(executor)
-    .await
-    .map(drop)
-}
-
-async fn insert_bot(executor: impl SqliteExecutor<'_>, bot: &NewBot<'_>) -> sqlx::Result<()> {
-    sqlx::query!(
-        "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)",
-        bot.account,
-        bot.owner,
-        bot.note,
-        bot.created_at,
     )
     .execute(executor)
     .await
@@ -2783,14 +2833,14 @@ pub(crate) mod tests {
             ("dalek", "luiz", None),
             ("Marvin", "alice", Some("posts the weather")),
         ] {
-            db.insert_bot(&NewBot {
+            let bot = NewBot {
                 account,
                 owner,
                 note,
                 created_at: 100,
-            })
-            .await
-            .unwrap();
+            };
+            let inserted = db.insert_bot(&bot, None, None).await.unwrap();
+            assert_eq!(inserted, BotInsertion::Inserted);
         }
         assert!(db.remove_bot("DALEK", 200).await.unwrap());
         (db, dir)
@@ -2836,12 +2886,16 @@ pub(crate) mod tests {
             created_at: 300,
         };
 
-        assert!(db.insert_bot_within(&bot("hal"), 2).await.unwrap());
-        assert!(!db.insert_bot_within(&bot("eve"), 2).await.unwrap());
+        let (hal, eve) = (bot("hal"), bot("eve"));
+        let inserted = db.insert_bot(&hal, None, Some(2)).await.unwrap();
+        assert_eq!(inserted, BotInsertion::Inserted);
+        let inserted = db.insert_bot(&eve, None, Some(2)).await.unwrap();
+        assert_eq!(inserted, BotInsertion::TooMany);
 
         assert_eq!(db.bot("eve").await.unwrap(), None);
         assert!(db.bot("hal").await.unwrap().is_some());
-        assert!(db.insert_bot_within(&bot("eve"), 3).await.unwrap());
+        let inserted = db.insert_bot(&eve, None, Some(3)).await.unwrap();
+        assert_eq!(inserted, BotInsertion::Inserted);
     }
 
     #[tokio::test]
@@ -2855,10 +2909,14 @@ pub(crate) mod tests {
         };
 
         let (hal, eve) = (bot("hal"), bot("eve"));
-        let inserted = tokio::join!(db.insert_bot_within(&hal, 2), db.insert_bot_within(&eve, 2));
+        let inserted = tokio::join!(
+            db.insert_bot(&hal, None, Some(2)),
+            db.insert_bot(&eve, None, Some(2))
+        );
 
         let inserted = [inserted.0.unwrap(), inserted.1.unwrap()];
-        assert_eq!(inserted.iter().filter(|&&ok| ok).count(), 1);
+        assert!(inserted.contains(&BotInsertion::Inserted), "{inserted:?}");
+        assert!(inserted.contains(&BotInsertion::TooMany), "{inserted:?}");
         assert_eq!(db.bots(Some("luiz")).await.unwrap().len(), 2);
     }
 
@@ -2902,13 +2960,72 @@ pub(crate) mod tests {
             note: None,
             created_at: 300,
         };
-        let error = db.insert_bot(&bot("hal", "nobody")).await.unwrap_err();
+        let error = db
+            .insert_bot(&bot("hal", "nobody"), None, None)
+            .await
+            .unwrap_err();
         assert!(error.to_string().contains("FOREIGN KEY"), "{error}");
-        let error = db.insert_bot(&bot("Dalek", "alice")).await.unwrap_err();
-        assert!(error.to_string().contains("UNIQUE"), "{error}");
-        db.forget_bot("DALEK").await.unwrap();
-        assert!(!db.name_held("dalek").await.unwrap());
-        db.insert_bot(&bot("Dalek", "alice")).await.unwrap();
+        let inserted = db.insert_bot(&bot("Dalek", "alice"), None, None).await;
+        assert_eq!(inserted.unwrap(), BotInsertion::NameTaken);
+    }
+
+    #[tokio::test]
+    async fn a_new_bot_takes_the_row_of_the_deleted_bot_it_was_judged_against() {
+        let (db, _dir) = with_bots().await;
+        let dalek = db.bot("dalek").await.unwrap().unwrap();
+        let bender = db.bot("bender").await.unwrap().unwrap();
+        let hal = NewBot {
+            account: "Dalek",
+            owner: "alice",
+            note: Some("takes over"),
+            created_at: 300,
+        };
+        let changed_since = Bot {
+            removed_at: Some(199),
+            ..dalek.clone()
+        };
+        for stale in [&changed_since, &bender] {
+            let inserted = db.insert_bot(&hal, Some(stale), None).await.unwrap();
+            assert_eq!(inserted, BotInsertion::NameTaken, "{stale:?}");
+        }
+        assert_eq!(db.bot("dalek").await.unwrap().as_ref(), Some(&dalek));
+
+        let inserted = db.insert_bot(&hal, Some(&dalek), None).await.unwrap();
+
+        assert_eq!(inserted, BotInsertion::Inserted);
+        assert_eq!(
+            db.bot("DALEK").await.unwrap(),
+            Some(Bot {
+                account: "dalek".into(),
+                owner: "alice".into(),
+                note: Some("takes over".into()),
+                created_at: 300,
+                removed_at: None,
+            })
+        );
+        assert_eq!(db.bots(Some("alice")).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn taking_back_a_bot_frees_its_name_or_puts_back_the_one_it_replaced() {
+        let (db, _dir) = with_bots().await;
+        let dalek = db.bot("dalek").await.unwrap().unwrap();
+        let bot = |account| NewBot {
+            account,
+            owner: "alice",
+            note: None,
+            created_at: 300,
+        };
+        db.insert_bot(&bot("hal"), None, None).await.unwrap();
+        db.insert_bot(&bot("dalek"), Some(&dalek), None)
+            .await
+            .unwrap();
+
+        db.take_back_bot("HAL", None).await.unwrap();
+        db.take_back_bot("dalek", Some(&dalek)).await.unwrap();
+
+        assert_eq!(db.bot("hal").await.unwrap(), None);
+        assert_eq!(db.bot("dalek").await.unwrap(), Some(dalek));
     }
 
     #[tokio::test]
