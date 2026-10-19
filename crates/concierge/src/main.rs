@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::Parser;
 use std::{net::SocketAddr, path::Path};
 
@@ -19,6 +20,7 @@ use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    common::make_undumpable().context("can't keep concierge's memory out of core dumps")?;
     match Command::parse() {
         Command::Migrate => migrate(&Databases::from_env()?).await,
         Command::Serve => serve(Config::from_env()?).await,
