@@ -1,6 +1,7 @@
 use axum::http::header;
 use concierge::{
     db,
+    email::Email,
     name::MemberName,
     rate_limit::{LINKS_PER_DAY, PER_ACCOUNT, TRY_LATER},
     verification_mail, verification_rules,
@@ -159,7 +160,10 @@ async fn saves_the_settings_and_says_so() {
     assert_eq!(response.status(), 303);
     assert_eq!(location(&response), "/account?saved&sent#email-and-news");
     let member = site.db.member("alice").await.unwrap().unwrap();
-    assert_eq!(member.email.as_deref(), Some("alice@example.net"));
+    assert_eq!(
+        member.email.as_ref().map(Email::as_str),
+        Some("alice@example.net")
+    );
     assert!(member.news_opt_in);
     let page = body_text(site.get("/account?saved", Some(&cookie)).await).await;
     assert_eq!(email_notices(&page), ["Saved."]);
@@ -202,7 +206,10 @@ async fn refuses_an_invalid_email_and_keeps_what_was_typed() {
     assert!(crate::is_tab(&page, "/account"), "{page}");
     assert!(page.contains(r#"type="checkbox" checked"#), "{page}");
     let member = site.db.member("alice").await.unwrap().unwrap();
-    assert_eq!(member.email.as_deref(), Some("someone@example.org"));
+    assert_eq!(
+        member.email.as_ref().map(Email::as_str),
+        Some("someone@example.org")
+    );
     assert!(!member.news_opt_in);
 }
 
@@ -237,7 +244,10 @@ async fn guests_cannot_change_settings() {
     assert_eq!(response.status(), 303);
     assert_eq!(location(&response), "/signin");
     let member = site.db.member("alice").await.unwrap().unwrap();
-    assert_eq!(member.email.as_deref(), Some("someone@example.org"));
+    assert_eq!(
+        member.email.as_ref().map(Email::as_str),
+        Some("someone@example.org")
+    );
 }
 
 const RESEND: &str = "/verification-link";
@@ -473,7 +483,10 @@ async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
     assert!(page.contains(r#"value="alice@example.net""#), "{page}");
     assert!(page.contains(&send_link("send a new link")), "{page}");
     let member = site.db.member("alice").await.unwrap().unwrap();
-    assert_eq!(member.email.as_deref(), Some("alice@example.net"));
+    assert_eq!(
+        member.email.as_ref().map(Email::as_str),
+        Some("alice@example.net")
+    );
     assert_eq!(site.mail().await.len(), LINKS_PER_DAY);
 }
 
@@ -505,7 +518,10 @@ async fn an_address_another_member_verified_is_refused_in_any_case() {
     );
     assert!(page.contains(r#"value="BOB@example.org""#), "{page}");
     let alice = site.db.member("alice").await.unwrap().unwrap();
-    assert_eq!(alice.email.as_deref(), Some("someone@example.org"));
+    assert_eq!(
+        alice.email.as_ref().map(Email::as_str),
+        Some("someone@example.org")
+    );
     assert!(site.mail().await.is_empty());
 }
 
@@ -540,7 +556,10 @@ fn password_error(page: &str) -> &str {
 
 async fn email_unchanged(site: &Site) {
     let alice = site.db.member("alice").await.unwrap().unwrap();
-    assert_eq!(alice.email.as_deref(), Some("someone@example.org"));
+    assert_eq!(
+        alice.email.as_ref().map(Email::as_str),
+        Some("someone@example.org")
+    );
     assert!(site.mail().await.is_empty());
 }
 

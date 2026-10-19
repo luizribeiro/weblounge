@@ -8,7 +8,6 @@ use outbox::{Message, Outbox, Subject};
 
 use crate::{
     db::{Db, IssuedCode},
-    email::Email,
     invite_rules, link_mail,
     name::MemberName,
     rate_limit, verification_rules,
@@ -80,7 +79,7 @@ pub fn message(
     };
     Ok(Message {
         account: Some(issued.account.to_string()),
-        to: Email::parse(&issued.email)?,
+        to: issued.email.clone(),
         subject: Subject::parse(kind.subject())?,
         body: body.render()?,
     })
@@ -163,7 +162,7 @@ mod tests {
         IssuedCode {
             code: "q".repeat(link_code::MAILED_LENGTH),
             account: MemberName::new(account),
-            email: "bob@example.org".into(),
+            email: db::tests::email("bob@example.org"),
             expires_at: verification_rules::expires_at(SENT),
             deadline: verification_rules::deadline(SENT),
         }

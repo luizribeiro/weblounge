@@ -142,7 +142,7 @@ pub async fn redeem(
         Ok(NameClaim::Held) => return refuse(taken()),
         Err(error) => return internal_error("Looking up a name", error),
     }
-    let email_taken = app.db.email_taken(account.email.as_str(), &account.name);
+    let email_taken = app.db.email_taken(&account.email, &account.name);
     match email_taken.await {
         Ok(false) => {}
         Ok(true) => {
@@ -215,7 +215,7 @@ async fn create_account(
     }
     let member = NewMember {
         account: &account.name,
-        email: account.email.as_str(),
+        email: &account.email,
         news_opt_in: account.news,
         invited_by: claim.created_by.as_ref(),
         joined_at: now,

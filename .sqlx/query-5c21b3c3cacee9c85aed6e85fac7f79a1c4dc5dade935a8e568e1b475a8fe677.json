@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "DELETE FROM password_reset_codes WHERE code_hash = ?\n               RETURNING account AS \"account: MemberName\", email, created_at, expires_at",
+  "query": "DELETE FROM password_reset_codes WHERE code_hash = ?\n               RETURNING account AS \"account: MemberName\", email AS \"email: Email\",\n                         created_at, expires_at",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Text"
       },
       {
-        "name": "email",
+        "name": "email: Email",
         "ordinal": 1,
         "type_info": "Text"
       },
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "aa42e0be858f450f2870bcc081ce9edc3996c198adb24e42ce93c40d792a1119"
+  "hash": "5c21b3c3cacee9c85aed6e85fac7f79a1c4dc5dade935a8e568e1b475a8fe677"
 }

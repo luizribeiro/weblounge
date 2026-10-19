@@ -154,14 +154,14 @@ pub async fn update(
             .await;
         }
     };
-    let changed = me.member.email.as_deref() != Some(email.as_str());
+    let changed = me.member.email.as_ref() != Some(&email);
     if changed
         && let Err(Refused { status, error }) =
             check_password(&app, account, &address, &settings.current).await
     {
         return refuse(status, None, Some(error)).await;
     }
-    match app.db.email_taken(email.as_str(), account).await {
+    match app.db.email_taken(&email, account).await {
         Ok(false) => {}
         Ok(true) => {
             let taken = Some(email::TAKEN.to_owned());
@@ -169,7 +169,7 @@ pub async fn update(
         }
         Err(error) => return internal_error("Looking up an email", error),
     }
-    if let Err(error) = app.db.update_settings(account, email.as_str(), news).await {
+    if let Err(error) = app.db.update_settings(account, &email, news).await {
         return internal_error("Saving settings", error);
     }
     if !changed {
@@ -234,7 +234,7 @@ async fn answer_link(app: &App, member: &Member, mailed: Mailed, saved: bool) ->
 
 /// The Account tab of `member`, with `forms` filled in over what's stored.
 pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {
-    let saved_email = member.email.as_deref().unwrap_or("");
+    let saved_email = member.email.as_ref().map_or("", Email::as_str);
     let settings = forms.settings.unwrap_or(SettingsForm {
         email: saved_email,
         news: member.news_opt_in,

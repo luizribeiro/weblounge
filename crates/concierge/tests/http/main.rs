@@ -35,6 +35,7 @@ use concierge::{
     background::Background,
     config::{IrcServer, Presence},
     db::{self, Db, NewInvite, NewMember},
+    email::Email,
     invite_rules,
     name::MemberName,
     oauth::Webchat,
@@ -198,7 +199,7 @@ impl Site {
         self.register(account).await;
         let member = NewMember {
             account: &MemberName::new(account),
-            email: "someone@example.org",
+            email: &Email::parse("someone@example.org").unwrap(),
             news_opt_in: false,
             invited_by: None,
             joined_at: 1_760_000_000,

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT account AS \"account: MemberName\", email, created_at, expires_at, replaced_at\n           FROM verification_codes WHERE code_hash = ?",
+  "query": "SELECT account AS \"account: MemberName\", email AS \"email: Email\", created_at,\n                  expires_at, replaced_at\n           FROM verification_codes WHERE code_hash = ?",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Text"
       },
       {
-        "name": "email",
+        "name": "email: Email",
         "ordinal": 1,
         "type_info": "Text"
       },
@@ -40,5 +40,5 @@
       true
     ]
   },
-  "hash": "f35d6f0d260d8c9c3ef5e50ff259a2e34177f416eb40153924f88c71e9fd7a82"
+  "hash": "647d640bc0ebe5a386b4d01735624043ac14938ebb09fd96c33d979ed6b2756f"
 }

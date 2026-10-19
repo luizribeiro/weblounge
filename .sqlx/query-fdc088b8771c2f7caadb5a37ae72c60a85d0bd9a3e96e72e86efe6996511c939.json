@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT account AS \"account!: MemberName\", email AS \"email!\" FROM members\n                       WHERE lower(email) = lower(?) AND removed_at IS NULL\n                         AND email_verified_at IS NOT NULL",
+  "query": "SELECT account AS \"account!: MemberName\", email AS \"email!: Email\" FROM members\n                       WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NOT NULL",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Text"
       },
       {
-        "name": "email!",
+        "name": "email!: Email",
         "ordinal": 1,
         "type_info": "Text"
       }
@@ -22,5 +22,5 @@
       true
     ]
   },
-  "hash": "8e65937093a9a52b140bbf301f8f58ec6a086a1c075a4f66a9bd0f57db92c0c7"
+  "hash": "fdc088b8771c2f7caadb5a37ae72c60a85d0bd9a3e96e72e86efe6996511c939"
 }

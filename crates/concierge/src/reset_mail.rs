@@ -54,7 +54,7 @@ pub fn link_message(issued: &IssuedReset, public_url: &str) -> anyhow::Result<Me
 /// password.
 pub fn changed_message(
     account: &MemberName,
-    email: &str,
+    email: &Email,
     public_url: &str,
 ) -> anyhow::Result<Message> {
     let body = ChangedBody {
@@ -66,13 +66,13 @@ pub fn changed_message(
 
 fn message(
     account: &MemberName,
-    email: &str,
+    email: &Email,
     subject: &str,
     body: String,
 ) -> anyhow::Result<Message> {
     Ok(Message {
         account: Some(account.to_string()),
-        to: Email::parse(email)?,
+        to: email.clone(),
         subject: Subject::parse(subject)?,
         body,
     })
@@ -108,7 +108,7 @@ mod tests {
             code: "q".repeat(link_code::MAILED_LENGTH),
             member: db::Recoverable {
                 account: MemberName::new(account),
-                email: "bob@example.org".into(),
+                email: db::tests::email("bob@example.org"),
             },
             expires_at: reset_rules::expires_at(SENT),
         }
@@ -146,7 +146,8 @@ mod tests {
     #[test]
     fn the_notice_says_what_changed_and_where_to_go_if_it_wasnt_them() {
         let bob = MemberName::new("Bob");
-        let message = changed_message(&bob, "bob@example.org", PUBLIC_URL).unwrap();
+        let to = db::tests::email("bob@example.org");
+        let message = changed_message(&bob, &to, PUBLIC_URL).unwrap();
         assert_eq!(message.subject.as_str(), CHANGED_SUBJECT);
         assert_eq!(message.to.as_str(), "bob@example.org");
         let body = message.body;
@@ -166,7 +167,12 @@ mod tests {
         let longest = "B".repeat(nick::MAX_LENGTH);
         for message in [
             link_message(&issued(&longest), PUBLIC_URL).unwrap(),
-            changed_message(&MemberName::new(&longest), "bob@example.org", PUBLIC_URL).unwrap(),
+            changed_message(
+                &MemberName::new(&longest),
+                &db::tests::email("bob@example.org"),
+                PUBLIC_URL,
+            )
+            .unwrap(),
         ] {
             let body = message.body;
             assert!(body.is_ascii(), "{body}");

@@ -5,6 +5,7 @@ use common::sqlite;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 use crate::{
+    email::Email,
     invite_code, invite_rules, link_code, link_mail,
     name::{BotName, MemberName},
     oauth::CodeChallenge,
@@ -24,7 +25,7 @@ pub use common::now;
 pub struct NewMember<'a> {
     /// Ergo's canonical spelling of the account name.
     pub account: &'a MemberName,
-    pub email: &'a str,
+    pub email: &'a Email,
     pub news_opt_in: bool,
     /// `None` for a root of the invite tree.
     pub invited_by: Option<&'a MemberName>,
@@ -36,7 +37,7 @@ pub struct NewMember<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Member {
     pub account: MemberName,
-    pub email: Option<String>,
+    pub email: Option<Email>,
     pub email_verified_at: Option<i64>,
     pub news_opt_in: bool,
     pub invited_by: Option<MemberName>,
@@ -228,7 +229,7 @@ pub struct IssuedCode {
     /// Ergo's canonical spelling of the member's account name.
     pub account: MemberName,
     /// The address it verifies, and goes to.
-    pub email: String,
+    pub email: Email,
     pub expires_at: i64,
     /// When the member's grace period ends.
     pub deadline: i64,
@@ -257,7 +258,7 @@ impl fmt::Debug for IssuedCode {
 pub struct VerificationCode {
     pub account: MemberName,
     /// The address it was sent to, the only one it verifies.
-    pub email: String,
+    pub email: Email,
     pub created_at: i64,
     pub expires_at: i64,
     pub replaced_at: Option<i64>,
@@ -296,7 +297,7 @@ pub enum Verification {
 pub struct Recoverable {
     /// Ergo's canonical spelling of the member's account name.
     pub account: MemberName,
-    pub email: String,
+    pub email: Email,
 }
 
 /// A code just issued to reset a member's password, to mail to them once.
@@ -320,7 +321,7 @@ pub struct TakenReset {
     /// Ergo's canonical spelling of the member's account name.
     pub account: MemberName,
     /// The confirmed address it went to.
-    pub email: String,
+    pub email: Email,
     created_at: i64,
     expires_at: i64,
 }
@@ -365,7 +366,8 @@ impl Db {
     pub async fn member(&self, account: &str) -> sqlx::Result<Option<Member>> {
         sqlx::query_as!(
             Member,
-            r#"SELECT account AS "account!: MemberName", email, email_verified_at, news_opt_in,
+            r#"SELECT account AS "account!: MemberName", email AS "email: Email",
+                      email_verified_at, news_opt_in,
                       invited_by AS "invited_by: MemberName", joined_at, is_admin, removed_at,
                       verification_first_sent_at, verification_reminded_at
                FROM members WHERE account = ?"#,
@@ -380,7 +382,7 @@ impl Db {
     pub async fn update_settings(
         &self,
         account: &MemberName,
-        email: &str,
+        email: &Email,
         news_opt_in: bool,
     ) -> sqlx::Result<()> {
         let mut transaction = self.pool.begin().await?;
@@ -416,7 +418,7 @@ impl Db {
     /// Whether a member other than `account` verified `email`, in any
     /// case, as the index that keeps verified addresses unique compares
     /// them.
-    pub async fn email_taken(&self, email: &str, account: &MemberName) -> sqlx::Result<bool> {
+    pub async fn email_taken(&self, email: &Email, account: &MemberName) -> sqlx::Result<bool> {
         sqlx::query_scalar!(
             r#"SELECT EXISTS (
                    SELECT 1 FROM members
@@ -444,7 +446,7 @@ impl Db {
             r#"UPDATE members
                SET verification_first_sent_at = COALESCE(verification_first_sent_at, ?)
                WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NULL
-               RETURNING account AS "account!: MemberName", email AS "email!",
+               RETURNING account AS "account!: MemberName", email AS "email!: Email",
                          verification_first_sent_at AS "first_sent_at!""#,
             now,
             account,
@@ -578,27 +580,23 @@ impl Db {
     /// their nick or that address, in any case.
     pub async fn recoverable_member(&self, lookup: &Lookup) -> sqlx::Result<Option<Recoverable>> {
         match lookup {
-            Lookup::Nick(nick) => {
-                sqlx::query_as!(
-                    Recoverable,
-                    r#"SELECT account AS "account!: MemberName", email AS "email!" FROM members
+            Lookup::Nick(nick) => sqlx::query_as!(
+                Recoverable,
+                r#"SELECT account AS "account!: MemberName", email AS "email!: Email" FROM members
                        WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NOT NULL"#,
-                    nick
-                )
-                .fetch_optional(&self.pool)
-                .await
-            }
-            Lookup::Email(email) => {
-                sqlx::query_as!(
-                    Recoverable,
-                    r#"SELECT account AS "account!: MemberName", email AS "email!" FROM members
+                nick
+            )
+            .fetch_optional(&self.pool)
+            .await,
+            Lookup::Email(email) => sqlx::query_as!(
+                Recoverable,
+                r#"SELECT account AS "account!: MemberName", email AS "email!: Email" FROM members
                        WHERE lower(email) = lower(?) AND removed_at IS NULL
                          AND email_verified_at IS NOT NULL"#,
-                    email
-                )
-                .fetch_optional(&self.pool)
-                .await
-            }
+                email
+            )
+            .fetch_optional(&self.pool)
+            .await,
         }
     }
 
@@ -614,7 +612,7 @@ impl Db {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let member = sqlx::query_as!(
             Recoverable,
-            r#"SELECT account AS "account!: MemberName", email AS "email!" FROM members
+            r#"SELECT account AS "account!: MemberName", email AS "email!: Email" FROM members
                WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NOT NULL"#,
             account
         )
@@ -660,7 +658,8 @@ impl Db {
         let code_hash = ResetCodeHash::of(code);
         let taken = sqlx::query!(
             r#"DELETE FROM password_reset_codes WHERE code_hash = ?
-               RETURNING account AS "account: MemberName", email, created_at, expires_at"#,
+               RETURNING account AS "account: MemberName", email AS "email: Email",
+                         created_at, expires_at"#,
             code_hash,
         )
         .fetch_optional(&mut *transaction)
@@ -1284,7 +1283,8 @@ async fn verification_code(
 ) -> sqlx::Result<Option<VerificationCode>> {
     sqlx::query_as!(
         VerificationCode,
-        r#"SELECT account AS "account: MemberName", email, created_at, expires_at, replaced_at
+        r#"SELECT account AS "account: MemberName", email AS "email: Email", created_at,
+                  expires_at, replaced_at
            FROM verification_codes WHERE code_hash = ?"#,
         code_hash
     )
@@ -1409,6 +1409,10 @@ pub(crate) mod tests {
     use common::sqlite::testing::files_contain;
     use sqlx::sqlite::SqliteConnectOptions;
     use std::sync::LazyLock;
+
+    pub fn email(address: &str) -> Email {
+        Email::parse(address).unwrap()
+    }
 
     pub async fn temp_db() -> (Db, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -1557,7 +1561,10 @@ pub(crate) mod tests {
         assert!(db.access_token(&hash(b"\x01"), 10).await.unwrap().is_some());
 
         let alice = db.member("ALICE").await.unwrap().unwrap();
-        assert_eq!(alice.email.as_deref(), Some("alice@example.org"));
+        assert_eq!(
+            alice.email.as_ref().map(Email::as_str),
+            Some("alice@example.org")
+        );
         assert!(alice.is_admin);
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(
@@ -1837,7 +1844,10 @@ pub(crate) mod tests {
             bob.invited_by.as_ref().map(MemberName::as_str),
             Some("alice")
         );
-        assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
+        assert_eq!(
+            bob.email.as_ref().map(Email::as_str),
+            Some("bob@example.org")
+        );
     }
 
     #[tokio::test]
@@ -1989,12 +1999,13 @@ pub(crate) mod tests {
         (db, dir)
     }
 
+    static BOBS_EMAIL: LazyLock<Email> = LazyLock::new(|| email("bob@example.org"));
     static ALICE: LazyLock<MemberName> = LazyLock::new(|| MemberName::new("alice"));
 
     fn newcomer(account: &MemberName, joined_at: i64) -> NewMember<'_> {
         NewMember {
             account,
-            email: "bob@example.org",
+            email: &BOBS_EMAIL,
             news_opt_in: true,
             invited_by: Some(&ALICE),
             joined_at,
@@ -2065,7 +2076,10 @@ pub(crate) mod tests {
             bob.invited_by.as_ref().map(MemberName::as_str),
             Some("alice")
         );
-        assert_eq!(bob.email.as_deref(), Some("bob@example.org"));
+        assert_eq!(
+            bob.email.as_ref().map(Email::as_str),
+            Some("bob@example.org")
+        );
         assert!(bob.news_opt_in);
         let invite = db.invite("open").await.unwrap().unwrap();
         assert_eq!(
@@ -2242,8 +2256,10 @@ pub(crate) mod tests {
             ("bob@example.org", "alice", false),
             ("carol+irc@example.org", "alice", false),
         ] {
-            let found = db.email_taken(email, &MemberName::new(account)).await;
-            let found = found.unwrap();
+            let found = db
+                .email_taken(&self::email(email), &MemberName::new(account))
+                .await
+                .unwrap();
             assert_eq!(found, taken, "{email} for {account}");
         }
     }
@@ -2258,7 +2274,7 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        db.update_settings(&MemberName::new("alice"), "alice@example.org", true)
+        db.update_settings(&MemberName::new("alice"), &email("alice@example.org"), true)
             .await
             .unwrap();
         let alice = db.member("alice").await.unwrap().unwrap();
@@ -2266,11 +2282,18 @@ pub(crate) mod tests {
             (alice.email_verified_at, alice.news_opt_in),
             (Some(10), true)
         );
-        db.update_settings(&MemberName::new("alice"), "alice@example.net", false)
-            .await
-            .unwrap();
+        db.update_settings(
+            &MemberName::new("alice"),
+            &email("alice@example.net"),
+            false,
+        )
+        .await
+        .unwrap();
         let alice = db.member("alice").await.unwrap().unwrap();
-        assert_eq!(alice.email.as_deref(), Some("alice@example.net"));
+        assert_eq!(
+            alice.email.as_ref().map(Email::as_str),
+            Some("alice@example.net")
+        );
         assert_eq!((alice.email_verified_at, alice.news_opt_in), (None, false));
     }
 
@@ -2328,7 +2351,7 @@ pub(crate) mod tests {
             db.verification_code(&issued.code).await.unwrap(),
             Some(VerificationCode {
                 account: MemberName::new("Alice"),
-                email: "alice@example.org".into(),
+                email: email("alice@example.org"),
                 created_at: MAILED,
                 expires_at,
                 replaced_at: None,
@@ -2489,12 +2512,12 @@ pub(crate) mod tests {
         let (db, _dir) = with_unverified_members().await;
         let kept = issue(&db, "Alice", MAILED).await;
         let bobs = issue(&db, "bob", MAILED).await;
-        db.update_settings(&MemberName::new("Alice"), "alice@example.org", true)
+        db.update_settings(&MemberName::new("Alice"), &email("alice@example.org"), true)
             .await
             .unwrap();
         assert!(db.verification_code(&kept.code).await.unwrap().is_some());
 
-        db.update_settings(&MemberName::new("Alice"), "alice@example.net", true)
+        db.update_settings(&MemberName::new("Alice"), &email("alice@example.net"), true)
             .await
             .unwrap();
 
@@ -2571,7 +2594,7 @@ pub(crate) mod tests {
         fn carol() -> Recoverable {
             Recoverable {
                 account: MemberName::new("carol"),
-                email: "carol@example.org".into(),
+                email: email("carol@example.org"),
             }
         }
 
@@ -2724,9 +2747,13 @@ pub(crate) mod tests {
                 None
             );
 
-            db.update_settings(&MemberName::new("carol"), "carol@example.org", false)
-                .await
-                .unwrap();
+            db.update_settings(
+                &MemberName::new("carol"),
+                &email("carol@example.org"),
+                false,
+            )
+            .await
+            .unwrap();
             execute(
                 &db,
                 "UPDATE members SET email_verified_at = 1 WHERE account = 'carol'",
@@ -2734,12 +2761,20 @@ pub(crate) mod tests {
             .await
             .unwrap();
             let saved = issue(&db, "carol", MAILED).await;
-            db.update_settings(&MemberName::new("carol"), "carol@example.net", false)
-                .await
-                .unwrap();
-            db.update_settings(&MemberName::new("carol"), "carol@example.org", false)
-                .await
-                .unwrap();
+            db.update_settings(
+                &MemberName::new("carol"),
+                &email("carol@example.net"),
+                false,
+            )
+            .await
+            .unwrap();
+            db.update_settings(
+                &MemberName::new("carol"),
+                &email("carol@example.org"),
+                false,
+            )
+            .await
+            .unwrap();
             execute(
                 &db,
                 "UPDATE members SET email_verified_at = 1 WHERE account = 'carol'",

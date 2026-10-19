@@ -16,6 +16,7 @@ use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
     db::{self, Db, NewMember, NewSession},
+    email::Email,
     name::MemberName,
     origin::Origin,
     secret_hash::SessionHash,
@@ -123,7 +124,7 @@ impl Fixture {
         let invited_by = invited_by.map(MemberName::new);
         let member = NewMember {
             account: &MemberName::new(account),
-            email: "someone@example.org",
+            email: &Email::parse("someone@example.org").unwrap(),
             news_opt_in: false,
             invited_by: invited_by.as_ref(),
             joined_at: 1_760_000_000,

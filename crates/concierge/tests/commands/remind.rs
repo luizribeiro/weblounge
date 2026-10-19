@@ -2,6 +2,7 @@ use std::process::{Command, Output};
 
 use concierge::{
     db::{self, NewMember},
+    email::Email,
     name::MemberName,
     verification_mail::REMINDER_SUBJECT,
     verification_rules::REMINDER_AFTER,
@@ -34,7 +35,7 @@ async fn mails_the_reminders_due_once_and_logs_only_how_many() {
     for account in ["alice", "bob"] {
         let member = NewMember {
             account: &MemberName::new(account),
-            email: &format!("{account}@example.org"),
+            email: &Email::parse(&format!("{account}@example.org")).unwrap(),
             news_opt_in: false,
             invited_by: None,
             joined_at: 1_760_000_000,
