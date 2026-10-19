@@ -1,5 +1,7 @@
 use axum::http::header;
-use concierge::{db, link_code, rate_limit::VERIFICATIONS_PER_ADDRESS, verification_rules};
+use concierge::{
+    db, link_code, name::MemberName, rate_limit::VERIFICATIONS_PER_ADDRESS, verification_rules,
+};
 
 use crate::{PUBLIC_URL, SEND_LINK_FORM, Site, body_text, confirm, send_link};
 
@@ -7,7 +9,10 @@ use crate::{PUBLIC_URL, SEND_LINK_FORM, Site, body_text, confirm, send_link};
 async fn with_a_code() -> (Site, String) {
     let site = Site::start().await;
     site.add_member("alice").await;
-    let issued = site.db.issue_verification_code("alice", db::now()).await;
+    let issued = site
+        .db
+        .issue_verification_code(&MemberName::new("alice"), db::now())
+        .await;
     (site, issued.unwrap().unwrap().code)
 }
 
@@ -78,7 +83,10 @@ async fn used_unknown_expired_and_malformed_codes_get_the_same_answer() {
     confirm(&site, &used).await;
     site.add_member("bob").await;
     let long_ago = db::now() - verification_rules::LIFETIME - 1;
-    let expired = site.db.issue_verification_code("bob", long_ago).await;
+    let expired = site
+        .db
+        .issue_verification_code(&MemberName::new("bob"), long_ago)
+        .await;
     let expired = expired.unwrap().unwrap().code;
     let unknown = "A".repeat(link_code::MAILED_LENGTH);
     let too_long = format!("{unknown}A");
@@ -112,7 +120,7 @@ async fn used_unknown_expired_and_malformed_codes_get_the_same_answer() {
 async fn an_older_link_points_to_the_newer_email() {
     let (site, first) = with_a_code().await;
     site.db
-        .issue_verification_code("alice", db::now())
+        .issue_verification_code(&MemberName::new("alice"), db::now())
         .await
         .unwrap()
         .unwrap();
@@ -145,7 +153,10 @@ async fn a_link_to_an_address_the_member_left_verifies_nothing() {
 async fn an_address_another_member_verified_first_stays_theirs() {
     let (site, alices) = with_a_code().await;
     site.add_member("bob").await;
-    let bobs = site.db.issue_verification_code("bob", db::now()).await;
+    let bobs = site
+        .db
+        .issue_verification_code(&MemberName::new("bob"), db::now())
+        .await;
     confirm(&site, &bobs.unwrap().unwrap().code).await;
 
     let (status, page) = confirm(&site, &alices).await;

@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT account AS \"account!\",\n                      email_verified_at IS NOT NULL AS \"verified!: bool\",\n                      verification_first_sent_at AS first_sent_at,\n                      verification_reminded_at AS reminded_at,\n                      (SELECT max(created_at) FROM verification_codes AS codes\n                       WHERE codes.account = members.account AND replaced_at IS NULL)\n                        AS \"last_sent_at: i64\"\n               FROM members WHERE removed_at IS NULL ORDER BY account",
+  "query": "SELECT account AS \"account!: MemberName\",\n                      email_verified_at IS NOT NULL AS \"verified!: bool\",\n                      verification_first_sent_at AS first_sent_at,\n                      verification_reminded_at AS reminded_at,\n                      (SELECT max(created_at) FROM verification_codes AS codes\n                       WHERE codes.account = members.account AND replaced_at IS NULL)\n                        AS \"last_sent_at: i64\"\n               FROM members WHERE removed_at IS NULL ORDER BY account",
   "describe": {
     "columns": [
       {
-        "name": "account!",
+        "name": "account!: MemberName",
         "ordinal": 0,
         "type_info": "Text"
       },
@@ -40,5 +40,5 @@
       true
     ]
   },
-  "hash": "0da2638d78896879193c9e689b43caf7e3d56213db6fbdeecbd0f9870755eea8"
+  "hash": "5265dd94c8bfdca2bf80d16255196318ebfce10cd54bd42e63ec41f6525d7182"
 }

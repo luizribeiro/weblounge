@@ -331,8 +331,12 @@ mod send_verification {
             fixture.insert_member(account, None).await;
         }
         let db = fixture.db().await;
-        db.issue_verification_code("bob", db::now()).await.unwrap();
-        let carols = db.issue_verification_code("carol", db::now()).await;
+        db.issue_verification_code(&MemberName::new("bob"), db::now())
+            .await
+            .unwrap();
+        let carols = db
+            .issue_verification_code(&MemberName::new("carol"), db::now())
+            .await;
         db.verify_email(&carols.unwrap().unwrap().code, db::now())
             .await
             .unwrap();

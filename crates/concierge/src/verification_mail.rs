@@ -9,7 +9,9 @@ use outbox::{Message, Outbox, Subject};
 use crate::{
     db::{Db, IssuedCode},
     email::Email,
-    invite_rules, link_mail, rate_limit, verification_rules,
+    invite_rules, link_mail,
+    name::MemberName,
+    rate_limit, verification_rules,
 };
 
 pub const SUBJECT: &str = "Confirm your email for weblounge.org";
@@ -43,7 +45,7 @@ pub const PER_RUN: usize = rate_limit::LINKS_PER_HOUR;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Batch {
     /// The accounts that were mailed a link.
-    pub sent: Vec<String>,
+    pub sent: Vec<MemberName>,
     /// How many accounts are left for another run.
     pub left: usize,
 }
@@ -77,7 +79,7 @@ pub fn message(
         reminder: kind == Kind::Reminder,
     };
     Ok(Message {
-        account: Some(issued.account.clone()),
+        account: Some(issued.account.to_string()),
         to: Email::parse(&issued.email)?,
         subject: Subject::parse(kind.subject())?,
         body: body.render()?,
@@ -92,7 +94,7 @@ pub async fn send(
     db: &Db,
     outbox: &Outbox,
     public_url: &str,
-    account: &str,
+    account: &MemberName,
     kind: Kind,
     now: i64,
 ) -> anyhow::Result<Option<i64>> {
@@ -115,7 +117,7 @@ pub async fn send_batch(
     db: &Db,
     outbox: &Outbox,
     public_url: &str,
-    accounts: &[String],
+    accounts: &[MemberName],
     kind: Kind,
     now: i64,
 ) -> anyhow::Result<Batch> {
@@ -160,11 +162,20 @@ mod tests {
     fn issued(account: &str) -> IssuedCode {
         IssuedCode {
             code: "q".repeat(link_code::MAILED_LENGTH),
-            account: account.into(),
+            account: MemberName::new(account),
             email: "bob@example.org".into(),
             expires_at: verification_rules::expires_at(SENT),
             deadline: verification_rules::deadline(SENT),
         }
+    }
+
+    fn bob() -> MemberName {
+        MemberName::new("bob")
+    }
+
+    /// The names a batch mailed, as spelled.
+    fn sent(batch: &Batch) -> Vec<&str> {
+        batch.sent.iter().map(MemberName::as_str).collect()
     }
 
     fn link() -> String {
@@ -275,7 +286,7 @@ mod tests {
     async fn sending_queues_the_link_to_a_code_on_file_sealed() {
         let (db, outbox, key, _dirs) = with_bob().await;
 
-        let sent = send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT).await;
+        let sent = send(&db, &outbox, PUBLIC_URL, &bob(), Kind::Link, SENT).await;
 
         let due = outbox.due(SENT).await.unwrap();
         assert_eq!(sent.unwrap(), Some(due[0].id));
@@ -305,7 +316,7 @@ mod tests {
         let (db, outbox, _key, _dirs) = with_bob().await;
         outbox.withdraw_key().await.unwrap();
 
-        let error = send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT)
+        let error = send(&db, &outbox, PUBLIC_URL, &bob(), Kind::Link, SENT)
             .await
             .unwrap_err();
 
@@ -322,7 +333,7 @@ mod tests {
             .await
             .unwrap();
 
-        let sent = send(&db, &outbox, PUBLIC_URL, "bob", Kind::Link, SENT).await;
+        let sent = send(&db, &outbox, PUBLIC_URL, &bob(), Kind::Link, SENT).await;
         assert_eq!(sent.unwrap(), None);
         assert!(outbox.due(SENT).await.unwrap().is_empty());
     }
@@ -352,7 +363,7 @@ mod tests {
         }
 
         async fn mail(db: &Db, account: &str, at: i64) {
-            db.issue_verification_code(account, at)
+            db.issue_verification_code(&MemberName::new(account), at)
                 .await
                 .unwrap()
                 .unwrap();
@@ -375,7 +386,9 @@ mod tests {
             }
             mail(&db, "early", SENT + DAY).await;
             mail(&db, "resent", NOW - DAY).await;
-            db.record_reminder("reminded", SENT + DAY).await.unwrap();
+            db.record_reminder(&MemberName::new("reminded"), SENT + DAY)
+                .await
+                .unwrap();
             db::tests::execute(
                 &db,
                 "UPDATE members SET email_verified_at = 1 WHERE account = 'verified'",
@@ -388,7 +401,7 @@ mod tests {
             assert_eq!(
                 batch,
                 Batch {
-                    sent: vec!["due".into()],
+                    sent: vec![MemberName::new("due")],
                     left: 0
                 }
             );
@@ -431,7 +444,7 @@ mod tests {
             let once_lapsed = remind(&db, &outbox, PUBLIC_URL, lapsed).await.unwrap();
 
             assert!(on_day_five.sent.is_empty());
-            assert_eq!(once_lapsed.sent, ["resent"]);
+            assert_eq!(sent(&once_lapsed), ["resent"]);
         }
 
         #[tokio::test]
@@ -449,7 +462,7 @@ mod tests {
                 .unwrap();
 
             assert_eq!((first.sent.len(), first.left), (PER_RUN, 2));
-            assert_eq!(second.sent, accounts[PER_RUN..]);
+            assert_eq!(sent(&second), names[PER_RUN..]);
             assert_eq!(second.left, 0);
         }
     }

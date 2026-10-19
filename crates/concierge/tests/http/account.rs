@@ -1,6 +1,7 @@
 use axum::http::header;
 use concierge::{
     db,
+    name::MemberName,
     rate_limit::{LINKS_PER_DAY, PER_ACCOUNT, TRY_LATER},
     verification_mail, verification_rules,
 };
@@ -246,7 +247,10 @@ const SPAM: &str = "If it doesn't arrive in a few minutes, check your spam folde
 async fn with_a_code_mailed() -> (Site, String, String) {
     let site = Site::start().await;
     site.add_member("alice").await;
-    let issued = site.db.issue_verification_code("alice", db::now()).await;
+    let issued = site
+        .db
+        .issue_verification_code(&MemberName::new("alice"), db::now())
+        .await;
     let cookie = site.sign_in("alice").await;
     (site, cookie, issued.unwrap().unwrap().code)
 }

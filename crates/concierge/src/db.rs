@@ -221,7 +221,7 @@ pub struct BotAccount {
 pub struct IssuedCode {
     pub code: String,
     /// Ergo's canonical spelling of the member's account name.
-    pub account: String,
+    pub account: MemberName,
     /// The address it verifies, and goes to.
     pub email: String,
     pub expires_at: i64,
@@ -238,7 +238,7 @@ impl link_mail::Issued for IssuedCode {
 /// A code that verifies a member's email, as the database keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VerificationCode {
-    pub account: String,
+    pub account: MemberName,
     /// The address it was sent to, the only one it verifies.
     pub email: String,
     pub created_at: i64,
@@ -261,7 +261,7 @@ impl VerificationCode {
 pub enum Verification {
     /// The member's email is verified now.
     Verified {
-        account: String,
+        account: MemberName,
     },
     /// No code is on file by that: mistyped, used already, or long expired.
     Unknown,
@@ -362,7 +362,7 @@ impl Db {
     /// longer verified, and codes sent to the old one verify nothing.
     pub async fn update_settings(
         &self,
-        account: &str,
+        account: &MemberName,
         email: &str,
         news_opt_in: bool,
     ) -> sqlx::Result<()> {
@@ -399,7 +399,7 @@ impl Db {
     /// Whether a member other than `account` verified `email`, in any
     /// case, as the index that keeps verified addresses unique compares
     /// them.
-    pub async fn email_taken(&self, email: &str, account: &str) -> sqlx::Result<bool> {
+    pub async fn email_taken(&self, email: &str, account: &MemberName) -> sqlx::Result<bool> {
         sqlx::query_scalar!(
             r#"SELECT EXISTS (
                    SELECT 1 FROM members
@@ -419,7 +419,7 @@ impl Db {
     /// Answers `None` unless `account` is a current, unverified member.
     pub async fn issue_verification_code(
         &self,
-        account: &str,
+        account: &MemberName,
         now: i64,
     ) -> sqlx::Result<Option<IssuedCode>> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
@@ -427,7 +427,7 @@ impl Db {
             r#"UPDATE members
                SET verification_first_sent_at = COALESCE(verification_first_sent_at, ?)
                WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NULL
-               RETURNING account AS "account!", email AS "email!",
+               RETURNING account AS "account!: MemberName", email AS "email!",
                          verification_first_sent_at AS "first_sent_at!""#,
             now,
             account,
@@ -518,9 +518,9 @@ impl Db {
     /// How far each current member got with verifying their email.
     pub async fn verification_progress(
         &self,
-    ) -> sqlx::Result<Vec<(String, verification_rules::Progress)>> {
+    ) -> sqlx::Result<Vec<(MemberName, verification_rules::Progress)>> {
         let rows = sqlx::query!(
-            r#"SELECT account AS "account!",
+            r#"SELECT account AS "account!: MemberName",
                       email_verified_at IS NOT NULL AS "verified!: bool",
                       verification_first_sent_at AS first_sent_at,
                       verification_reminded_at AS reminded_at,
@@ -546,7 +546,7 @@ impl Db {
     }
 
     /// Notes that `account`'s one reminder went out at `now`.
-    pub async fn record_reminder(&self, account: &str, now: i64) -> sqlx::Result<()> {
+    pub async fn record_reminder(&self, account: &MemberName, now: i64) -> sqlx::Result<()> {
         sqlx::query!(
             "UPDATE members SET verification_reminded_at = ? WHERE account = ?",
             now,
@@ -1252,8 +1252,8 @@ async fn verification_code(
 ) -> sqlx::Result<Option<VerificationCode>> {
     sqlx::query_as!(
         VerificationCode,
-        "SELECT account, email, created_at, expires_at, replaced_at
-         FROM verification_codes WHERE code_hash = ?",
+        r#"SELECT account AS "account: MemberName", email, created_at, expires_at, replaced_at
+           FROM verification_codes WHERE code_hash = ?"#,
         code_hash
     )
     .fetch_optional(executor)
@@ -2160,7 +2160,8 @@ pub(crate) mod tests {
             ("bob@example.org", "alice", false),
             ("carol+irc@example.org", "alice", false),
         ] {
-            let found = db.email_taken(email, account).await.unwrap();
+            let found = db.email_taken(email, &MemberName::new(account)).await;
+            let found = found.unwrap();
             assert_eq!(found, taken, "{email} for {account}");
         }
     }
@@ -2175,7 +2176,7 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        db.update_settings("alice", "alice@example.org", true)
+        db.update_settings(&MemberName::new("alice"), "alice@example.org", true)
             .await
             .unwrap();
         let alice = db.member("alice").await.unwrap().unwrap();
@@ -2183,7 +2184,7 @@ pub(crate) mod tests {
             (alice.email_verified_at, alice.news_opt_in),
             (Some(10), true)
         );
-        db.update_settings("alice", "alice@example.net", false)
+        db.update_settings(&MemberName::new("alice"), "alice@example.net", false)
             .await
             .unwrap();
         let alice = db.member("alice").await.unwrap().unwrap();
@@ -2209,7 +2210,7 @@ pub(crate) mod tests {
     }
 
     async fn issue(db: &Db, account: &str, now: i64) -> IssuedCode {
-        db.issue_verification_code(account, now)
+        db.issue_verification_code(&MemberName::new(account), now)
             .await
             .unwrap()
             .unwrap()
@@ -2234,7 +2235,7 @@ pub(crate) mod tests {
         assert_eq!(
             db.verification_code(&issued.code).await.unwrap(),
             Some(VerificationCode {
-                account: "Alice".into(),
+                account: MemberName::new("Alice"),
                 email: "alice@example.org".into(),
                 created_at: MAILED,
                 expires_at,
@@ -2289,7 +2290,10 @@ pub(crate) mod tests {
         let (db, _dir) = with_unverified_members().await;
         db.remove_member("bob", MAILED).await.unwrap();
         for account in ["carol", "bob", "nobody"] {
-            let issued = db.issue_verification_code(account, MAILED).await.unwrap();
+            let issued = db
+                .issue_verification_code(&MemberName::new(account), MAILED)
+                .await
+                .unwrap();
             assert_eq!(issued, None, "{account}");
         }
         let carol = db.member("carol").await.unwrap().unwrap();
@@ -2306,11 +2310,9 @@ pub(crate) mod tests {
 
         let verification = db.verify_email(&issued.code, now).await.unwrap();
 
-        assert_eq!(
-            verification,
-            Verification::Verified {
-                account: "Alice".into()
-            }
+        assert!(
+            matches!(&verification, Verification::Verified { account } if account.as_str() == "Alice"),
+            "{verification:?}"
         );
         let alice = db.member("alice").await.unwrap().unwrap();
         assert_eq!(alice.email_verified_at, Some(now));
@@ -2393,12 +2395,12 @@ pub(crate) mod tests {
         let (db, _dir) = with_unverified_members().await;
         let kept = issue(&db, "Alice", MAILED).await;
         let bobs = issue(&db, "bob", MAILED).await;
-        db.update_settings("Alice", "alice@example.org", true)
+        db.update_settings(&MemberName::new("Alice"), "alice@example.org", true)
             .await
             .unwrap();
         assert!(db.verification_code(&kept.code).await.unwrap().is_some());
 
-        db.update_settings("Alice", "alice@example.net", true)
+        db.update_settings(&MemberName::new("Alice"), "alice@example.net", true)
             .await
             .unwrap();
 
@@ -2419,7 +2421,9 @@ pub(crate) mod tests {
         .unwrap();
         issue(&db, "alice", MAILED).await;
         issue(&db, "alice", MAILED + 60).await;
-        db.record_reminder("alice", MAILED + 60).await.unwrap();
+        db.record_reminder(&MemberName::new("alice"), MAILED + 60)
+            .await
+            .unwrap();
 
         let progress = db.verification_progress().await.unwrap();
 
@@ -2624,7 +2628,7 @@ pub(crate) mod tests {
                 None
             );
 
-            db.update_settings("carol", "carol@example.org", false)
+            db.update_settings(&MemberName::new("carol"), "carol@example.org", false)
                 .await
                 .unwrap();
             execute(
@@ -2634,10 +2638,10 @@ pub(crate) mod tests {
             .await
             .unwrap();
             let saved = issue(&db, "carol", MAILED).await;
-            db.update_settings("carol", "carol@example.net", false)
+            db.update_settings(&MemberName::new("carol"), "carol@example.net", false)
                 .await
                 .unwrap();
-            db.update_settings("carol", "carol@example.org", false)
+            db.update_settings(&MemberName::new("carol"), "carol@example.org", false)
                 .await
                 .unwrap();
             execute(

@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE members\n               SET verification_first_sent_at = COALESCE(verification_first_sent_at, ?)\n               WHERE account = ? AND removed_at IS NULL AND email_verified_at IS NULL\n               RETURNING account AS \"account!: MemberName\", email AS \"email!\",\n                         verification_first_sent_at AS \"first_sent_at!\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "account!: MemberName",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "email!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "first_sent_at!",
+        "ordinal": 2,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "55cf2a9082fb709b36a9884a233e5e0996caf252b56ef0718d68201bc51ad587"
+}

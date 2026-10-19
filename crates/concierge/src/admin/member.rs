@@ -4,7 +4,9 @@ use clap::Subcommand;
 
 use super::{Admin, bot, erase_reminder, print_once};
 use crate::{
-    db, password,
+    db,
+    name::MemberName,
+    password,
     verification_mail::{self, Kind},
 };
 
@@ -77,7 +79,7 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
 
 async fn send_verification(admin: &Admin, name: Option<&str>) -> anyhow::Result<String> {
     let accounts = match name {
-        Some(name) => vec![admin.current_member(name).await?.account.to_string()],
+        Some(name) => vec![admin.current_member(name).await?.account],
         None => never_sent_a_link(admin).await?,
     };
     if accounts.is_empty() {
@@ -111,7 +113,7 @@ async fn send_verification(admin: &Admin, name: Option<&str>) -> anyhow::Result<
 }
 
 /// The unconfirmed members who were never sent a link.
-async fn never_sent_a_link(admin: &Admin) -> anyhow::Result<Vec<String>> {
+async fn never_sent_a_link(admin: &Admin) -> anyhow::Result<Vec<MemberName>> {
     let progress = admin.db.verification_progress().await?;
     Ok(progress
         .into_iter()

@@ -14,6 +14,7 @@ use crate::{
     auth::Visitor,
     db::{self, Member, Verification},
     email, invite_rules, link_code,
+    name::MemberName,
     rate_limit::{self, ClientAddress, MailRefusal, Recipient},
     tree, verification_mail, verification_rules,
 };
@@ -123,7 +124,7 @@ impl Unconfirmed {
 
 /// Mails `account` a new verification link, replacing their last, if the
 /// limits on mail allow.
-pub async fn mail_link(app: &App, account: &str, recipient: Recipient) -> Mailed {
+pub async fn mail_link(app: &App, account: &MemberName, recipient: Recipient) -> Mailed {
     app.give_back_unsent_links().await;
     if let Err(refusal) = app.mailed_links.check(account, recipient, Instant::now()) {
         return Mailed::Refused(refusal);

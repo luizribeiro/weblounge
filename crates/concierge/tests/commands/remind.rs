@@ -43,7 +43,7 @@ async fn mails_the_reminders_due_once_and_logs_only_how_many() {
         db.insert_member(&member).await.unwrap();
     }
     let mailed_at = db::now() - REMINDER_AFTER;
-    db.issue_verification_code("alice", mailed_at)
+    db.issue_verification_code(&MemberName::new("alice"), mailed_at)
         .await
         .unwrap();
 
@@ -68,7 +68,7 @@ async fn reminds_nobody_while_the_mailer_is_down_and_says_so() {
     let db = fixture.db().await;
     fixture.insert_member("alice", None).await;
     let mailed_at = db::now() - REMINDER_AFTER;
-    db.issue_verification_code("alice", mailed_at)
+    db.issue_verification_code(&MemberName::new("alice"), mailed_at)
         .await
         .unwrap();
     fixture.outbox().await.withdraw_key().await.unwrap();
