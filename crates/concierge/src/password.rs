@@ -1,12 +1,13 @@
-//! The passwords concierge generates for members' IRC accounts.
+//! The passwords concierge generates for members' and bots' IRC accounts.
 //!
 //! Lowercase letters and digits, minus the ones that look alike (0 and o;
 //! 1, i and l), so a password reads back unambiguously and types without
 //! switching keyboards on a phone. No separators: a double-click selects the
 //! whole password. Long enough for 128 bits.
 
+use anyhow::Context;
 use common::random;
-use ergo_api::Passphrase;
+use ergo_api::{Client, Passphrase};
 
 const ALPHABET: &[u8] = b"23456789abcdefghjkmnpqrstuvwxyz";
 const LENGTH: usize = 26;
@@ -14,6 +15,20 @@ const LENGTH: usize = 26;
 pub fn generate() -> Passphrase {
     Passphrase::new(random::string(ALPHABET, LENGTH))
         .expect("the alphabet has neither whitespace nor colons")
+}
+
+/// Replaces `account`'s password in Ergo.
+pub async fn set(ergo: &Client, account: &str, password: &Passphrase) -> anyhow::Result<()> {
+    ergo.set_password(account, password)
+        .await
+        .with_context(|| format!("Ergo didn't take {account}'s new password"))
+}
+
+/// Gives `account` a new generated password in Ergo, and answers it.
+pub async fn set_generated(ergo: &Client, account: &str) -> anyhow::Result<Passphrase> {
+    let password = generate();
+    set(ergo, account, &password).await?;
+    Ok(password)
 }
 
 #[cfg(test)]

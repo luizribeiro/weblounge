@@ -5,12 +5,13 @@ use std::{
 
 use anyhow::Context;
 use clap::Subcommand;
-use ergo_api::{Erasure, Passphrase, Preference, Registration, SettingsChanges};
+use ergo_api::Passphrase;
 
 use super::{Admin, print_once};
 use crate::{
-    db::{self, Bot, Member, NewBot},
-    nick::{self, Nick},
+    bots::{Bots, Refusal},
+    db::{Bot, Member},
+    nick::Nick,
     password, password_rules, tree,
 };
 
@@ -67,6 +68,15 @@ pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<St
     }
 }
 
+impl Admin {
+    fn bots(&self) -> Bots<'_> {
+        Bots {
+            db: &self.db,
+            ergo: &self.ergo,
+        }
+    }
+}
+
 async fn create(
     admin: &Admin,
     owner: &str,
@@ -98,8 +108,8 @@ async fn ensure(
         bot.account,
         bot.owner
     );
-    set_up(admin, &bot.account, &bot.owner).await?;
-    admin.set_password(&bot.account, &password).await?;
+    admin.bots().set_up(&bot.account, &bot.owner).await?;
+    password::set(&admin.ergo, &bot.account, &password).await?;
     Ok(format!("updated {}\n", bot.account))
 }
 
@@ -141,7 +151,7 @@ async fn apply_vhosts(admin: &Admin) -> anyhow::Result<String> {
     let bots = admin.db.bots(None).await?;
     let mut failures = Vec::new();
     for bot in &bots {
-        if let Err(error) = set_vhost(admin, &bot.account, &bot.owner).await {
+        if let Err(error) = admin.bots().set_vhost(&bot.account, &bot.owner).await {
             failures.push(format!("{error:#}"));
         }
     }
@@ -157,8 +167,10 @@ async fn apply_vhosts(admin: &Admin) -> anyhow::Result<String> {
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
     let bot = live_bot(admin, name).await?;
-    set_up(admin, &bot.account, &bot.owner).await?;
-    let password = admin.set_generated_password(&bot.account).await?;
+    let password = admin
+        .bots()
+        .reset_password(&bot.account, &bot.owner)
+        .await?;
     Ok(print_once(&password))
 }
 
@@ -167,15 +179,10 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
     remove(admin, &bot.account).await
 }
 
-/// Erases the live bot `account` in Ergo, which disconnects it, and marks
-/// it deleted. An account Ergo has no record of was erased already.
+/// Erases the live bot `account` and marks it deleted, answering what it
+/// did.
 pub(super) async fn remove(admin: &Admin, account: &str) -> anyhow::Result<String> {
-    let _: Erasure = admin
-        .ergo
-        .erase(account)
-        .await
-        .with_context(|| format!("Ergo didn't erase {account}"))?;
-    admin.db.remove_bot(account, db::now()).await?;
+    admin.bots().remove(account).await?;
     Ok(format!("removed bot {account}\n"))
 }
 
@@ -195,8 +202,8 @@ fn ensure_live(bot: &Bot) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Records `name` as a bot of `owner` and registers its Ergo account with
-/// `password`, answering its name.
+/// Creates `name` as a bot of `owner` with `password`, answering its name,
+/// with the refusals put the way the commands print them.
 async fn register(
     admin: &Admin,
     owner: &Member,
@@ -204,87 +211,15 @@ async fn register(
     note: Option<&str>,
     password: &Passphrase,
 ) -> anyhow::Result<Nick> {
-    let nick = Nick::parse(name).with_context(|| format!("{name} can't be a bot's name"))?;
-    let taken = || anyhow::anyhow!("{nick} is taken");
-    if admin.db.name_held(nick.as_str()).await? {
-        return Err(taken());
-    }
-    // Recorded first, so an account Ergo creates always has its row; the
-    // row goes again if Ergo creates nothing.
-    admin
-        .db
-        .insert_bot(&NewBot {
-            account: nick.as_str(),
-            owner: &owner.account,
-            note,
-            created_at: db::now(),
-        })
-        .await?;
-    let registration = admin.ergo.register(nick.clone(), password).await;
-    if !matches!(registration, Ok(Registration::Created)) {
-        admin.db.forget_bot(nick.as_str()).await?;
-    }
-    match registration.with_context(|| format!("Ergo didn't create {nick}"))? {
-        Registration::Created => {}
-        Registration::NameTaken => return Err(taken()),
-    }
-    set_up(admin, nick.as_str(), &owner.account)
-        .await
-        .with_context(|| {
-            format!("{nick} was created, but not set up; bot reset-password {nick} tries again")
-        })?;
-    Ok(nick)
-}
-
-/// The host everyone sees `owner`'s bots connect from, so WHOIS and joins
-/// say whose bot it is, and one ban keeps every bot out of a channel.
-fn vhost(owner: &str) -> String {
-    format!("{VHOST_PREFIX}{owner}")
-}
-
-const VHOST_PREFIX: &str = "weblounge/bot/";
-
-/// Ergo's default `accounts.vhosts.max-length`, which owners' names stay
-/// within.
-const ERGO_VHOST_MAX_LENGTH: usize = 64;
-const _: () = assert!(VHOST_PREFIX.len() + nick::MAX_LENGTH <= ERGO_VHOST_MAX_LENGTH);
-
-async fn set_up(admin: &Admin, account: &str, owner: &str) -> anyhow::Result<()> {
-    stay_offline_when_stopped(admin, account).await?;
-    set_vhost(admin, account, owner).await
-}
-
-async fn set_vhost(admin: &Admin, account: &str, owner: &str) -> anyhow::Result<()> {
-    admin
-        .ergo
-        .set_vhost(account, vhost(owner))
-        .await
-        .with_context(|| format!("Ergo didn't give {account} its vhost"))
-}
-
-/// Turns the bot's always-on and auto-away off, so a stopped bot leaves the
-/// channels instead of lingering in them.
-async fn stay_offline_when_stopped(admin: &Admin, account: &str) -> anyhow::Result<()> {
-    let changes = SettingsChanges {
-        always_on: Some(Preference::Off),
-        auto_away: Some(Preference::Off),
-        ..Default::default()
-    };
-    admin
-        .ergo
-        .update_settings(account, changes)
-        .await
-        .with_context(|| format!("Ergo didn't turn {account}'s always-on and auto-away off"))?;
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn names_the_owner_under_the_networks_bot_namespace() {
-        assert_eq!(vhost("luiz"), "weblounge/bot/luiz");
-        assert_eq!(vhost("Zoe"), "weblounge/bot/Zoe");
+    match admin
+        .bots()
+        .create(&owner.account, name, note, password)
+        .await?
+    {
+        Ok(nick) => Ok(nick),
+        Err(Refusal::InvalidName(invalid)) => {
+            Err(anyhow::Error::new(invalid).context(format!("{name} can't be a bot's name")))
+        }
+        Err(Refusal::Taken) => anyhow::bail!("{name} is taken"),
     }
 }

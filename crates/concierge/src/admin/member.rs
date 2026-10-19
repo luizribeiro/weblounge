@@ -4,7 +4,7 @@ use clap::Subcommand;
 
 use super::{Admin, bot, erase_reminder, print_once};
 use crate::{
-    db,
+    db, password,
     verification_mail::{self, Kind},
 };
 
@@ -47,7 +47,7 @@ pub(super) async fn run(command: MemberCommand, admin: &Admin) -> anyhow::Result
 
 async fn reset_password(admin: &Admin, name: &str) -> anyhow::Result<String> {
     let member = admin.current_member(name).await?;
-    let password = admin.set_generated_password(&member.account).await?;
+    let password = password::set_generated(&admin.ergo, &member.account).await?;
     admin.db.end_sessions(&member.account).await?;
     Ok(print_once(&password))
 }
@@ -59,7 +59,7 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
     for bot in admin.db.bots(Some(account)).await? {
         bots_removed += &bot::remove(admin, &bot.account).await?;
     }
-    admin.set_generated_password(account).await?;
+    password::set_generated(&admin.ergo, account).await?;
     let mail = admin.outbox.delete_for(account).await?;
     let removal = admin.db.remove_member(account, db::now()).await?;
     let lingering = if removal.off_the_disk && mail.off_the_disk {
