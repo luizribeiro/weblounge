@@ -95,7 +95,7 @@ mod delete {
         assert_eq!(
             output,
             "removed alice (sessions ended: 1, invites revoked: 1)\n\
-             Ergo's API can't delete accounts: an oper must run /NS ERASE alice\n"
+             An oper must still run /NS ERASE alice\n"
         );
         assert!(!fixture.signs_in_to_ergo("alice", OLD_PASSWORD).await);
         let db = fixture.db().await;
@@ -148,7 +148,7 @@ mod delete {
         assert_eq!(
             output,
             "removed alice (sessions ended: 0, invites revoked: 0)\n\
-             Ergo's API can't delete accounts: an oper must run /NS ERASE alice\n\
+             An oper must still run /NS ERASE alice\n\
              removed bot hal\n\
              removed bot Marvin\n"
         );

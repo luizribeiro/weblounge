@@ -104,5 +104,5 @@ fn print_once(password: &Passphrase) -> String {
 
 /// What's left to do once concierge let go of `account`.
 fn erase_reminder(account: &str) -> String {
-    format!("Ergo's API can't delete accounts: an oper must run /NS ERASE {account}\n")
+    format!("An oper must still run /NS ERASE {account}\n")
 }
