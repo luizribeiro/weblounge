@@ -15,7 +15,7 @@
       ]
     },
     "images/favicon.svg": {
-      "bytes": 1007,
+      "bytes": 81,
       "imports": []
     },
     "scripts/members.ts": {
@@ -57,10 +57,10 @@
       "entryPoint": "images/favicon.svg",
       "inputs": {
         "images/favicon.svg": {
-          "bytesInOutput": 1007
+          "bytesInOutput": 81
         }
       },
-      "bytes": 1007
+      "bytes": 81
     },
     "members/members-7QK2WZ3D.js": {
       "imports": [],
