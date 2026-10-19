@@ -1,0 +1,79 @@
+--- a/docs/API.md
++++ b/docs/API.md
+@@ -91,6 +91,19 @@
+ * `registeredAt`: string, registration date/time of the channel (in ISO8601 format) if it is registered
+ 
+ 
++`/v1/ns/erase`
++--------------
++
++This endpoint erases an account, with the same semantics as `NS ERASE`: it deletes all records of the account, unregisters the channels it founded, and disconnects every client logged in to it. The name can then be registered again. The request is a JSON object with fields:
++
++* `accountName`: string, name of the account
++
++The response is a JSON object with fields:
++
++* `success`: whether the account was erased
++* `errorCode`: string, optional, machine-readable description of the error. Possible values include: `INVALID_REQUEST`, `ACCOUNT_DOES_NOT_EXIST`, `UNKNOWN_ERROR`.
++* `error`: string, optional, human-readable description of the failure if `errorCode` is `UNKNOWN_ERROR`
++
+ `/v1/ns/info`
+ -------------
+ 
+--- a/irc/api.go
++++ b/irc/api.go
+@@ -38,6 +38,7 @@
+ 	// /v1/ns: nickserv functionality
+ 	api.mux.HandleFunc("POST /v1/ns/info", api.handleAccountDetails)
+ 	api.mux.HandleFunc("POST /v1/ns/list", api.handleAccountList)
++	api.mux.HandleFunc("POST /v1/ns/erase", api.handleNsErase)
+ 	api.mux.HandleFunc("POST /v1/ns/passwd", api.handleNsPasswd)
+ 	api.mux.HandleFunc("POST /v1/ns/saregister", api.handleSaregister)
+ 	api.mux.HandleFunc("POST /v1/ns/saget", api.handleNsSaget)
+@@ -223,6 +224,46 @@
+ 	}
+ 
+ 	a.writeJSONResponse(response, w, r)
++}
++
++type apiNsEraseRequest struct {
++	AccountName string `json:"accountName"`
++}
++
++func (a *ergoAPI) handleNsErase(w http.ResponseWriter, r *http.Request) {
++	var request apiNsEraseRequest
++	if err := a.decodeJSONRequest(&request, w, r); err != nil {
++		return
++	}
++
++	var response apiGenericResponse
++	if request.AccountName == "" {
++		response.ErrorCode = "INVALID_REQUEST"
++		a.writeJSONResponse(response, w, r)
++		return
++	}
++	accountName := a.server.accounts.AccountToAccountName(request.AccountName)
++	if accountName == "" {
++		response.ErrorCode = "ACCOUNT_DOES_NOT_EXIST"
++		a.writeJSONResponse(response, w, r)
++		return
++	}
++
++	err := a.server.accounts.Unregister(accountName, true)
++	switch err {
++	case nil:
++		response.Success = true
++		a.server.logger.Info("api", "erased account", accountName)
++		a.server.snomasks.Send(sno.LocalAccounts, fmt.Sprintf("API erased account %s", accountName))
++	case errAccountDoesNotExist:
++		response.ErrorCode = "ACCOUNT_DOES_NOT_EXIST"
++	default:
++		a.server.logger.Error("api", "could not erase account:", err.Error())
++		response.ErrorCode = "UNKNOWN_ERROR"
++		response.Error = err.Error()
++	}
++
++	a.writeJSONResponse(response, w, r)
+ }
+ 
+ func (a *ergoAPI) handleNsPasswd(w http.ResponseWriter, r *http.Request) {

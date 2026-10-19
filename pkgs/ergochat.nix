@@ -17,5 +17,8 @@ ergochat.overrideAttrs (finalAttrs: old: {
     # Ergo only sets vhosts through an oper's HS SET. Not offered upstream
     # yet.
     ./ergochat-hs-set-api.patch
+    # Deleting a bot from the members' site has to disconnect it, which
+    # only an oper's NS ERASE does. Not offered upstream yet.
+    ./ergochat-ns-erase-api.patch
   ];
 })
