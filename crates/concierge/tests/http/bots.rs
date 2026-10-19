@@ -254,10 +254,7 @@ async fn the_tab_offers_the_form_to_make_one_with_the_servers_name_rules() {
         "{page}"
     );
     assert!(page.contains(&name_field("")), "{page}");
-    assert!(
-        page.contains(r#"data-availability="/signup/nick""#),
-        "{page}"
-    );
+    assert!(page.contains(r#"data-availability="/bots/name""#), "{page}");
     assert!(
         page.contains(r#"<button class="button button-primary" type="submit">Make a bot</button>"#),
         "{page}"
@@ -319,6 +316,55 @@ async fn a_name_a_member_or_bot_holds_is_taken_even_once_ergo_forgot_it() {
         );
     }
     assert_eq!(bot_count(&site).await, 1);
+}
+
+/// What the Bots tab's form hears as `name` is typed, as the member signed
+/// in with `cookie`.
+async fn name_lookup(site: &Site, cookie: Option<&str>, name: &str) -> (u16, String) {
+    let response = site.post("/bots/name", &[("nick", name)], cookie).await;
+    (response.status().as_u16(), body_text(response).await)
+}
+
+fn lookup_answer(answer: &str) -> (u16, String) {
+    (200, format!(r#"{{"status":"{answer}"}}"#))
+}
+
+#[tokio::test]
+async fn the_forms_lookup_frees_the_members_own_deleted_bots_names_alone() {
+    let site = Site::start().await;
+    site.add_verified_member("alice").await;
+    site.add_member("luiz").await;
+    site.execute(
+        "INSERT INTO bots (account, owner, created_at) VALUES ('bender', 'alice', 0);
+         INSERT INTO bots (account, owner, created_at, removed_at)
+         VALUES ('dalek', 'alice', 0, unixepoch()), ('hal', 'luiz', 0, unixepoch())",
+    )
+    .await;
+    let alice = site.sign_in("alice").await;
+
+    for (name, answer) in [
+        ("Dalek", "available"),
+        ("marvin", "available"),
+        ("hal", "taken"),
+        ("bender", "taken"),
+        ("LUIZ", "taken"),
+        ("2pac", "invalid"),
+    ] {
+        let heard = name_lookup(&site, Some(&alice), name).await;
+        assert_eq!(heard, lookup_answer(answer), "{name}");
+    }
+    let luiz = site.sign_in("luiz").await;
+    let hal = name_lookup(&site, Some(&luiz), "hal").await;
+    assert_eq!(hal, lookup_answer("available"));
+    let dalek = name_lookup(&site, Some(&luiz), "dalek").await;
+    assert_eq!(dalek, lookup_answer("taken"));
+}
+
+#[tokio::test]
+async fn guests_get_no_bot_name_lookups() {
+    let site = Site::start().await;
+    let (status, _) = name_lookup(&site, None, "dalek").await;
+    assert_eq!(status, 303);
 }
 
 #[tokio::test]

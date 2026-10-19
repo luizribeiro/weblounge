@@ -1,6 +1,7 @@
 //! What the signup form checks as you type: the server's password rules,
 //! whether a nick is free, and whether the invite code from the link
-//! works. Nicks and codes are POSTed, so they stay out of URLs and access
+//! works; and whether a name is free for a member's next bot, on the Bots
+//! tab. Nicks and codes are POSTed, so they stay out of URLs and access
 //! logs.
 
 use std::time::Instant;
@@ -15,7 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use super::invite;
 use crate::{
-    app::AppState,
+    app::{App, AppState},
+    auth::CurrentMember,
     bots::{self, NameClaim},
     invite_code,
     nick::Nick,
@@ -65,12 +67,34 @@ pub async fn nick(
     address: ClientAddress,
     Form(lookup): Form<Lookup>,
 ) -> Response {
+    availability(&app, address, &lookup.nick, None).await
+}
+
+/// Whether a name is free for the signed-in member's next bot, which may
+/// reuse the names of their own deleted bots.
+pub async fn bot_name(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    address: ClientAddress,
+    Form(lookup): Form<Lookup>,
+) -> Response {
+    availability(&app, address, &lookup.nick, Some(&me.member.account)).await
+}
+
+/// Whether `claimant`, a member, or None for someone signing up, may take
+/// `nick`.
+async fn availability(
+    app: &App,
+    address: ClientAddress,
+    nick: &str,
+    claimant: Option<&str>,
+) -> Response {
     if !app.lookups.allows(address.0, Instant::now()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    let status = match Nick::parse(&lookup.nick) {
+    let status = match Nick::parse(nick) {
         Err(_) => Availability::Invalid,
-        Ok(nick) => match taken(&app, &nick).await {
+        Ok(nick) => match taken(app, &nick, claimant).await {
             Ok(true) => Availability::Taken,
             Ok(false) => Availability::Available,
             Err(error) => {
@@ -107,9 +131,9 @@ pub async fn invite(
 }
 
 /// Whether a member, removed or not, a bot or a deleted bot whose name
-/// isn't free yet, or an Ergo account holds the nick.
-async fn taken(app: &crate::app::App, nick: &Nick) -> anyhow::Result<bool> {
-    let claim = bots::name_claim(&app.db, nick.as_str(), None, app.history_expiry).await?;
+/// isn't free to `claimant` yet, or an Ergo account holds the nick.
+async fn taken(app: &App, nick: &Nick, claimant: Option<&str>) -> anyhow::Result<bool> {
+    let claim = bots::name_claim(&app.db, nick.as_str(), claimant, app.history_expiry).await?;
     if claim == NameClaim::Held {
         return Ok(true);
     }

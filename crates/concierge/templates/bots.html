@@ -49,7 +49,7 @@
         <form class="form bot-form" method="post" action="/bots">
           <div class="field">
             <label for="bot-name">Name</label>
-            <input id="bot-name" name="name" value="{{ forms.name }}" required maxlength="{{ name_max_length }}" pattern="{{ name_pattern }}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="bot-name-hint" data-availability="/signup/nick"{% if forms.name_error.is_some() %} aria-invalid="true"{% endif %}>
+            <input id="bot-name" name="name" value="{{ forms.name }}" required maxlength="{{ name_max_length }}" pattern="{{ name_pattern }}" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="bot-name-hint" data-availability="/bots/name"{% if forms.name_error.is_some() %} aria-invalid="true"{% endif %}>
             {%- if let Some(error) = forms.name_error %}
             <p class="field-error" id="bot-name-hint" data-nick-status data-hint="Its nick on IRC, for good. {{ name_rule }}">{{ error }}</p>
             {%- else %}
