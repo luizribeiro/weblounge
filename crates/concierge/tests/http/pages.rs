@@ -40,7 +40,10 @@ async fn privacy_counts_failed_sign_ins_for_as_long_as_the_rate_limiter() {
     let page = body_text(Site::start().await.get("/privacy", None).await).await;
     let minutes = rate_limit::WINDOW.as_secs() / 60;
     assert!(
-        page.contains(&format!("per address, in memory, for {minutes} minutes.")),
+        page.contains(&format!(
+            "email confirmations and password resets are counted per address, \
+             in memory, for {minutes} minutes."
+        )),
         "{page}"
     );
 }

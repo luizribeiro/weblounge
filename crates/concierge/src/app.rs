@@ -19,7 +19,7 @@ use crate::{
     db::Db,
     oauth::Webchat,
     rate_limit::{AddressLimiter, Limiter, MailLimiter},
-    routes, session,
+    reset_mail, routes, session,
 };
 
 /// What every request handler shares.
@@ -34,7 +34,11 @@ pub struct App {
     pub lookups: AddressLimiter,
     pub oauth_requests: AddressLimiter,
     pub verifications: AddressLimiter,
+    /// Asking for reset links and using them, by client address.
+    pub recoveries: AddressLimiter,
+    /// Verification links mailed lately.
     pub mailed_links: MailLimiter,
+    pub reset_links: MailLimiter,
     /// The site's origin, which forms must post from.
     pub public_url: String,
     /// What invite links start with; the code follows.
@@ -50,6 +54,20 @@ pub struct App {
 }
 
 pub type AppState = Arc<App>;
+
+impl App {
+    /// Stops counting the links the mailer deleted unsent against their
+    /// members, who never got them.
+    pub async fn give_back_unsent_links(&self) {
+        match self.outbox.take_unsent().await {
+            Ok(unsent) => {
+                self.mailed_links.refund(&unsent);
+                self.reset_links.refund(&unsent);
+            }
+            Err(error) => eprintln!("Reading the links deleted unsent failed: {error}"),
+        }
+    }
+}
 
 pub fn router(app: App) -> Router {
     let public_url = app.public_url.clone();
@@ -122,6 +140,12 @@ pub fn router(app: App) -> Router {
             "/verify",
             get(routes::verify::show)
                 .post(routes::verify::confirm)
+                .layer(map_response(routes::no_store)),
+        )
+        .route(
+            reset_mail::FORGOT_PATH,
+            get(routes::reset::forgot)
+                .post(routes::reset::ask)
                 .layer(map_response(routes::no_store)),
         )
         .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));

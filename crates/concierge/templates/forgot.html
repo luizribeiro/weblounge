@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Forgot your password?{% endblock %}
+
+{% block content %}
+      <section class="card narrow" aria-labelledby="forgot-title">
+        <p class="eyebrow">Password</p>
+        <h1 id="forgot-title">Forgot your password?</h1>
+        <p>We'll email you a link to choose a new one, if your email is confirmed.</p>
+        {%- if let Some(alert) = alert %}
+        <p class="alert" role="alert">{{ alert }}</p>
+        {%- endif %}
+        <form class="form" method="post" action="{{ crate::reset_mail::FORGOT_PATH }}">
+          <div class="field">
+            <label for="who">Nick or email</label>
+            <input id="who" name="who" value="{{ who }}" required maxlength="{{ max_length }}" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus{% if field_error.is_some() %} aria-invalid="true" aria-describedby="who-error"{% endif %}>
+            {%- if let Some(error) = field_error %}
+            <p class="field-error" id="who-error">{{ error }}</p>
+            {%- endif %}
+          </div>
+          <button class="button button-primary" type="submit">Send a link</button>
+        </form>
+      </section>
+{%- endblock %}

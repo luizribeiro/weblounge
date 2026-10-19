@@ -219,7 +219,7 @@ async fn answer_link(app: &App, member: &Member, mailed: Mailed, saved: bool) ->
             return Redirect::to(&format!("/account{query}#email-and-news")).into_response();
         }
         Mailed::Refused(refusal) => (StatusCode::TOO_MANY_REQUESTS, refusal.to_string()),
-        Mailed::Failed => (StatusCode::SERVICE_UNAVAILABLE, UNSENT.to_owned()),
+        Mailed::Failed => (StatusCode::SERVICE_UNAVAILABLE, super::UNSENT.to_owned()),
     };
     let forms = Forms {
         flash: Flash {
@@ -231,8 +231,6 @@ async fn answer_link(app: &App, member: &Member, mailed: Mailed, saved: bool) ->
     };
     page(app, member, status, forms).await
 }
-
-const UNSENT: &str = "Couldn't send a link just now. Try again in a minute.";
 
 /// The Account tab of `member`, with `forms` filled in over what's stored.
 pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) -> Response {

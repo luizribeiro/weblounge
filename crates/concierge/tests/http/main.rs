@@ -12,6 +12,7 @@ mod oauth;
 mod pages;
 mod password;
 mod presence;
+mod reset;
 mod security;
 mod signin;
 mod signup;
@@ -36,7 +37,7 @@ use concierge::{
     oauth::Webchat,
     rate_limit::{
         AddressLimiter, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter, OAUTH_REQUESTS_PER_ADDRESS,
-        VERIFICATIONS_PER_ADDRESS,
+        RECOVERIES_PER_ADDRESS, VERIFICATIONS_PER_ADDRESS,
     },
     session::{self, Token},
 };
@@ -93,7 +94,9 @@ impl Site {
             lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
             oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
             verifications: AddressLimiter::new(VERIFICATIONS_PER_ADDRESS),
+            recoveries: AddressLimiter::new(RECOVERIES_PER_ADDRESS),
             mailed_links: MailLimiter::default(),
+            reset_links: MailLimiter::default(),
             public_url: PUBLIC_URL.into(),
             invite_links: format!("{JOIN_URL}/#"),
             webchat: Webchat {

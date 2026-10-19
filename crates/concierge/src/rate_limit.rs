@@ -110,6 +110,11 @@ pub const OAUTH_REQUESTS_PER_ADDRESS: usize = 120;
 /// one writer.
 pub const VERIFICATIONS_PER_ADDRESS: usize = 20;
 
+/// Asking for a reset link takes a post, and setting the password another,
+/// or a few for one the rules refuse; this leaves room for a household,
+/// and keeps one address from trying a list of nicks and addresses.
+pub const RECOVERIES_PER_ADDRESS: usize = 20;
+
 /// Requests in the last [`WINDOW`], by client address, up to a limit.
 pub struct AddressLimiter {
     requests: Recent<IpAddr>,
@@ -130,19 +135,20 @@ impl AddressLimiter {
     }
 }
 
-/// One verification link at a time: enough to find the first in a slow
-/// inbox or the spam folder before asking again.
+/// One link at a time, to confirm an email or reset a password: enough to
+/// find the first in a slow inbox or the spam folder before asking again.
 pub const LINK_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// Enough for a few typos in an address, too few to flood a stranger who
-/// was given as one.
+/// was given as one, or a member whose nick someone keeps typing in.
 pub const LINKS_PER_DAY: usize = 5;
-/// Links mailed per hour, all members together: well under the mailer's
-/// own cap, which reminders and other mail share.
+/// Links of one kind mailed per hour, all members together: verification
+/// and reset links, and a batch of reminders, stay well under the
+/// mailer's own cap of 400.
 pub const LINKS_PER_HOUR: usize = 60;
 const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 const HOUR: Duration = Duration::from_secs(60 * 60);
 
-/// Why a verification link wasn't mailed.
+/// Why a link wasn't mailed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MailRefusal {
     TooSoon,
@@ -163,7 +169,7 @@ impl fmt::Display for MailRefusal {
     }
 }
 
-/// Where a verification link goes, next to the member's last one.
+/// Where a link goes, next to the member's last one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Recipient {
     /// The address the last link went to, which may still be on its way.
@@ -173,7 +179,7 @@ pub enum Recipient {
     NewAddress,
 }
 
-/// Verification links mailed lately, by member and overall.
+/// Links of one kind mailed lately, by member and overall.
 pub struct MailLimiter {
     recent: Recent<Key>,
     today: Recent<Key>,
@@ -207,11 +213,16 @@ impl MailLimiter {
             Err(MailRefusal::TooSoon)
         } else if !self.today.under(&key, LINKS_PER_DAY, now) {
             Err(MailRefusal::TooManyToday)
-        } else if !self.overall.has_room(now) {
+        } else if self.busy(now) {
             Err(MailRefusal::Busy)
         } else {
             Ok(())
         }
+    }
+
+    /// Whether every member's links together have reached the hourly cap.
+    pub fn busy(&self, now: Instant) -> bool {
+        !self.overall.has_room(now)
     }
 
     /// Counts the link to `account` just queued as message `id`. Only links
@@ -416,8 +427,10 @@ mod tests {
             assert!(mail(&links, &format!("member{n}"), start).is_ok());
         }
         assert_eq!(mail(&links, "alice", start), Err(MailRefusal::Busy));
+        assert!(links.busy(start));
         let next = start + Duration::from_secs(1);
         assert_eq!(mail(&links, "alice", next), Err(MailRefusal::Busy));
+        assert!(!links.busy(start + HOUR));
         assert!(mail(&links, "alice", start + HOUR).is_ok());
         assert!(mail(&links, "member0", start + HOUR).is_ok());
     }

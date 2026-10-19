@@ -9,6 +9,7 @@ pub mod oauth;
 pub mod pages;
 pub mod password;
 pub mod presence;
+pub mod reset;
 pub mod signin;
 pub mod verify;
 
@@ -29,6 +30,9 @@ use crate::{
     db::{self, Member},
 };
 use verify::Unconfirmed;
+
+/// What pages say when a link couldn't be mailed, as while no mailer runs.
+pub const UNSENT: &str = "Couldn't send a link just now. Try again in a minute.";
 
 /// What pages say when Ergo's API doesn't answer as it should.
 pub const ERGO_UNAVAILABLE: &str =
