@@ -13,9 +13,29 @@ address=$(nix eval --raw "$config.weblounge.publicIPv4")
 mapfile -t names < <(nix eval --raw "$config.security.acme.certs" --apply \
   'certs: builtins.concatStringsSep "\n" (builtins.concatLists (builtins.attrValues
      (builtins.mapAttrs (name: cert: [ name ] ++ cert.extraDomainNames) certs)))')
-mapfile -t nameservers < <(dig +short NS "$domain")
+
+# A resolver that doesn't answer makes dig print a line like ";;
+# communications error to 10.1.1.1#53: timed out" to stdout, not stderr;
+# only a plain hostname is accepted so such lines are never chased as
+# nameservers.
+looks_like_hostname() {
+  [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*\.?$ ]]
+}
+
+nameservers=()
+for try in 1 2 3 4 5; do
+  mapfile -t candidates < <(dig +short NS "$domain")
+  nameservers=()
+  for candidate in "${candidates[@]}"; do
+    if looks_like_hostname "$candidate"; then
+      nameservers+=("$candidate")
+    fi
+  done
+  [ ${#nameservers[@]} -gt 0 ] && break
+  sleep 5
+done
 if [ ${#nameservers[@]} -eq 0 ]; then
-  echo "found no nameservers for $domain" >&2
+  echo "found no nameservers for $domain after $try tries" >&2
   exit 1
 fi
 
