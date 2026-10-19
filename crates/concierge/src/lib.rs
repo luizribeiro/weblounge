@@ -17,6 +17,7 @@ pub mod link_code;
 mod link_mail;
 pub mod nick;
 pub mod oauth;
+pub mod origin;
 pub mod password;
 pub mod password_rules;
 pub mod platform;

@@ -3,12 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use axum::http::Uri;
 use common::config::{invalid, read_credential, required};
 use ergo_api::{Client, Url};
 
-use crate::history;
 pub use crate::routes::presence::Presence;
+use crate::{
+    history,
+    origin::{self, Origin, SiteOrigin, WebchatOrigin},
+};
 pub use common::config::ConfigError;
 
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
@@ -21,11 +23,11 @@ const MIN_SESSION_KEY_BYTES: usize = 32;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub listen: SocketAddr,
-    pub public_url: String,
+    pub public_url: SiteOrigin,
     /// What invite links start with; the code follows.
     pub invite_links: String,
     /// The web client's origin, the one OAuth client.
-    pub webchat_url: String,
+    pub webchat_url: WebchatOrigin,
     pub irc_server: IrcServer,
     pub ergo_api: Url,
     pub assets_dir: PathBuf,
@@ -54,7 +56,7 @@ pub struct Databases {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemindConfig {
     pub databases: Databases,
-    pub public_url: String,
+    pub public_url: SiteOrigin,
 }
 
 /// The address members' IRC clients connect to, over TLS.
@@ -104,7 +106,7 @@ impl Config {
         let history_expiry = require("CONCIERGE_HISTORY_EXPIRE_TIME")?;
         let public_url = origin("CONCIERGE_PUBLIC_URL", public_url)?;
         let join_url = join_url
-            .map(|url| origin("CONCIERGE_JOIN_URL", url))
+            .map(|url| checked_origin("CONCIERGE_JOIN_URL", url, origin::normalize))
             .transpose()?;
         Ok(Self {
             listen: listen.parse().map_err(|_| {
@@ -114,7 +116,7 @@ impl Config {
                     "expected an address:port",
                 )
             })?,
-            invite_links: invite_links(&public_url, join_url.as_deref()),
+            invite_links: invite_links(public_url.as_str(), join_url.as_deref()),
             public_url,
             webchat_url: origin("CONCIERGE_WEBCHAT_URL", webchat_url)?,
             irc_server: IrcServer::parse(&irc_server).ok_or_else(|| {
@@ -253,17 +255,16 @@ fn parse_http_url(url: &str) -> Option<Url> {
 }
 
 /// The origin in the variable `name`, which holds `url`.
-fn origin(name: &'static str, url: String) -> Result<String, ConfigError> {
-    parse_origin(&url)
-        .ok_or_else(|| invalid(name, url, "expected an http(s) origin, without a path"))
+fn origin<S>(name: &'static str, url: String) -> Result<Origin<S>, ConfigError> {
+    checked_origin(name, url, Origin::parse)
 }
 
-fn parse_origin(url: &str) -> Option<String> {
-    let uri: Uri = url.parse().ok()?;
-    let has_path = !matches!(uri.path(), "" | "/") || uri.query().is_some();
-    let web_scheme = matches!(uri.scheme_str(), Some("http" | "https"));
-    (web_scheme && uri.authority().is_some() && !has_path)
-        .then(|| url.trim_end_matches('/').to_owned())
+fn checked_origin<T>(
+    name: &'static str,
+    url: String,
+    parse: impl FnOnce(&str) -> Option<T>,
+) -> Result<T, ConfigError> {
+    parse(&url).ok_or_else(|| invalid(name, url, "expected an http(s) origin, without a path"))
 }
 
 #[cfg(test)]
@@ -304,7 +305,12 @@ mod tests {
     }
 
     fn public_url(url: &str) -> Result<String, ConfigError> {
-        parse_with(&[("CONCIERGE_PUBLIC_URL", Some(url))]).map(|config| config.public_url)
+        parse_with(&[("CONCIERGE_PUBLIC_URL", Some(url))])
+            .map(|config| config.public_url.to_string())
+    }
+
+    fn origin<S>(url: &str) -> Origin<S> {
+        Origin::parse(url).unwrap()
     }
 
     #[test]
@@ -313,9 +319,9 @@ mod tests {
             parse_with(&[]),
             Ok(Config {
                 listen: "127.0.0.1:8080".parse().unwrap(),
-                public_url: "https://members.weblounge.org".into(),
+                public_url: origin("https://members.weblounge.org"),
                 invite_links: "https://join.weblounge.org/#".into(),
-                webchat_url: "https://irc.weblounge.org".into(),
+                webchat_url: origin("https://irc.weblounge.org"),
                 irc_server: IrcServer {
                     host: "irc.weblounge.org".into(),
                     port: 6697,
@@ -449,7 +455,8 @@ mod tests {
         assert_eq!(
             webchat("https://irc.weblounge.localhost:10443/")
                 .unwrap()
-                .webchat_url,
+                .webchat_url
+                .as_str(),
             "https://irc.weblounge.localhost:10443"
         );
         assert!(matches!(
@@ -587,7 +594,7 @@ mod tests {
                     concierge: "/var/lib/concierge/concierge.db".into(),
                     outbox: "/var/lib/concierge-outbox/outbox.db".into(),
                 },
-                public_url: "https://members.weblounge.org".into(),
+                public_url: origin("https://members.weblounge.org"),
             })
         );
         for name in [

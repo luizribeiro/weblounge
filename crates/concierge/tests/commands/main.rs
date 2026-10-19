@@ -16,6 +16,7 @@ use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
     db::{self, Db, NewMember, NewSession},
+    origin::Origin,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
 use outbox::{Outbox, QueuedMessage, testing::TestKey};
@@ -47,9 +48,9 @@ impl Fixture {
         credential(ERGO_API_TOKEN_CREDENTIAL, &format!("{}\n", ergo.token()));
         let config = Config {
             listen: "127.0.0.1:8080".parse().unwrap(),
-            public_url: "https://members.weblounge.localhost:10443".into(),
+            public_url: Origin::parse("https://members.weblounge.localhost:10443").unwrap(),
             invite_links: "https://join.weblounge.localhost:10443/#".into(),
-            webchat_url: "https://irc.weblounge.localhost:10443".into(),
+            webchat_url: Origin::parse("https://irc.weblounge.localhost:10443").unwrap(),
             irc_server: IrcServer {
                 host: "irc.weblounge.localhost".into(),
                 port: 16697,

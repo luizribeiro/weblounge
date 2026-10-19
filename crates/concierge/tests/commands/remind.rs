@@ -16,7 +16,7 @@ fn remind(fixture: &Fixture) -> Output {
         .env_clear()
         .env("STATE_DIRECTORY", fixture.state_dir())
         .env("CONCIERGE_OUTBOX", &fixture.config.outbox_path)
-        .env("CONCIERGE_PUBLIC_URL", &fixture.config.public_url)
+        .env("CONCIERGE_PUBLIC_URL", fixture.config.public_url.as_str())
         .output()
         .unwrap()
 }

@@ -83,7 +83,7 @@ async fn send_verification(admin: &Admin, name: Option<&str>) -> anyhow::Result<
     if accounts.is_empty() {
         return Ok("every unconfirmed member was sent a link already\n".into());
     }
-    let public_url = &admin.config.public_url;
+    let public_url = admin.config.public_url.as_str();
     let batch = verification_mail::send_batch(
         &admin.db,
         &admin.outbox,

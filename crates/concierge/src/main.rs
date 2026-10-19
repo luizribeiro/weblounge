@@ -51,7 +51,8 @@ fn report_migration(path: &Path, version: Option<i64>) {
 async fn remind(config: &RemindConfig) -> anyhow::Result<()> {
     let db = Db::open(&config.databases.concierge).await?;
     let outbox = Outbox::open(&config.databases.outbox).await?;
-    let batch = verification_mail::remind(&db, &outbox, &config.public_url, db::now()).await?;
+    let batch =
+        verification_mail::remind(&db, &outbox, config.public_url.as_str(), db::now()).await?;
     let plural = if batch.sent.len() == 1 { "" } else { "s" };
     eprintln!("Queued {} reminder{plural}", batch.sent.len());
     if batch.left > 0 {
@@ -79,10 +80,10 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         bot_changes: AddressLimiter::new(BOT_CHANGES_PER_ADDRESS),
         mailed_links: MailLimiter::default(),
         reset_links: MailLimiter::default(),
-        public_url: config.public_url.clone(),
+        public_url: config.public_url.to_string(),
         invite_links: config.invite_links.clone(),
         webchat: Webchat {
-            origin: config.webchat_url.clone(),
+            origin: config.webchat_url.to_string(),
         },
         introspection_secret: config.read_introspection_secret()?,
         irc_server: config.irc_server.clone(),
