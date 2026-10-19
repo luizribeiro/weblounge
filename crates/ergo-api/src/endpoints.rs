@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{AccountName, Passphrase};
@@ -37,14 +39,25 @@ pub struct SaRegister {
 }
 endpoint!(SaRegister, "/v1/ns/saregister" => Ack);
 
-/// `/v1/check_auth`: checks an account's passphrase.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// `/v1/check_auth`: checks an account's passphrase. The passphrase is
+/// whatever someone typed, so it isn't a [`Passphrase`], and `Debug`
+/// redacts it by hand.
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckAuth {
     pub account_name: AccountName,
     pub passphrase: String,
 }
 endpoint!(CheckAuth, "/v1/check_auth" => Authenticated);
+
+impl fmt::Debug for CheckAuth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CheckAuth")
+            .field("account_name", &self.account_name)
+            .field("passphrase", &format_args!("<redacted>"))
+            .finish()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -219,6 +232,18 @@ mod tests {
         assert_eq!(
             serde_json::to_value(request).unwrap(),
             json!({"accountName": "alice", "passphrase": "q7Hx-2mZp_9vLcT4wRfB"})
+        );
+    }
+
+    #[test]
+    fn debug_output_hides_a_typed_passphrase() {
+        let request = CheckAuth {
+            account_name: "alice".into(),
+            passphrase: "hunter 2".into(),
+        };
+        assert_eq!(
+            format!("{request:?}"),
+            r#"CheckAuth { account_name: AccountName("alice"), passphrase: <redacted> }"#
         );
     }
 
