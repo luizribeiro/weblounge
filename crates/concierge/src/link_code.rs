@@ -1,9 +1,8 @@
 //! The secret codes in links concierge shows or mails once, for invites,
-//! email verification and password resets. Only their hashes are kept:
-//! nothing needs a code back.
+//! email verification and password resets. Only their hashes are kept, as
+//! [`crate::secret_hash::SecretHash`]: nothing needs a code back.
 
 use common::random;
-use sha2::{Digest, Sha256};
 
 pub const ALPHABET: &[u8] = random::URL_SAFE;
 pub const HASH_LENGTH: usize = 32;
@@ -35,12 +34,6 @@ pub fn parse(input: &str, length: usize) -> Option<&str> {
 /// it valid in the `v` mode browsers compile patterns in.
 pub fn html_pattern(length: usize) -> String {
     format!(r"\s*(?:.*[#\/])?[A-Za-z0-9_\-]{{{length}}}\s*")
-}
-
-/// What the database keeps of `code`. A plain hash is enough: codes are
-/// random and long, so nobody can search for one that hashes the same.
-pub fn hash(code: &str) -> Vec<u8> {
-    Sha256::digest(code.as_bytes()).to_vec()
 }
 
 #[cfg(test)]
@@ -125,19 +118,6 @@ mod tests {
                 "{input:?}"
             );
         }
-    }
-
-    #[test]
-    fn hashes_with_sha256() {
-        let hex: String = hash("q7Hx2mZp9vLcT4wRfBa-_w")
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
-        assert_eq!(
-            hex,
-            "22cdf3661de9f286e70ff43127a6d9e94aadeb9a076cfcdaa771265fcaf85f70"
-        );
-        assert_eq!(hash("x").len(), HASH_LENGTH);
     }
 
     #[test]

@@ -9,7 +9,10 @@ use crate::{
     name::{BotName, MemberName},
     oauth::CodeChallenge,
     reset_rules::{self, Lookup},
-    secret_hash::{AccessTokenHash, AuthorizationCodeHash, SessionHash},
+    secret_hash::{
+        AccessTokenHash, AuthorizationCodeHash, InviteCodeHash, ResetCodeHash, SessionHash,
+        VerificationCodeHash,
+    },
     tree::Branch,
     verification_rules,
 };
@@ -109,7 +112,7 @@ pub struct NewInvite<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invite {
-    pub code_hash: Vec<u8>,
+    pub code_hash: InviteCodeHash,
     pub created_by: Option<MemberName>,
     pub created_at: i64,
     pub expires_at: i64,
@@ -139,7 +142,7 @@ impl Invite {
 /// An invite held for one redemption, from [`Db::claim_invite`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Claim {
-    pub code_hash: Vec<u8>,
+    pub code_hash: InviteCodeHash,
     pub claimed_at: i64,
     pub created_by: Option<MemberName>,
     pub makes_admin: bool,
@@ -300,7 +303,7 @@ impl link_mail::Issued for IssuedReset {
 /// [`Db::restore_reset_code`] puts back if the reset fails.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TakenReset {
-    code_hash: Vec<u8>,
+    code_hash: ResetCodeHash,
     /// Ergo's canonical spelling of the member's account name.
     pub account: MemberName,
     /// The confirmed address it went to.
@@ -449,7 +452,7 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         let code = link_code::generate(link_code::MAILED_LENGTH);
-        let code_hash = link_code::hash(&code);
+        let code_hash = VerificationCodeHash::of(&code);
         let expires_at = verification_rules::expires_at(now);
         sqlx::query!(
             "INSERT INTO verification_codes (code_hash, account, email, created_at, expires_at)
@@ -477,7 +480,7 @@ impl Db {
     /// requests can't both use one code.
     pub async fn verify_email(&self, code: &str, now: i64) -> sqlx::Result<Verification> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let code_hash = link_code::hash(code);
+        let code_hash = VerificationCodeHash::of(code);
         let Some(record) = verification_code(&mut *transaction, &code_hash).await? else {
             return Ok(Verification::Unknown);
         };
@@ -513,7 +516,7 @@ impl Db {
 
     /// The verification code `code`, while it's on file.
     pub async fn verification_code(&self, code: &str) -> sqlx::Result<Option<VerificationCode>> {
-        verification_code(&self.pool, &link_code::hash(code)).await
+        verification_code(&self.pool, &VerificationCodeHash::of(code)).await
     }
 
     /// How far each current member got with verifying their email.
@@ -615,7 +618,7 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         let code = link_code::generate(link_code::MAILED_LENGTH);
-        let code_hash = link_code::hash(&code);
+        let code_hash = ResetCodeHash::of(&code);
         let expires_at = reset_rules::expires_at(now);
         sqlx::query!(
             "INSERT INTO password_reset_codes (code_hash, account, email, created_at, expires_at)
@@ -641,7 +644,7 @@ impl Db {
     /// confirmed one. A code that doesn't work goes too.
     pub async fn take_reset_code(&self, code: &str, now: i64) -> sqlx::Result<Option<TakenReset>> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let code_hash = link_code::hash(code);
+        let code_hash = ResetCodeHash::of(code);
         let taken = sqlx::query!(
             r#"DELETE FROM password_reset_codes WHERE code_hash = ?
                RETURNING account AS "account: MemberName", email, created_at, expires_at"#,
@@ -851,7 +854,7 @@ impl Db {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let invites = sqlx::query_as!(
             Invite,
-            r#"SELECT code_hash AS "code_hash!", created_by AS "created_by: MemberName",
+            r#"SELECT code_hash AS "code_hash!: InviteCodeHash", created_by AS "created_by: MemberName",
                       created_at, expires_at, claimed_at,
                       redeemed_by AS "redeemed_by: MemberName", redeemed_at, revoked_at, makes_admin
                FROM invites WHERE created_by = ?"#,
@@ -868,10 +871,10 @@ impl Db {
     }
 
     pub async fn invite(&self, code: &str) -> sqlx::Result<Option<Invite>> {
-        let code_hash = invite_code::hash(code);
+        let code_hash = InviteCodeHash::of(code);
         sqlx::query_as!(
             Invite,
-            r#"SELECT code_hash AS "code_hash!", created_by AS "created_by: MemberName",
+            r#"SELECT code_hash AS "code_hash!: InviteCodeHash", created_by AS "created_by: MemberName",
                       created_at, expires_at, claimed_at,
                       redeemed_by AS "redeemed_by: MemberName", redeemed_at, revoked_at, makes_admin
                FROM invites WHERE code_hash = ?"#,
@@ -885,7 +888,7 @@ impl Db {
     pub async fn invites_created_by(&self, account: &MemberName) -> sqlx::Result<Vec<Invite>> {
         sqlx::query_as!(
             Invite,
-            r#"SELECT code_hash AS "code_hash!", created_by AS "created_by: MemberName",
+            r#"SELECT code_hash AS "code_hash!: InviteCodeHash", created_by AS "created_by: MemberName",
                       created_at, expires_at, claimed_at,
                       redeemed_by AS "redeemed_by: MemberName", redeemed_at, revoked_at, makes_admin
                FROM invites WHERE created_by = ? ORDER BY created_at DESC, rowid DESC"#,
@@ -1264,7 +1267,7 @@ async fn insert_member(
 
 async fn verification_code(
     executor: impl SqliteExecutor<'_>,
-    code_hash: &[u8],
+    code_hash: &VerificationCodeHash,
 ) -> sqlx::Result<Option<VerificationCode>> {
     sqlx::query_as!(
         VerificationCode,
@@ -1290,7 +1293,7 @@ async fn insert_invite(
     executor: impl SqliteExecutor<'_>,
     invite: &NewInvite<'_>,
 ) -> sqlx::Result<()> {
-    let code_hash = invite_code::hash(invite.code);
+    let code_hash = InviteCodeHash::of(invite.code);
     sqlx::query!(
         "INSERT INTO invites (code_hash, created_by, created_at, expires_at, makes_admin)
          VALUES (?, ?, ?, ?, ?)",
@@ -1346,7 +1349,7 @@ async fn hash_carried_over_codes(connection: &mut SqliteConnection) -> sqlx::Res
     .fetch_all(&mut *connection)
     .await?;
     for code in codes {
-        let hash = invite_code::hash(&String::from_utf8_lossy(&code));
+        let hash = InviteCodeHash::of(&String::from_utf8_lossy(&code));
         sqlx::query!(
             "UPDATE invites SET code_hash = ? WHERE code_hash = ?",
             hash,
@@ -1495,7 +1498,8 @@ pub(crate) mod tests {
     async fn requiring_an_email_keeps_members_and_whatever_refers_to_them() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("concierge.db");
-        let open: String = invite_code::hash("open")
+        let open: String = InviteCodeHash::of("open")
+            .as_bytes()
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect();
@@ -1586,7 +1590,8 @@ pub(crate) mod tests {
             .fetch_all(&db.pool)
             .await
             .unwrap();
-        let hashes = ["q7Hx2mZp9vLcT4wRfBa-_w", "v0Ri8dEa2kWnL5yTcHq-_x"].map(invite_code::hash);
+        let hashes = ["q7Hx2mZp9vLcT4wRfBa-_w", "v0Ri8dEa2kWnL5yTcHq-_x"]
+            .map(|code| InviteCodeHash::of(code).as_bytes().to_vec());
         assert_eq!(kept, hashes);
     }
 
@@ -1601,7 +1606,7 @@ pub(crate) mod tests {
              VALUES (CAST('q7Hx2mZp9vLcT4wRfBa-_w' AS BLOB), 1, 2);",
         )
         .await;
-        let hashed = invite_code::hash("v0Ri8dEa2kWnL5yTcHq-_x");
+        let hashed = InviteCodeHash::of("v0Ri8dEa2kWnL5yTcHq-_x");
         let pool = SqlitePool::connect(&format!("sqlite://{}", path.display()))
             .await
             .unwrap();
@@ -1619,7 +1624,8 @@ pub(crate) mod tests {
             .fetch_all(&db.pool)
             .await
             .unwrap();
-        assert_eq!(kept, [invite_code::hash("q7Hx2mZp9vLcT4wRfBa-_w"), hashed]);
+        let carried_over = InviteCodeHash::of("q7Hx2mZp9vLcT4wRfBa-_w");
+        assert_eq!(kept, [carried_over.as_bytes(), hashed.as_bytes()]);
     }
 
     #[tokio::test]
@@ -1950,7 +1956,7 @@ pub(crate) mod tests {
         sqlx::query(&format!(
             "UPDATE invites SET {assignments} WHERE code_hash = ?"
         ))
-        .bind(invite_code::hash(code))
+        .bind(InviteCodeHash::of(code))
         .execute(&db.pool)
         .await
         .unwrap();
@@ -1991,7 +1997,7 @@ pub(crate) mod tests {
         assert_eq!(
             claim,
             Claim {
-                code_hash: invite_code::hash("open"),
+                code_hash: InviteCodeHash::of("open"),
                 claimed_at: now,
                 created_by: Some(ALICE.clone()),
                 makes_admin: false,
@@ -2103,7 +2109,7 @@ pub(crate) mod tests {
 
         let invites = db.invites_created_by(&ALICE).await.unwrap();
         let hashes: Vec<_> = invites.into_iter().map(|invite| invite.code_hash).collect();
-        let newest_first = ["made-in-the-same-second", "newer", "open"].map(invite_code::hash);
+        let newest_first = ["made-in-the-same-second", "newer", "open"].map(InviteCodeHash::of);
         assert_eq!(hashes, newest_first);
         assert_eq!(
             db.invitees(&ALICE).await.unwrap(),

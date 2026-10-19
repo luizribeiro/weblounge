@@ -1,6 +1,6 @@
 //! Invite codes: the secret part of an invite link.
 
-pub use crate::link_code::{HASH_LENGTH, from_input, hash};
+pub use crate::link_code::{HASH_LENGTH, from_input};
 
 use crate::link_code;
 

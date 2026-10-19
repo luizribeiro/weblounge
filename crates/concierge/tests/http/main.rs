@@ -43,7 +43,7 @@ use concierge::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
         OAUTH_REQUESTS_PER_ADDRESS, RECOVERIES_PER_ADDRESS, VERIFICATIONS_PER_ADDRESS,
     },
-    secret_hash::SessionHash,
+    secret_hash::{InviteCodeHash, SessionHash},
     session::{self, Token},
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
@@ -265,7 +265,7 @@ impl Site {
         sqlx::query(&format!(
             "UPDATE invites SET {assignments} WHERE code_hash = ?"
         ))
-        .bind(concierge::invite_code::hash(code))
+        .bind(InviteCodeHash::of(code))
         .execute(&pool)
         .await
         .unwrap();
