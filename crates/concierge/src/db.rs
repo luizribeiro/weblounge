@@ -277,6 +277,12 @@ pub struct IssuedReset {
     pub expires_at: i64,
 }
 
+impl link_mail::Issued for IssuedReset {
+    fn expires_at(&self) -> i64 {
+        self.expires_at
+    }
+}
+
 /// A reset code taken out of the database by its one use, which
 /// [`Db::restore_reset_code`] puts back if the reset fails.
 #[derive(Debug, Clone, PartialEq, Eq)]

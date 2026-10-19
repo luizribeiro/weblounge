@@ -1,0 +1,10 @@
+Hi {{ nick }},
+
+To choose a new password for weblounge.org, open this link and press
+"Set my password":
+
+{{ link }}
+
+The link works once, within {{ lifetime }}. If you didn't ask to reset
+your password, you can ignore this email; your password stays as it is.
+{# Askama drops a template's last newline; this keeps the body's. #}
