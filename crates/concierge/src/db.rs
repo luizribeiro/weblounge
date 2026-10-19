@@ -2963,6 +2963,30 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn two_members_at_once_cannot_both_reuse_a_deleted_bots_name() {
+        let (db, _dir) = with_bots().await;
+        let dalek = db.bot("dalek").await.unwrap().unwrap();
+        let bot = |owner| NewBot {
+            account: "dalek",
+            owner,
+            note: None,
+            created_at: 300,
+        };
+        let (luiz, alice) = (bot("luiz"), bot("alice"));
+
+        let inserted = tokio::join!(
+            db.insert_bot(&luiz, Some(&dalek), None),
+            db.insert_bot(&alice, Some(&dalek), None)
+        );
+
+        let inserted = [inserted.0.unwrap(), inserted.1.unwrap()];
+        assert!(inserted.contains(&BotInsertion::Inserted), "{inserted:?}");
+        assert!(inserted.contains(&BotInsertion::NameTaken), "{inserted:?}");
+        let live = db.bots(None).await.unwrap();
+        assert_eq!(live.iter().filter(|bot| bot.account == "dalek").count(), 1);
+    }
+
+    #[tokio::test]
     async fn a_new_bot_takes_the_row_of_the_deleted_bot_it_was_judged_against() {
         let (db, _dir) = with_bots().await;
         let dalek = db.bot("dalek").await.unwrap().unwrap();
