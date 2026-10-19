@@ -107,14 +107,14 @@ async fn an_email_never_mailed_offers_a_first_link() {
 }
 
 #[tokio::test]
-async fn a_confirmed_email_says_so_and_nothing_more() {
+async fn a_confirmed_email_has_no_hint() {
     let site = Site::start().await;
     site.add_member("alice").await;
     site.execute("UPDATE members SET email_verified_at = 1, verification_first_sent_at = 0")
         .await;
     let cookie = site.sign_in("alice").await;
     let page = body_text(site.get("/account", Some(&cookie)).await).await;
-    assert_eq!(email_hint(&page), "Confirmed. For account recovery.");
+    assert!(!page.contains(r#"id="email-hint""#), "{page}");
     assert!(!page.contains(r#"form="send-link""#), "{page}");
     assert!(!page.contains(SEND_LINK_FORM), "{page}");
 }
