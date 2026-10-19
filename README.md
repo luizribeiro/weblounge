@@ -105,8 +105,12 @@ In the VM it's at https://irc.weblounge.localhost:10443.
 
 A bot is an Ergo account a member owns. Ergo can't tell it from anyone
 else's account, so concierge's `bots` table is the record of which
-accounts are bots and whose they are; admins create them with
-`concierge-admin bot create`. Bots set mode `+B` on themselves.
+accounts are bots and whose they are. Members make, reset and delete
+their own on the members' site's Bots tab, three at a time once they've
+confirmed their email; admins use `concierge-admin bot …`, which shares
+its code and isn't held to the three. A bot's generated password is
+shown once. Deleting a bot erases its Ergo account, disconnecting it,
+and its name stays taken. Bots set mode `+B` on themselves.
 
 `templates/bot` is a Go bot to start from (`nix flake init -t
 github:luizribeiro/weblounge#bot`); its README covers running it with and
