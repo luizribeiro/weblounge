@@ -160,7 +160,7 @@ with subtest("while the mailer is down, a new address gets no link, and the page
     judy = Browser("judy")
     judy.sign_in("judy", judy_password)
     credenza.succeed("systemctl stop concierge-mailer")
-    page = judy.post("/settings", "email=judy@example.net", flags=["-w", "\n%{http_code}"])
+    page = judy.post("/settings", "email=judy@example.net", f"current={judy_password}", flags=["-w", "\n%{http_code}"])
     assert page.endswith("\n503") and "Couldn&#39;t send a link just now. Try again in a minute." in page, page
     credenza.succeed("systemctl start concierge-mailer")
     published_key()

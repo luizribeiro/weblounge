@@ -53,6 +53,16 @@
               {%- endif %}</p>
             {%- endif %}
           </div>
+          <input class="visually-hidden" type="text" value="{{ nick }}" autocomplete="username" readonly tabindex="-1" aria-hidden="true">
+          <div class="field">
+            <label for="email-password">Current password</label>
+            <input id="email-password" name="current" type="password" autocomplete="current-password" aria-describedby="email-password-hint"{% if settings.password_error.is_some() %} aria-invalid="true"{% endif %}>
+            {%- if let Some(error) = settings.password_error %}
+            <p class="field-error" id="email-password-hint">{{ error }}</p>
+            {%- else %}
+            <p class="hint" id="email-password-hint">Needed to change your email.</p>
+            {%- endif %}
+          </div>
           {%- call components::news_opt_in(settings.news) %}{% endcall %}
           <button class="button button-primary" type="submit">Save</button>
         </form>

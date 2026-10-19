@@ -12,6 +12,7 @@ use serde::Deserialize;
 
 use super::{
     Flash, Layout, Tab, internal_error,
+    password::{self, Refused},
     presence::Presence,
     render_with,
     verify::{self, Due, Mailed, Unconfirmed},
@@ -22,7 +23,7 @@ use crate::{
     db::{self, Bot, Member},
     email::{self, Email},
     password_rules::FieldErrors,
-    rate_limit::Recipient,
+    rate_limit::{ClientAddress, Recipient},
 };
 
 #[derive(Template)]
@@ -56,6 +57,10 @@ impl Account<'_> {
 pub struct Settings {
     email: String,
     news: Option<String>,
+    /// The member's password, which changing the email needs: otherwise
+    /// a stolen session could move the account's recovery to another
+    /// address.
+    current: String,
 }
 
 /// The email and news form, as stored or as typed.
@@ -63,7 +68,12 @@ struct SettingsForm<'a> {
     email: &'a str,
     news: bool,
     email_error: Option<String>,
+    /// What's wrong with the current password given; never what was typed.
+    password_error: Option<&'static str>,
 }
+
+/// What the email form says when it's sent without the password.
+const PASSWORD_NEEDED: &str = "Enter your password to change your email.";
 
 /// What's wrong with a password change; never what was typed.
 #[derive(Default)]
@@ -114,34 +124,53 @@ pub async fn show(
 pub async fn update(
     State(app): State<AppState>,
     CurrentMember(me): CurrentMember,
+    address: ClientAddress,
     Form(settings): Form<Settings>,
 ) -> Response {
     let account = &me.member.account;
     let news = settings.news.is_some();
-    let refuse = |error: String| {
+    let refuse = |status, email_error, password_error| {
         let forms = Forms {
             settings: Some(SettingsForm {
                 email: &settings.email,
                 news,
-                email_error: Some(error),
+                email_error,
+                password_error,
             }),
             ..Forms::default()
         };
-        page(&app, &me.member, StatusCode::UNPROCESSABLE_ENTITY, forms)
+        page(&app, &me.member, status, forms)
     };
     let email = match Email::parse(&settings.email) {
         Ok(email) => email,
-        Err(error) => return refuse(error.to_string()).await,
+        Err(error) => {
+            return refuse(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Some(error.to_string()),
+                None,
+            )
+            .await;
+        }
     };
+    let changed = me.member.email.as_deref() != Some(email.as_str());
+    if changed
+        && let Err(Refused { status, error }) =
+            check_password(&app, account, &address, &settings.current).await
+    {
+        return refuse(status, None, Some(error)).await;
+    }
     match app.db.email_taken(email.as_str(), account).await {
         Ok(false) => {}
-        Ok(true) => return refuse(email::TAKEN.to_owned()).await,
+        Ok(true) => {
+            let taken = Some(email::TAKEN.to_owned());
+            return refuse(StatusCode::UNPROCESSABLE_ENTITY, taken, None).await;
+        }
         Err(error) => return internal_error("Looking up an email", error),
     }
     if let Err(error) = app.db.update_settings(account, email.as_str(), news).await {
         return internal_error("Saving settings", error);
     }
-    if me.member.email.as_deref() == Some(email.as_str()) {
+    if !changed {
         return Redirect::to("/account?saved#email-and-news").into_response();
     }
     let mailed = verify::mail_link(&app, account, Recipient::NewAddress).await;
@@ -150,6 +179,22 @@ pub async fn update(
         Ok(None) => internal_error("Reading back saved settings", "no member"),
         Err(error) => internal_error("Reading back saved settings", error),
     }
+}
+
+/// Checks the password a change of email came with, which it needs.
+async fn check_password(
+    app: &App,
+    account: &str,
+    address: &ClientAddress,
+    current: &str,
+) -> Result<(), Refused> {
+    if current.is_empty() {
+        return Err(Refused {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            error: PASSWORD_NEEDED,
+        });
+    }
+    password::check_current(app, account, address, current).await
 }
 
 /// Mails the member a new link to confirm their email.
@@ -193,6 +238,7 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         email: member.email.as_deref().unwrap_or(""),
         news: member.news_opt_in,
         email_error: None,
+        password_error: None,
     });
     let presence = match app.ergo.settings(member.account.as_str()).await {
         Ok(settings) => Ok(Presence::of(&settings, app.presence_defaults)),

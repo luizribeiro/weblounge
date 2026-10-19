@@ -1,8 +1,13 @@
 use axum::http::header;
-use concierge::{db, rate_limit::LINKS_PER_DAY, verification_mail, verification_rules};
+use concierge::{
+    db,
+    rate_limit::{LINKS_PER_DAY, PER_ACCOUNT, TRY_LATER},
+    verification_mail, verification_rules,
+};
+use ergo_api::fake::Failure;
 
 use crate::{
-    NEWS_LABEL, SEND_LINK_FORM, Site, body_text, confirm, execute, location, send_link,
+    NEWS_LABEL, PASSWORD, SEND_LINK_FORM, Site, body_text, confirm, execute, location, send_link,
     verification_link,
 };
 
@@ -143,7 +148,11 @@ async fn saves_the_settings_and_says_so() {
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
 
-    let form = [("email", " alice@example.net "), ("news", "on")];
+    let form = [
+        ("email", " alice@example.net "),
+        ("news", "on"),
+        ("current", PASSWORD),
+    ];
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(response.status(), 303);
@@ -423,7 +432,7 @@ async fn guests_and_other_sites_cannot_ask_for_links() {
 async fn a_new_address_gets_a_link_and_the_old_ones_stops_working() {
     let (site, cookie, old) = with_a_code_mailed().await;
 
-    let form = [("email", "alice@example.net")];
+    let form = [("email", "alice@example.net"), ("current", PASSWORD)];
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(location(&response), "/account?saved&sent#email-and-news");
@@ -457,7 +466,7 @@ async fn a_new_address_past_the_week_gets_a_link_without_the_date() {
     site.execute("UPDATE members SET verification_first_sent_at = 0")
         .await;
 
-    let form = [("email", "alice@example.net")];
+    let form = [("email", "alice@example.net"), ("current", PASSWORD)];
     site.post("/settings", &form, Some(&cookie)).await;
 
     let page = body_text(site.get("/account?saved&sent", Some(&cookie)).await).await;
@@ -474,7 +483,7 @@ async fn a_new_address_gets_its_link_without_waiting_on_the_last() {
     let (site, cookie, _) = with_a_code_mailed().await;
     site.post(RESEND, &[], Some(&cookie)).await;
 
-    let form = [("email", "alice@example.net")];
+    let form = [("email", "alice@example.net"), ("current", PASSWORD)];
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(location(&response), "/account?saved&sent#email-and-news");
@@ -487,11 +496,11 @@ async fn a_new_address_is_saved_even_when_no_link_may_go_out() {
     let (site, cookie, _) = with_a_code_mailed().await;
     for n in 0..LINKS_PER_DAY {
         let email = format!("alice{n}@example.net");
-        site.post("/settings", &[("email", email.as_str())], Some(&cookie))
-            .await;
+        let form = [("email", email.as_str()), ("current", PASSWORD)];
+        site.post("/settings", &form, Some(&cookie)).await;
     }
 
-    let form = [("email", "alice@example.net")];
+    let form = [("email", "alice@example.net"), ("current", PASSWORD)];
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(response.status(), 429);
@@ -518,7 +527,11 @@ async fn an_address_another_member_verified_is_refused_in_any_case() {
     .await;
     let cookie = site.sign_in("alice").await;
 
-    let form = [("email", "BOB@example.org"), ("news", "on")];
+    let form = [
+        ("email", "BOB@example.org"),
+        ("news", "on"),
+        ("current", PASSWORD),
+    ];
     let response = site.post("/settings", &form, Some(&cookie)).await;
 
     assert_eq!(response.status(), 422);
@@ -547,4 +560,124 @@ async fn a_member_keeps_their_own_verified_address() {
     assert_eq!(location(&response), "/account?saved#email-and-news");
     let alice = site.db.member("alice").await.unwrap().unwrap();
     assert!(alice.news_opt_in && alice.email_verified_at.is_some());
+}
+
+/// alice, signed in, sending her Email card with a new address and `current`.
+async fn change_email(site: &Site, cookie: &str, current: &str) -> axum::response::Response {
+    let form = [("email", "alice@example.net"), ("current", current)];
+    site.post("/settings", &form, Some(cookie)).await
+}
+
+/// What the Email card says under its password field.
+fn password_error(page: &str) -> &str {
+    let error = page
+        .split(r#"<p class="field-error" id="email-password-hint">"#)
+        .nth(1)
+        .expect("an error under the password");
+    error.split("</p>").next().unwrap()
+}
+
+async fn email_unchanged(site: &Site) {
+    let alice = site.db.member("alice").await.unwrap().unwrap();
+    assert_eq!(alice.email.as_deref(), Some("someone@example.org"));
+    assert!(site.mail().await.is_empty());
+}
+
+#[tokio::test]
+async fn the_email_form_asks_for_the_password_to_change_the_address() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let page = body_text(site.get("/account", Some(&cookie)).await).await;
+    let card = page.split(r#"id="email-and-news""#).nth(1).unwrap();
+    assert!(
+        card.contains(r#"<label for="email-password">Current password</label>"#),
+        "{card}"
+    );
+    assert!(
+        card.contains(r#"<input id="email-password" name="current" type="password" autocomplete="current-password" aria-describedby="email-password-hint">"#),
+        "{card}"
+    );
+    assert!(
+        card.contains(
+            r#"<p class="hint" id="email-password-hint">Needed to change your email.</p>"#
+        ),
+        "{card}"
+    );
+}
+
+#[tokio::test]
+async fn a_wrong_or_missing_password_changes_no_email_and_keeps_what_was_typed() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    for (current, status, error) in [
+        ("not-the-password", 401, "Wrong password."),
+        ("", 422, "Enter your password to change your email."),
+    ] {
+        let response = change_email(&site, &cookie, current).await;
+
+        assert_eq!(response.status(), status, "{current:?}");
+        let page = body_text(response).await;
+        assert_eq!(password_error(&page), error);
+        assert!(page.contains(r#"value="alice@example.net""#), "{page}");
+        assert!(
+            page.contains(r#"name="current" type="password" autocomplete="current-password" aria-describedby="email-password-hint" aria-invalid="true">"#),
+            "{page}"
+        );
+        assert!(!page.contains("not-the-password"), "{page}");
+        assert!(crate::is_tab(&page, "/account"), "{page}");
+    }
+    email_unchanged(&site).await;
+}
+
+#[tokio::test]
+async fn wrong_passwords_for_the_email_count_against_signing_in() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    for _ in 0..PER_ACCOUNT {
+        let response = change_email(&site, &cookie, "guess-guess").await;
+        assert_eq!(response.status(), 401);
+    }
+
+    let response = change_email(&site, &cookie, PASSWORD).await;
+
+    assert_eq!(response.status(), 429);
+    let page = body_text(response).await;
+    assert_eq!(password_error(&page), TRY_LATER);
+    email_unchanged(&site).await;
+    assert_eq!(site.sign_in_form("alice", PASSWORD).await.status(), 429);
+}
+
+#[tokio::test]
+async fn an_email_change_ergo_cannot_check_changes_nothing() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    site.ergo.fail_next(Failure::UnknownError);
+
+    let response = change_email(&site, &cookie, PASSWORD).await;
+
+    assert_eq!(response.status(), 503);
+    let page = body_text(response).await;
+    assert!(password_error(&page).contains("Nothing changed"), "{page}");
+    email_unchanged(&site).await;
+}
+
+#[tokio::test]
+async fn the_news_setting_alone_needs_no_password() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+
+    let form = [
+        ("email", "someone@example.org"),
+        ("news", "on"),
+        ("current", ""),
+    ];
+    let response = site.post("/settings", &form, Some(&cookie)).await;
+
+    assert_eq!(location(&response), "/account?saved#email-and-news");
+    assert!(site.db.member("alice").await.unwrap().unwrap().news_opt_in);
 }

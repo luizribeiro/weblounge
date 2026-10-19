@@ -155,8 +155,15 @@ with subtest("a member signs in to the website with their IRC password"):
     clients = browser.get("/clients", "-f")
     assert "<code>irc.weblounge.org</code>" in clients and "<code>6697</code>" in clients, clients
 
+with subtest("changing the email needs the member's password: a wrong one changes nothing"):
+    fields = ["email=dana@example.org", "current=a-wrong-guess"]
+    refused = browser.post("/settings", *fields, flags=["-w", "\n%{http_code}"])
+    assert refused.endswith("\n401"), refused
+    assert '<p class="field-error" id="email-password-hint">Wrong password.</p>' in refused, refused
+    assert concierge_sql("SELECT email FROM members WHERE account = 'Dana'").strip() != "dana@example.org"
+
 with subtest("a member changes their email and news setting on the Account tab"):
-    saved = browser.post("/settings", "email=dana@example.org", "news=on")
+    saved = browser.post("/settings", "email=dana@example.org", "news=on", f"current={password}")
     assert saved == f"303 https://{members}/account?saved&sent#email-and-news", saved
     tab = browser.get("/account?saved", "-f")
     assert "Saved." in tab and 'value="dana@example.org"' in tab, tab

@@ -2,7 +2,7 @@ use axum::http::header;
 use concierge::invite_rules::MAX_OPEN;
 use regex::Regex;
 
-use crate::{JOIN_URL, Site, body_text, location};
+use crate::{JOIN_URL, PASSWORD, Site, body_text, location};
 
 fn invite_links(page: &str) -> Vec<String> {
     let link = Regex::new(r#"<code class="invite-link">(https://[^<]+)</code>"#).unwrap();
@@ -325,7 +325,7 @@ async fn changing_to_an_unconfirmed_email_keeps_open_invites_but_makes_no_more()
     site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     let link = create_invite(&site, &cookie).await;
-    let form = [("email", "alice@example.net")];
+    let form = [("email", "alice@example.net"), ("current", PASSWORD)];
     site.post("/settings", &form, Some(&cookie)).await;
 
     let response = site.post("/invites", &[], Some(&cookie)).await;
