@@ -5,7 +5,17 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Account, add_member, concierge_admin, confirm_email, ergo_api, irc, irc_command, register
+    from helpers import (
+        Account,
+        add_member,
+        concierge_admin,
+        concierge_admin_command,
+        confirm_email,
+        ergo_api,
+        irc,
+        irc_command,
+        register,
+    )
 
 luiz: Account = {"account": "luiz", "password": "plain-old-vanilla"}
 alice: Account = {"account": "alice", "password": "correct-horse"}
@@ -194,3 +204,14 @@ with subtest("the passwords the Bots tab showed never reach the journal"):
     credenza.succeed("journalctl --sync")
     for secret in [old, robbie["password"]]:
         credenza.fail(f"journalctl | grep -qF {secret}")
+
+with subtest("a deleted bot's owner makes it again at once, and it logs in from their vhost"):
+    refused = credenza.fail(concierge_admin_command("bot", "create", "luiz", "robbie") + " 2>&1")
+    assert "robbie is taken" in refused, refused
+    deleted = robbie["password"]
+    robbie["password"] = bots_browser(zoe, "create", "robbie")
+    assert robbie["password"] != deleted
+    session = irc("WHOIS robbie", **robbie)
+    assert " 903 " in session, session
+    assert re.search(r"^:\S+ 311 robbie robbie ~u weblounge/bot/zoe ", session, re.M), session
+    assert re.match(r"robbie zoe \d{4}-\d\d-\d\d$", concierge_admin("bot", "list", "zoe").splitlines()[-1])

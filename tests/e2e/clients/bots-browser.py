@@ -1,7 +1,8 @@
 """Make, reset or delete a bot on the Bots tab, as its owner would, at a
 phone's width or a desktop's: `create NAME`, `reset NAME` or `delete
 NAME`. Creating and resetting print the password the dialog shows, once.
-Checks that the dialogs ask first, that the controls fit and are big
+Checks that the name field calls the name free as it's typed, that the
+dialogs ask first, that the controls fit and are big
 enough to tap, and that the password is gone once the dialog is."""
 
 import sys
@@ -54,6 +55,7 @@ def main():
         assert fits(page), width
         if action == "create":
             page.fill("#bot-name", name)
+            expect(page.locator("#bot-name-hint")).to_have_text(f"{name} is free.")
             make = page.get_by_role("button", name="Make a bot")
             assert_tappable(make, width)
             make.click()
