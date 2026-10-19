@@ -327,7 +327,7 @@ mod delete {
     use super::*;
 
     #[tokio::test]
-    async fn locks_the_bot_out_keeps_its_name_and_reminds_to_erase_it() {
+    async fn erases_the_account_and_keeps_its_name() {
         let fixture = Fixture::with_owners().await;
         let output = fixture
             .run(&["bot", "create", "luiz", "Bender"])
@@ -337,12 +337,9 @@ mod delete {
 
         let output = fixture.run(&["bot", "delete", "bender"]).await.unwrap();
 
-        assert_eq!(
-            output,
-            "removed bot Bender\n\
-             Ergo's API can't delete accounts: an oper must run /NS ERASE Bender\n"
-        );
+        assert_eq!(output, "removed bot Bender\n");
         assert!(!fixture.signs_in_to_ergo("bender", &password).await);
+        assert!(!fixture.in_ergo("bender").await);
         assert!(fixture.bot("bender").await.unwrap().removed_at.is_some());
         assert_eq!(fixture.db().await.bots(None).await.unwrap(), []);
         let error = fixture
@@ -366,6 +363,17 @@ mod delete {
     }
 
     #[tokio::test]
+    async fn marks_a_bot_ergo_erased_already_deleted() {
+        let fixture = Fixture::with_owners().await;
+        fixture.insert_bot("ghost", "luiz", None).await;
+
+        let output = fixture.run(&["bot", "delete", "ghost"]).await.unwrap();
+
+        assert_eq!(output, "removed bot ghost\n");
+        assert!(fixture.bot("ghost").await.unwrap().removed_at.is_some());
+    }
+
+    #[tokio::test]
     async fn keeps_the_bot_when_ergo_fails() {
         let fixture = Fixture::with_owners().await;
         fixture
@@ -376,11 +384,13 @@ mod delete {
 
         let error = fixture.run(&["bot", "delete", "bender"]).await.unwrap_err();
 
-        assert!(
-            error.to_string().starts_with("Ergo didn't take bender's"),
-            "{error:#}"
+        assert_eq!(
+            format!("{error:#}"),
+            "Ergo didn't erase bender: \
+             Ergo refused the request: UNKNOWN_ERROR (simulated failure)"
         );
         assert_eq!(fixture.bot("bender").await.unwrap().removed_at, None);
+        assert!(fixture.in_ergo("bender").await);
     }
 }
 
@@ -559,7 +569,8 @@ mod apply_vhosts {
             .run(&["bot", "create", "luiz", "Hal"])
             .await
             .unwrap();
-        fixture.run(&["bot", "delete", "hal"]).await.unwrap();
+        let deleted_before_erasing = fixture.db().await.remove_bot("hal", db::now()).await;
+        assert!(deleted_before_erasing.unwrap());
         fixture.ergo.client().set_vhost("hal", "").await.unwrap();
 
         let output = fixture.run(&["bot", "apply-vhosts"]).await.unwrap();

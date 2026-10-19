@@ -5,9 +5,9 @@ use std::{
 
 use anyhow::Context;
 use clap::Subcommand;
-use ergo_api::{Passphrase, Preference, Registration, SettingsChanges};
+use ergo_api::{Erasure, Passphrase, Preference, Registration, SettingsChanges};
 
-use super::{Admin, erase_reminder, print_once};
+use super::{Admin, print_once};
 use crate::{
     db::{self, Bot, Member, NewBot},
     nick::{self, Nick},
@@ -31,7 +31,7 @@ pub enum BotCommand {
     /// Give a bot a new generated password, and print it once. Turns its
     /// always-on and auto-away off and sets its vhost again too.
     ResetPassword { name: String },
-    /// Lock a bot out with a password nobody knows and mark it deleted,
+    /// Erase a bot's account, disconnecting it, and mark it deleted,
     /// keeping its name taken.
     Delete { name: String },
     /// Create a bot whose password is in a file, or set an existing bot's
@@ -135,8 +135,8 @@ async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
         .collect())
 }
 
-/// Deleted bots keep whatever vhost they had: nobody can sign in to them,
-/// and Ergo may have erased them.
+/// Deleted bots are left alone: Ergo erased them, or, for bots deleted
+/// before it could, nobody can sign in to them.
 async fn apply_vhosts(admin: &Admin) -> anyhow::Result<String> {
     let bots = admin.db.bots(None).await?;
     let mut failures = Vec::new();
@@ -167,15 +167,16 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
     remove(admin, &bot.account).await
 }
 
-/// Locks the live bot `account` out and marks it deleted, answering what's
-/// left for an oper to do.
+/// Erases the live bot `account` in Ergo, which disconnects it, and marks
+/// it deleted. An account Ergo has no record of was erased already.
 pub(super) async fn remove(admin: &Admin, account: &str) -> anyhow::Result<String> {
-    admin.set_generated_password(account).await?;
+    let _: Erasure = admin
+        .ergo
+        .erase(account)
+        .await
+        .with_context(|| format!("Ergo didn't erase {account}"))?;
     admin.db.remove_bot(account, db::now()).await?;
-    Ok(format!(
-        "removed bot {account}\n{}",
-        erase_reminder(account)
-    ))
+    Ok(format!("removed bot {account}\n"))
 }
 
 /// The bot named `name`, unless there's none or it was deleted.

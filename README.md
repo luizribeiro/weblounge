@@ -197,11 +197,12 @@ machine. They print plain lines a script can read:
 | `bot create <owner> <name> [--note …]`          | Registers a member's bot, prints its generated password once     |
 | `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
 | `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |
-| `bot delete <name>`                             | Locks a bot out and marks it deleted, keeping its name taken     |
+| `bot delete <name>`                             | Erases a bot's account, disconnecting it; its name stays taken   |
 | `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password; `-` is stdin |
 
-Ergo's API can't delete accounts, so after `member delete` or `bot delete`
-an oper still runs `/NS ERASE <account>`.
+After `member delete`, an oper still runs `/NS ERASE <account>`. `bot
+delete` erases the bot's account itself, through
+`pkgs/ergochat-ns-erase-api.patch`, which disconnects it too.
 
 `member send-verification` is for the members who joined before emails
 were confirmed, and goes once they all have. Members have a week from

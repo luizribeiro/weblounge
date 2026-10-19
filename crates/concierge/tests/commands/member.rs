@@ -150,9 +150,7 @@ mod delete {
             "removed alice (sessions ended: 0, invites revoked: 0)\n\
              Ergo's API can't delete accounts: an oper must run /NS ERASE alice\n\
              removed bot hal\n\
-             Ergo's API can't delete accounts: an oper must run /NS ERASE hal\n\
-             removed bot Marvin\n\
-             Ergo's API can't delete accounts: an oper must run /NS ERASE Marvin\n"
+             removed bot Marvin\n"
         );
         let [marvin, hal, bender] = &passwords[..] else {
             unreachable!()
@@ -278,8 +276,8 @@ mod reconcile {
         for (owner, bot) in [("alice", "Bender"), ("alice", "hal"), ("carol", "marvin")] {
             fixture.run(&["bot", "create", owner, bot]).await.unwrap();
         }
-        fixture.run(&["bot", "delete", "hal"]).await.unwrap();
         let db = fixture.db().await;
+        db.remove_bot("hal", db::now()).await.unwrap();
         let ghost = NewBot {
             account: "ghost",
             owner: "alice",

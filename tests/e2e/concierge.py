@@ -260,10 +260,12 @@ with subtest("a bot made with concierge-admin logs in to IRC with SASL, but not 
     account = browser.get("/account", "-f")
     assert "<strong>bender</strong>" in account and "answers !ping" in account, account
 
-with subtest("concierge-admin bot delete locks the bot out of IRC"):
+with subtest("concierge-admin bot delete erases the bot's account in Ergo"):
     deleted = concierge_admin("bot", "delete", "bender")
-    assert "an oper must run /NS ERASE bender" in deleted, deleted
+    assert deleted == "removed bot bender\n", deleted
     client.fail(irc_command(account="bender", password=bot_password))
+    body, _ = ergo_api("ns/info", accountName="bender")
+    assert json.loads(body) == {"success": False}, body
     assert concierge_admin("bot", "list") == ""
 
 with subtest("the passwords never reach the journal"):
