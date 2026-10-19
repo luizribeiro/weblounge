@@ -14,6 +14,7 @@ use outbox::Outbox;
 use crate::{
     assets::{self, Assets},
     auth,
+    background::Background,
     config::{IrcServer, Presence},
     csrf,
     db::Db,
@@ -34,6 +35,8 @@ pub struct App {
     pub lookups: AddressLimiter,
     pub oauth_requests: AddressLimiter,
     pub verifications: AddressLimiter,
+    /// Work requests answer without waiting for.
+    pub background: Background,
     /// Asking for reset links and using them, by client address.
     pub recoveries: AddressLimiter,
     /// Verification links mailed lately.

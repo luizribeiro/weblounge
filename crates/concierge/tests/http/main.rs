@@ -31,6 +31,7 @@ use axum::{
 use concierge::{
     app::{self, App},
     assets::Assets,
+    background::Background,
     config::{IrcServer, Presence},
     db::{self, Db, NewInvite, NewMember},
     invite_rules,
@@ -64,6 +65,8 @@ struct Site {
     mailer_key: TestKey,
     ergo: FakeErgo,
     state: TempDir,
+    /// What requests left running when they answered.
+    background: Background,
 }
 
 impl Site {
@@ -83,6 +86,7 @@ impl Site {
             .await
             .unwrap();
         let mailer_key = TestKey::publish(&outbox).await;
+        let background = Background::default();
         let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/assets");
         let mut app = App {
             assets: Assets::load(&fixtures).unwrap(),
@@ -94,6 +98,7 @@ impl Site {
             lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
             oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
             verifications: AddressLimiter::new(VERIFICATIONS_PER_ADDRESS),
+            background: background.clone(),
             recoveries: AddressLimiter::new(RECOVERIES_PER_ADDRESS),
             mailed_links: MailLimiter::default(),
             reset_links: MailLimiter::default(),
@@ -117,6 +122,7 @@ impl Site {
             mailer_key,
             ergo: fake,
             state,
+            background,
         }
     }
 

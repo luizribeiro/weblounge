@@ -2,6 +2,7 @@ pub mod admin;
 pub mod app;
 pub mod assets;
 mod auth;
+pub mod background;
 pub mod clients;
 pub mod config;
 mod csrf;

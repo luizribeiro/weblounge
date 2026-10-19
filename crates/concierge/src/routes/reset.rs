@@ -47,7 +47,8 @@ pub async fn forgot(State(app): State<AppState>, visitor: Visitor) -> Response {
 }
 
 /// Mails a reset link to the confirmed email of the member `who` names,
-/// if there's one and the limits allow, and answers the same either way.
+/// if there's one and the limits allow, and answers the same either way,
+/// and as soon: the mailing happens after the answer.
 pub async fn ask(
     State(app): State<AppState>,
     visitor: Visitor,
@@ -92,7 +93,12 @@ pub async fn ask(
         Err(error) => return internal_error("Reading the mailer's key", error),
     }
     match app.db.recoverable_member(&lookup).await {
-        Ok(Some(member)) => mail_link(&app, &member.account, now).await,
+        Ok(Some(member)) => {
+            let app = app.clone();
+            app.background
+                .clone()
+                .spawn(async move { mail_link(&app, &member.account, now).await });
+        }
         Ok(None) => {}
         Err(error) => return internal_error("Looking up a member to reset", error),
     }

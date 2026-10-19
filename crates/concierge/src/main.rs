@@ -6,6 +6,7 @@ use concierge::{
     admin::{self, Command},
     app::{self, App},
     assets::Assets,
+    background::Background,
     config::{Config, Databases, RemindConfig},
     db::{self, Db},
     oauth::Webchat,
@@ -62,6 +63,7 @@ async fn remind(config: &RemindConfig) -> anyhow::Result<()> {
 async fn serve(config: Config) -> anyhow::Result<()> {
     let db = Db::open(&config.database_path()).await?;
     db.end_expired_sessions(db::now()).await?;
+    let background = Background::default();
     let app = App {
         assets: Assets::load(&config.assets_dir)?,
         db,
@@ -72,6 +74,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
         oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),
         verifications: AddressLimiter::new(VERIFICATIONS_PER_ADDRESS),
+        background: background.clone(),
         recoveries: AddressLimiter::new(RECOVERIES_PER_ADDRESS),
         mailed_links: MailLimiter::default(),
         reset_links: MailLimiter::default(),

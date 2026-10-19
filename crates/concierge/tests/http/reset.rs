@@ -34,7 +34,9 @@ impl Site {
             .post_with(FORGOT, &[("who", who)], None, &headers)
             .await;
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-        (response.status().as_u16(), body_text(response).await)
+        let answer = (response.status().as_u16(), body_text(response).await);
+        self.background.settled().await;
+        answer
     }
 
     async fn forgot(&self, who: &str) -> (u16, String) {
