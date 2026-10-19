@@ -111,6 +111,8 @@ fn content_type(file_name: &str) -> &'static str {
         Some("css") => "text/css",
         Some("js") => "text/javascript",
         Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("avif") => "image/avif",
         Some("map") => "application/json",
         _ => "application/octet-stream",
     }
@@ -186,6 +188,16 @@ mod tests {
             ]
         );
         assert!(assets.response(MANIFEST).is_none());
+    }
+
+    #[test]
+    fn types_the_images_stylesheets_load() {
+        assert_eq!(content_type("felt-light-fibres-OKCGXEXF.png"), "image/png");
+        assert_eq!(
+            content_type("felt-light-fibres-SD4I2WZC.avif"),
+            "image/avif"
+        );
+        assert_eq!(content_type("notes.txt"), "application/octet-stream");
     }
 
     #[test]
