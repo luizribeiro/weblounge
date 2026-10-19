@@ -710,7 +710,8 @@ async fn the_tab_asks_before_deleting() {
     let site = Site::start().await;
     let (cookie, _) = alice_with_bender(&site).await;
     let question = "Delete bender? If it's connected, it's disconnected right away, \
-                    and it can't log in again. Its name stays taken.";
+                    and it can't log in again. You can reuse its name at once; anyone \
+                    else can in 2 weeks, once its messages have left the chat history.";
 
     let tab = bots_tab(&site, &cookie).await;
     assert!(
@@ -734,6 +735,17 @@ async fn the_tab_asks_before_deleting() {
         "{page}"
     );
     assert!(site.ergo.client().info("bender").await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn asking_before_deleting_says_how_long_the_chat_history_keeps_its_name() {
+    let site = Site::start_with(|app| app.history_expiry = 10 * 24 * 60 * 60).await;
+    let (cookie, _) = alice_with_bender(&site).await;
+    let wait = "anyone else can in 10 days, once its messages have left the chat history.";
+
+    assert!(bots_tab(&site, &cookie).await.contains(wait));
+    let page = body_text(site.get("/bots/bender/delete", Some(&cookie)).await).await;
+    assert!(page.contains(wait), "{page}");
 }
 
 #[tokio::test]

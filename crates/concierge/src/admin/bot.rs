@@ -32,8 +32,9 @@ pub enum BotCommand {
     /// Give a bot a new generated password, and print it once. Turns its
     /// always-on and auto-away off and sets its vhost again too.
     ResetPassword { name: String },
-    /// Erase a bot's account, disconnecting it, and mark it deleted,
-    /// keeping its name taken.
+    /// Erase a bot's account, disconnecting it, and mark it deleted. Its
+    /// owner may reuse its name at once; others once the chat history has
+    /// expired for it.
     Delete { name: String },
     /// Create a bot whose password is in a file, or set an existing bot's
     /// password to the file's. Meant to run before the bot starts, every

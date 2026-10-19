@@ -12,7 +12,7 @@
         {%- call components::reset_bot_password(bot) %}<a class="button" href="/bots">Keep it</a>{% endcall %}
         {%- when Question::Delete %}
         <h2 class="eyebrow" id="question-title">Delete {{ bot }}</h2>
-        {%- call components::delete_bot(bot) %}<a class="button" href="/bots">Keep it</a>{% endcall %}
+        {%- call components::delete_bot(bot, history_kept) %}<a class="button" href="/bots">Keep it</a>{% endcall %}
         {%- endmatch %}
       </section>
 {%- endblock %}

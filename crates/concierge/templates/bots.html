@@ -39,7 +39,7 @@
             </dialog>
             <dialog class="card" id="delete-{{ bot.account }}" aria-labelledby="delete-{{ bot.account }}-title" aria-describedby="delete-{{ bot.account }}-question">
               <h2 class="eyebrow" id="delete-{{ bot.account }}-title">Delete {{ bot.account }}</h2>
-              {%- call components::delete_bot(bot.account) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep it</button>{% endcall %}
+              {%- call components::delete_bot(bot.account, history_kept) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep it</button>{% endcall %}
             </dialog>
           </li>
           {%- endfor %}

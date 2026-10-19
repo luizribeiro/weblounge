@@ -24,7 +24,7 @@ use crate::{
     bot_rules,
     bots::{Bots, Refusal},
     db::{self, Bot, Member},
-    nick, password,
+    invite_rules, nick, password,
     rate_limit::{ClientAddress, TRY_LATER},
 };
 
@@ -43,6 +43,8 @@ struct BotsPage<'a> {
     name_max_length: usize,
     name_pattern: String,
     name_rule: &'a str,
+    /// How long until others may take a deleted bot's name, in words.
+    history_kept: String,
 }
 
 /// What the last change left on the tab.
@@ -71,6 +73,7 @@ struct QuestionPage<'a> {
     layout: Layout<'a>,
     bot: String,
     question: Question,
+    history_kept: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,11 +195,13 @@ async fn ask(app: &App, member: &Member, name: &str, question: Question) -> Resp
         layout: Layout::new(app, Some(&member.account)).on(Tab::Bots),
         bot: bot.account,
         question,
+        history_kept: invite_rules::in_words(app.history_expiry),
     })
 }
 
 /// Erases the member's bot `name` in Ergo, which disconnects it at once,
-/// and marks it deleted, keeping its name taken.
+/// and marks it deleted, keeping its name from others until the chat
+/// history has expired for it.
 pub async fn delete(
     State(app): State<AppState>,
     CurrentMember(me): CurrentMember,
@@ -334,6 +339,7 @@ async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) 
         name_max_length: nick::MAX_LENGTH,
         name_pattern: nick::html_pattern(),
         name_rule: nick::RULE,
+        history_kept: invite_rules::in_words(app.history_expiry),
     };
     render_with(status, &page)
 }
