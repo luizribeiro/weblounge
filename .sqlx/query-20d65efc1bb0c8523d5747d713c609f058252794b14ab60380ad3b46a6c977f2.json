@@ -1,10 +1,10 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT account AS \"account!\", email, email_verified_at, news_opt_in,\n                      invited_by, joined_at, is_admin, removed_at,\n                      verification_first_sent_at, verification_reminded_at\n               FROM members WHERE account = ?",
+  "query": "SELECT account AS \"account!: MemberName\", email, email_verified_at, news_opt_in,\n                      invited_by AS \"invited_by: MemberName\", joined_at, is_admin, removed_at,\n                      verification_first_sent_at, verification_reminded_at\n               FROM members WHERE account = ?",
   "describe": {
     "columns": [
       {
-        "name": "account!",
+        "name": "account!: MemberName",
         "ordinal": 0,
         "type_info": "Text"
       },
@@ -24,7 +24,7 @@
         "type_info": "Bool"
       },
       {
-        "name": "invited_by",
+        "name": "invited_by: MemberName",
         "ordinal": 4,
         "type_info": "Text"
       },
@@ -70,5 +70,5 @@
       true
     ]
   },
-  "hash": "6412a9fe4bcc9068b3fbb1db3ee52688022f26b6e0980d98ef292344d0259911"
+  "hash": "20d65efc1bb0c8523d5747d713c609f058252794b14ab60380ad3b46a6c977f2"
 }

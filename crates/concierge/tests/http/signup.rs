@@ -60,7 +60,7 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     assert!(!page.contains(NEW_PASSWORD), "{page}");
 
     let member = site.db.member("bob").await.unwrap().unwrap();
-    assert_eq!(member.account, "Bob");
+    assert_eq!(member.account.as_str(), "Bob");
     assert_eq!(member.invited_by.as_deref(), Some("alice"));
     assert_eq!(member.email.as_deref(), Some("bob@example.org"));
     assert!(member.news_opt_in);

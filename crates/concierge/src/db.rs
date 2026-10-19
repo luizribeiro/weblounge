@@ -6,6 +6,7 @@ use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 use crate::{
     invite_code, invite_rules, link_code, link_mail,
+    name::MemberName,
     oauth::CodeChallenge,
     reset_rules::{self, Lookup},
     tree::Branch,
@@ -30,11 +31,11 @@ pub struct NewMember<'a> {
 /// A member, or the placeholder a removed member leaves in the invite tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Member {
-    pub account: String,
+    pub account: MemberName,
     pub email: Option<String>,
     pub email_verified_at: Option<i64>,
     pub news_opt_in: bool,
-    pub invited_by: Option<String>,
+    pub invited_by: Option<MemberName>,
     pub joined_at: i64,
     pub is_admin: bool,
     pub removed_at: Option<i64>,
@@ -347,8 +348,8 @@ impl Db {
     pub async fn member(&self, account: &str) -> sqlx::Result<Option<Member>> {
         sqlx::query_as!(
             Member,
-            r#"SELECT account AS "account!", email, email_verified_at, news_opt_in,
-                      invited_by, joined_at, is_admin, removed_at,
+            r#"SELECT account AS "account!: MemberName", email, email_verified_at, news_opt_in,
+                      invited_by AS "invited_by: MemberName", joined_at, is_admin, removed_at,
                       verification_first_sent_at, verification_reminded_at
                FROM members WHERE account = ?"#,
             account
@@ -1503,7 +1504,8 @@ pub(crate) mod tests {
                 .unwrap()
                 .unwrap()
                 .member
-                .account,
+                .account
+                .as_str(),
             "alice"
         );
         assert!(db.access_token(b"\x01", 10).await.unwrap().is_some());
@@ -1745,11 +1747,11 @@ pub(crate) mod tests {
         assert_eq!(
             alice,
             Member {
-                account: "alice".into(),
+                account: MemberName::new("alice"),
                 email: None,
                 email_verified_at: None,
                 news_opt_in: false,
-                invited_by: Some("root".into()),
+                invited_by: Some(MemberName::new("root")),
                 joined_at: 10,
                 is_admin: false,
                 removed_at: Some(200),

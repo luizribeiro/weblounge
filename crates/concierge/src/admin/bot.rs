@@ -105,7 +105,7 @@ async fn ensure(
     };
     ensure_live(&bot)?;
     anyhow::ensure!(
-        bot.owner == owner.account,
+        bot.owner == owner.account.as_str(),
         "{} belongs to {}",
         bot.account,
         bot.owner

@@ -77,7 +77,7 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
 
 async fn send_verification(admin: &Admin, name: Option<&str>) -> anyhow::Result<String> {
     let accounts = match name {
-        Some(name) => vec![admin.current_member(name).await?.account],
+        Some(name) => vec![admin.current_member(name).await?.account.to_string()],
         None => never_sent_a_link(admin).await?,
     };
     if accounts.is_empty() {

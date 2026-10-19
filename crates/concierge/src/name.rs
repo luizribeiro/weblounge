@@ -76,6 +76,14 @@ impl<K> Hash for Name<K> {
     }
 }
 
+impl<K> std::ops::Deref for Name<K> {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.name
+    }
+}
+
 impl<K> fmt::Display for Name<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.name)

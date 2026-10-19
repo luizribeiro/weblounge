@@ -47,7 +47,7 @@ async fn signs_a_member_in_under_ergos_spelling_of_their_name() {
     let cookie = session_cookie(&response).unwrap();
     let hash = site.session_hash(&cookie).await;
     let session = site.db.session(&hash, db::now()).await.unwrap().unwrap();
-    assert_eq!(session.member.account, "Alice");
+    assert_eq!(session.member.account.as_str(), "Alice");
 }
 
 #[tokio::test]

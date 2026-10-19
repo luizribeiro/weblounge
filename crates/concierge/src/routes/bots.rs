@@ -292,7 +292,7 @@ fn bots(app: &App) -> Bots<'_> {
 /// `member`'s live bot named `name`, in any case.
 async fn owned_bot(app: &App, member: &Member, name: &str) -> sqlx::Result<Option<Bot>> {
     let bot = app.db.bot(name).await?;
-    Ok(bot.filter(|bot| bot.removed_at.is_none() && bot.owner == member.account))
+    Ok(bot.filter(|bot| bot.removed_at.is_none() && bot.owner == member.account.as_str()))
 }
 
 /// `member`'s live bot named `name`, or the answer that none was found.
