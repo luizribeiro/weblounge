@@ -26,8 +26,9 @@ const MAX_NANOS: u128 = i64::MAX as u128;
 
 /// How long Ergo keeps chat history, in whole seconds rounded up, from an
 /// expire-time written the way Ergo reads it: numbers with units, summed,
-/// such as `2w`, `14d`, `1d12h` or `1.5h`. None for one Ergo refuses, and
-/// for no time at all, which Ergo takes as keeping history forever.
+/// such as `2w`, `14d`, `1d12h` or `1.5h`. None for one Ergo refuses; for
+/// no time at all, which Ergo takes as keeping history forever; and for a
+/// negative one, which Ergo reads but which keeps nothing.
 pub fn parse_expire_time(setting: &str) -> Option<i64> {
     let mut rest = setting.strip_prefix('+').unwrap_or(setting);
     if rest.is_empty() {
