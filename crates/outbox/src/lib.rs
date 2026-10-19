@@ -72,6 +72,10 @@ impl Subject {
     }
 }
 
+// Only ever written: what's read back stays text, which the mailer parses
+// again before sending.
+common::sqlite_newtype!(Subject, 0: String);
+
 /// A plain-text message to queue, as it is or sealed. Its `Debug` output
 /// leaves the body out: a sealed message's carries a secret link.
 #[derive(Clone, PartialEq, Eq)]
@@ -387,7 +391,6 @@ async fn insert(
     now: i64,
     give_up_at: Option<i64>,
 ) -> sqlx::Result<i64> {
-    let (recipient, subject) = (message.to.as_str(), message.subject.as_str());
     let (text, sealed_to, sealed_body) = match body {
         Body::Plain(text) => (Some(text), None, None),
         Body::Sealed { to, ciphertext } => (None, Some(to), Some(ciphertext)),
@@ -398,8 +401,8 @@ async fn insert(
               give_up_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         message.account,
-        recipient,
-        subject,
+        message.to,
+        message.subject,
         text,
         sealed_to,
         sealed_body,
