@@ -33,6 +33,45 @@ pub struct Change {
     confirmation: String,
 }
 
+/// Why the current password a form gave was refused, and what the form
+/// says under it.
+pub struct Refused {
+    pub status: StatusCode,
+    pub error: &'static str,
+}
+
+/// Checks that `current` is `account`'s password, counting wrong ones
+/// against the limits on signing in.
+pub async fn check_current(
+    app: &App,
+    account: &str,
+    address: &ClientAddress,
+    current: &str,
+) -> Result<(), Refused> {
+    let refused = |status, error| Err(Refused { status, error });
+    if !(1..=password_rules::MAX_BYTES).contains(&current.len()) {
+        return refused(StatusCode::UNAUTHORIZED, WRONG);
+    }
+    let now = Instant::now();
+    if !app.limiter.allows(account, address.0, now) {
+        return refused(StatusCode::TOO_MANY_REQUESTS, rate_limit::TRY_LATER);
+    }
+    match app.ergo.check_auth(account, current).await {
+        Ok(Some(_)) => {
+            app.limiter.record_success(account);
+            Ok(())
+        }
+        Ok(None) => {
+            app.limiter.record_failure(account, address.0, now);
+            refused(StatusCode::UNAUTHORIZED, WRONG)
+        }
+        Err(error) => {
+            eprintln!("Checking a password failed: {error}");
+            refused(StatusCode::SERVICE_UNAVAILABLE, ERGO_UNAVAILABLE)
+        }
+    }
+}
+
 pub async fn change(
     State(app): State<AppState>,
     CurrentMember(me): CurrentMember,
@@ -56,28 +95,8 @@ pub async fn change(
             return refuse(StatusCode::UNPROCESSABLE_ENTITY, form).await;
         }
     };
-    if !(1..=password_rules::MAX_BYTES).contains(&change.current.len()) {
-        return refuse(StatusCode::UNAUTHORIZED, current_error(WRONG)).await;
-    }
-    let now = Instant::now();
-    if !app.limiter.allows(account, address.0, now) {
-        let form = current_error(rate_limit::TRY_LATER);
-        return refuse(StatusCode::TOO_MANY_REQUESTS, form).await;
-    }
-    match verify(&app, account, &change.current).await {
-        Ok(true) => app.limiter.record_success(account),
-        Ok(false) => {
-            app.limiter.record_failure(account, address.0, now);
-            return refuse(StatusCode::UNAUTHORIZED, current_error(WRONG)).await;
-        }
-        Err(error) => {
-            eprintln!("Checking a password failed: {error}");
-            return refuse(
-                StatusCode::SERVICE_UNAVAILABLE,
-                current_error(ERGO_UNAVAILABLE),
-            )
-            .await;
-        }
+    if let Err(refused) = check_current(&app, account, &address, &change.current).await {
+        return refuse(refused.status, current_error(refused.error)).await;
     }
     if let Err(error) = app.ergo.set_password(account, &new).await {
         eprintln!("Changing a password failed: {error}");
@@ -91,8 +110,4 @@ pub async fn change(
         Ok(_) => Redirect::to("/account?password#change-password").into_response(),
         Err(error) => internal_error("Ending a member's other sessions", error),
     }
-}
-
-async fn verify(app: &App, account: &str, password: &str) -> ergo_api::Result<bool> {
-    Ok(app.ergo.check_auth(account, password).await?.is_some())
 }
