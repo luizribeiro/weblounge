@@ -305,11 +305,29 @@ impl Outbox {
         .map(drop)
     }
 
-    /// Deletes a message once it's sent, or can never be.
+    /// Deletes a message once it's sent, or refused for good.
     pub async fn delete(&self, id: i64) -> sqlx::Result<Deletion> {
         let deleted = sqlx::query!("DELETE FROM outbox WHERE id = ?", id)
             .execute(&self.pool)
             .await?;
+        Ok(self.erase(deleted.rows_affected()).await)
+    }
+
+    /// Deletes a message that can never be sent, noting it unsent if it
+    /// was sealed.
+    pub async fn delete_unsent(&self, id: i64) -> sqlx::Result<Deletion> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        sqlx::query!(
+            "INSERT OR IGNORE INTO unsent (id)
+             SELECT id FROM outbox WHERE id = ? AND sealed_to IS NOT NULL",
+            id,
+        )
+        .execute(&mut *transaction)
+        .await?;
+        let deleted = sqlx::query!("DELETE FROM outbox WHERE id = ?", id)
+            .execute(&mut *transaction)
+            .await?;
+        transaction.commit().await?;
         Ok(self.erase(deleted.rows_affected()).await)
     }
 
@@ -692,6 +710,25 @@ mod tests {
 
         assert_eq!(outbox.take_unsent().await.unwrap(), sealed);
         assert!(outbox.take_unsent().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_sealed_message_that_can_never_be_sent_is_noted_unsent_and_a_plain_one_is_not() {
+        let (outbox, _dir) = with_outbox().await;
+        TestKey::publish(&outbox).await;
+        let carols = message(Some("carol"), "carol@example.org", VERIFY_SUBJECT);
+        let sealed = outbox.queue_sealed(&carols, QUEUED).await.unwrap();
+        let alice = outbox.due(QUEUED).await.unwrap().remove(0);
+
+        for id in [sealed, alice.id] {
+            assert_eq!(outbox.delete_unsent(id).await.unwrap().messages, 1);
+        }
+
+        assert_eq!(outbox.take_unsent().await.unwrap(), [sealed]);
+        assert_eq!(
+            recipients(&outbox.due(QUEUED + 60).await.unwrap()),
+            ["bob@example.org"]
+        );
     }
 
     #[tokio::test]

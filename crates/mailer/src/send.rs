@@ -208,7 +208,7 @@ impl<T: Transport> Mailer<T> {
             let id = queued.id;
             let Some(message) = self.message(queued) else {
                 eprintln!("Message {id} doesn't make a message any more; deleting it");
-                self.outbox.delete(id).await?;
+                self.outbox.delete_unsent(id).await?;
                 round.unreadable += 1;
                 continue;
             };
@@ -621,6 +621,7 @@ mod tests {
         let round = mailer.round(QUEUED + 60, Instant::now()).await.unwrap();
 
         assert_eq!((round.unreadable, round.sent), (3, 2));
+        assert_eq!(mailer.outbox.take_unsent().await.unwrap().len(), 1);
         assert!(due(&mailer, QUEUED + 60).await.is_empty());
     }
 
