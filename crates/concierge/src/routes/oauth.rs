@@ -18,6 +18,7 @@ use crate::{
     auth::{self, Visitor},
     db::{self, NewAccessToken, NewAuthorizationCode},
     oauth::{self, AuthorizationRequest, Refusal, TokenRequest, WEBCHAT_CLIENT},
+    origin::WebchatOrigin,
     rate_limit::ClientAddress,
     session::Token,
 };
@@ -41,7 +42,7 @@ struct Metadata<'a> {
 }
 
 pub async fn metadata(State(app): State<AppState>) -> Response {
-    let issuer = &app.public_url;
+    let issuer = app.public_url.as_str();
     Json(Metadata {
         issuer,
         authorization_endpoint: format!("{issuer}{AUTHORIZE_PATH}"),
@@ -214,7 +215,12 @@ fn refuse(app: &crate::app::App, visitor: &Visitor, refusal: &Refusal) -> Respon
 
 /// Lets the web client's pages read the answers of the endpoints it
 /// calls from the browser, and no other site's.
-pub async fn allow_webchat(State(origin): State<String>, request: Request, next: Next) -> Response {
+pub async fn allow_webchat(
+    State(origin): State<WebchatOrigin>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let origin = origin.as_str();
     let from_webchat = request
         .headers()
         .get(header::ORIGIN)
@@ -222,7 +228,7 @@ pub async fn allow_webchat(State(origin): State<String>, request: Request, next:
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.append(header::VARY, HeaderValue::from_static("origin"));
-    if from_webchat && let Ok(origin) = HeaderValue::from_str(&origin) {
+    if from_webchat && let Ok(origin) = HeaderValue::from_str(origin) {
         headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
     }
     response

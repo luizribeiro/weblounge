@@ -131,7 +131,7 @@ pub async fn mail_link(app: &App, account: &str, recipient: Recipient) -> Mailed
     let sent = verification_mail::send(
         &app.db,
         &app.outbox,
-        &app.public_url,
+        app.public_url.as_str(),
         account,
         verification_mail::Kind::Link,
         db::now(),

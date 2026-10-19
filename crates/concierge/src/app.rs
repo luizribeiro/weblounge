@@ -19,6 +19,7 @@ use crate::{
     csrf,
     db::Db,
     oauth::Webchat,
+    origin::SiteOrigin,
     rate_limit::{AddressLimiter, Limiter, MailLimiter},
     reset_mail, routes, session,
 };
@@ -45,7 +46,7 @@ pub struct App {
     pub mailed_links: MailLimiter,
     pub reset_links: MailLimiter,
     /// The site's origin, which forms must post from.
-    pub public_url: String,
+    pub public_url: SiteOrigin,
     /// What invite links start with; the code follows.
     pub invite_links: String,
     /// The web client, which signs members in through our OAuth server.
@@ -192,7 +193,7 @@ pub fn router(app: App) -> Router {
                 .layer(map_response(routes::no_store))
                 .layer(middleware::from_fn_with_state(
                     webchat_origin.clone(),
-                    csrf::guard,
+                    csrf::guard_webchat,
                 )),
         )
         .layer(middleware::from_fn_with_state(
@@ -203,7 +204,7 @@ pub fn router(app: App) -> Router {
         .merge(pages)
         .route("/healthz", get(|| async { "ok" }))
         .route(&format!("{}{{file}}", assets::URL_PREFIX), get(asset))
-        .layer(middleware::from_fn_with_state(public_url, csrf::guard))
+        .layer(middleware::from_fn_with_state(public_url, csrf::guard_site))
         .merge(webchat_api)
         // Ergo calls this, not a browser, and authenticates with its secret.
         .route(

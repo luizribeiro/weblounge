@@ -9,7 +9,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
-use crate::db::AuthorizationCode;
+use crate::{db::AuthorizationCode, origin::WebchatOrigin};
 
 /// The web client, gamja: public, so it has no secret, and PKCE stands in.
 pub const WEBCHAT_CLIENT: &str = "gamja";
@@ -28,7 +28,7 @@ const MAX_STATE_LENGTH: usize = 256;
 /// The one registered client and where it may be sent back to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Webchat {
-    pub origin: String,
+    pub origin: WebchatOrigin,
 }
 
 impl Webchat {
@@ -39,9 +39,10 @@ impl Webchat {
 
     /// Where members open the chat, as they'd type it.
     pub fn address(&self) -> &str {
-        self.origin
+        let origin = self.origin.as_str();
+        origin
             .split_once("://")
-            .map_or(&self.origin, |(_, address)| address)
+            .map_or(origin, |(_, address)| address)
     }
 }
 
@@ -269,8 +270,12 @@ mod tests {
     }
 
     fn webchat() -> Webchat {
+        webchat_at("https://irc.weblounge.org")
+    }
+
+    fn webchat_at(origin: &str) -> Webchat {
         Webchat {
-            origin: "https://irc.weblounge.org".into(),
+            origin: WebchatOrigin::parse(origin).unwrap(),
         }
     }
 
@@ -351,17 +356,13 @@ mod tests {
     #[test]
     fn the_address_is_the_origin_without_its_scheme() {
         assert_eq!(webchat().address(), "irc.weblounge.org");
-        let vm = Webchat {
-            origin: "https://irc.weblounge.localhost:10443".into(),
-        };
+        let vm = webchat_at("https://irc.weblounge.localhost:10443");
         assert_eq!(vm.address(), "irc.weblounge.localhost:10443");
     }
 
     #[test]
     fn a_vm_redirect_carries_the_forwarded_port() {
-        let vm = Webchat {
-            origin: "https://irc.weblounge.localhost:10443".into(),
-        };
+        let vm = webchat_at("https://irc.weblounge.localhost:10443");
         let request = AuthorizationRequest {
             redirect_uri: Some("https://irc.weblounge.localhost:10443/".into()),
             ..gamja()

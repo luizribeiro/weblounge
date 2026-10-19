@@ -8,6 +8,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+use crate::origin::{SiteOrigin, WebchatOrigin};
+
 /// Whether a request with these headers may go ahead on the site at
 /// `public_url`. Browsers send `Origin` on every POST; `Referer` stands in
 /// for the few that leave it out.
@@ -28,8 +30,26 @@ fn origin_of(url: &str) -> Option<String> {
     Some(format!("{}://{}", uri.scheme()?, uri.authority()?))
 }
 
-pub async fn guard(State(public_url): State<String>, request: Request, next: Next) -> Response {
-    if allows(request.method(), request.headers(), &public_url) {
+/// Guards the members' site's own pages.
+pub async fn guard_site(
+    State(origin): State<SiteOrigin>,
+    request: Request,
+    next: Next,
+) -> Response {
+    guard(origin.as_str(), request, next).await
+}
+
+/// Guards the endpoints the web client posts to.
+pub async fn guard_webchat(
+    State(origin): State<WebchatOrigin>,
+    request: Request,
+    next: Next,
+) -> Response {
+    guard(origin.as_str(), request, next).await
+}
+
+async fn guard(origin: &str, request: Request, next: Next) -> Response {
+    if allows(request.method(), request.headers(), origin) {
         next.run(request).await
     } else {
         (StatusCode::FORBIDDEN, "Cross-origin request refused.\n").into_response()

@@ -37,6 +37,7 @@ use concierge::{
     db::{self, Db, NewInvite, NewMember},
     invite_rules,
     oauth::Webchat,
+    origin::Origin,
     rate_limit::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
         OAUTH_REQUESTS_PER_ADDRESS, RECOVERIES_PER_ADDRESS, VERIFICATIONS_PER_ADDRESS,
@@ -106,10 +107,10 @@ impl Site {
             bot_changes: AddressLimiter::new(BOT_CHANGES_PER_ADDRESS),
             mailed_links: MailLimiter::default(),
             reset_links: MailLimiter::default(),
-            public_url: PUBLIC_URL.into(),
+            public_url: Origin::parse(PUBLIC_URL).unwrap(),
             invite_links: format!("{JOIN_URL}/#"),
             webchat: Webchat {
-                origin: WEBCHAT_URL.into(),
+                origin: Origin::parse(WEBCHAT_URL).unwrap(),
             },
             introspection_secret: INTROSPECTION_SECRET.into(),
             irc_server: irc_server(),

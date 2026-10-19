@@ -116,7 +116,13 @@ async fn mail_link(app: &App, account: &str, now: Instant) {
     {
         return;
     }
-    let sent = reset_mail::send_link(&app.db, &app.outbox, &app.public_url, account, db::now());
+    let sent = reset_mail::send_link(
+        &app.db,
+        &app.outbox,
+        app.public_url.as_str(),
+        account,
+        db::now(),
+    );
     match sent.await {
         Ok(Some(id)) => app.reset_links.record(account, id, now),
         Ok(None) => {}
@@ -260,7 +266,7 @@ pub async fn reset(
 /// Tells `account`'s confirmed address their password changed, in mail
 /// that carries no secret, so it waits for the mailer as it is.
 async fn notify(app: &App, account: &str, email: &str) {
-    let queued = match reset_mail::changed_message(account, email, &app.public_url) {
+    let queued = match reset_mail::changed_message(account, email, app.public_url.as_str()) {
         Ok(message) => app
             .outbox
             .queue(&message, db::now())

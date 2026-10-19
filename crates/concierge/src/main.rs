@@ -80,10 +80,10 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         bot_changes: AddressLimiter::new(BOT_CHANGES_PER_ADDRESS),
         mailed_links: MailLimiter::default(),
         reset_links: MailLimiter::default(),
-        public_url: config.public_url.to_string(),
+        public_url: config.public_url.clone(),
         invite_links: config.invite_links.clone(),
         webchat: Webchat {
-            origin: config.webchat_url.to_string(),
+            origin: config.webchat_url.clone(),
         },
         introspection_secret: config.read_introspection_secret()?,
         irc_server: config.irc_server.clone(),
