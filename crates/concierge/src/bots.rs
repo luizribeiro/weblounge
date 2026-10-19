@@ -54,8 +54,14 @@ impl Bots<'_> {
             created_at: db::now(),
         };
         let inserted = match max_live {
-            Some(max_live) => self.db.insert_bot_within(&bot, max_live).await?,
-            None => self.db.insert_bot(&bot).await.map(|()| true)?,
+            Some(max_live) => self.db.insert_bot_within(&bot, max_live).await,
+            None => self.db.insert_bot(&bot).await.map(|()| true),
+        };
+        let inserted = match inserted {
+            Err(sqlx::Error::Database(error)) if error.is_unique_violation() => {
+                return Ok(Err(Refusal::Taken));
+            }
+            inserted => inserted?,
         };
         if !inserted {
             return Ok(Err(Refusal::TooMany));

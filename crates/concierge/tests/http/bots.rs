@@ -343,6 +343,23 @@ async fn a_member_makes_three_and_no_more() {
 }
 
 #[tokio::test]
+async fn two_posts_of_one_name_at_once_make_one_bot_and_say_the_other_is_taken() {
+    let site = Site::start().await;
+    site.add_verified_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+
+    let (first, second) = tokio::join!(
+        make(&site, &cookie, "bender"),
+        make(&site, &cookie, "bender")
+    );
+
+    let mut statuses = [first.0, second.0];
+    statuses.sort();
+    assert_eq!(statuses, [200, 422], "{first:?} {second:?}");
+    assert_eq!(bot_count(&site).await, 1);
+}
+
+#[tokio::test]
 async fn bots_an_admin_made_count_and_deleted_ones_dont() {
     let site = Site::start().await;
     site.add_verified_member("alice").await;
