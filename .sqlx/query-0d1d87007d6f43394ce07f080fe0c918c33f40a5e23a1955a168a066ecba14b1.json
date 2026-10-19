@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) AS \"live!: i64\" FROM bots\n               WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "live!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0d1d87007d6f43394ce07f080fe0c918c33f40a5e23a1955a168a066ecba14b1"
+}

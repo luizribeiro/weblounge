@@ -1067,16 +1067,27 @@ impl Db {
     }
 
     pub async fn insert_bot(&self, bot: &NewBot<'_>) -> sqlx::Result<()> {
-        sqlx::query!(
-            "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)",
-            bot.account,
+        insert_bot(&self.pool, bot).await
+    }
+
+    /// Inserts `bot` unless its owner has `max_live` live bots already;
+    /// answers whether it did. Concurrent calls take turns, so they can't
+    /// both see room for one more.
+    pub async fn insert_bot_within(&self, bot: &NewBot<'_>, max_live: i64) -> sqlx::Result<bool> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let live = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) AS "live!: i64" FROM bots
+               WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL"#,
             bot.owner,
-            bot.note,
-            bot.created_at,
         )
-        .execute(&self.pool)
-        .await
-        .map(drop)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if live >= max_live {
+            return Ok(false);
+        }
+        insert_bot(&mut *transaction, bot).await?;
+        transaction.commit().await?;
+        Ok(true)
     }
 
     /// The bot whose account is `account`, in any case, deleted or not.
@@ -1206,6 +1217,19 @@ async fn insert_invite(
         invite.created_at,
         invite.expires_at,
         invite.makes_admin,
+    )
+    .execute(executor)
+    .await
+    .map(drop)
+}
+
+async fn insert_bot(executor: impl SqliteExecutor<'_>, bot: &NewBot<'_>) -> sqlx::Result<()> {
+    sqlx::query!(
+        "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)",
+        bot.account,
+        bot.owner,
+        bot.note,
+        bot.created_at,
     )
     .execute(executor)
     .await
@@ -2800,6 +2824,42 @@ pub(crate) mod tests {
         assert_eq!(names(db.bots(None).await.unwrap()), ["bender", "Marvin"]);
         assert_eq!(names(db.bots(Some("LUIZ")).await.unwrap()), ["bender"]);
         assert!(db.bots(Some("nobody")).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn inserts_a_bot_only_while_its_owner_has_room_for_it() {
+        let (db, _dir) = with_bots().await;
+        let bot = |account| NewBot {
+            account,
+            owner: "LUIZ",
+            note: None,
+            created_at: 300,
+        };
+
+        assert!(db.insert_bot_within(&bot("hal"), 2).await.unwrap());
+        assert!(!db.insert_bot_within(&bot("eve"), 2).await.unwrap());
+
+        assert_eq!(db.bot("eve").await.unwrap(), None);
+        assert!(db.bot("hal").await.unwrap().is_some());
+        assert!(db.insert_bot_within(&bot("eve"), 3).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn two_bots_at_once_cannot_both_take_the_last_place() {
+        let (db, _dir) = with_bots().await;
+        let bot = |account| NewBot {
+            account,
+            owner: "luiz",
+            note: None,
+            created_at: 300,
+        };
+
+        let (hal, eve) = (bot("hal"), bot("eve"));
+        let inserted = tokio::join!(db.insert_bot_within(&hal, 2), db.insert_bot_within(&eve, 2));
+
+        let inserted = [inserted.0.unwrap(), inserted.1.unwrap()];
+        assert_eq!(inserted.iter().filter(|&&ok| ok).count(), 1);
+        assert_eq!(db.bots(Some("luiz")).await.unwrap().len(), 2);
     }
 
     #[tokio::test]
