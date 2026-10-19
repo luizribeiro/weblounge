@@ -1,5 +1,5 @@
 use axum::http::header;
-use concierge::{db, rate_limit::VERIFICATIONS_PER_ADDRESS, verification_rules};
+use concierge::{db, link_code, rate_limit::VERIFICATIONS_PER_ADDRESS, verification_rules};
 
 use crate::{PUBLIC_URL, SEND_LINK_FORM, Site, body_text, confirm, send_link};
 
@@ -80,7 +80,7 @@ async fn used_unknown_expired_and_malformed_codes_get_the_same_answer() {
     let long_ago = db::now() - verification_rules::LIFETIME - 1;
     let expired = site.db.issue_verification_code("bob", long_ago).await;
     let expired = expired.unwrap().unwrap().code;
-    let unknown = "A".repeat(verification_rules::CODE_LENGTH);
+    let unknown = "A".repeat(link_code::MAILED_LENGTH);
     let too_long = format!("{unknown}A");
     let odd = format!("{}+", &unknown[1..]);
 
@@ -186,7 +186,7 @@ async fn an_address_gets_twenty_tries_then_waits() {
             ("x-real-ip", address),
         ]
     };
-    let unknown = "A".repeat(verification_rules::CODE_LENGTH);
+    let unknown = "A".repeat(link_code::MAILED_LENGTH);
     for _ in 0..VERIFICATIONS_PER_ADDRESS {
         let response = site
             .post_with("/verify", &[("code", &unknown)], None, &from("192.0.2.7"))

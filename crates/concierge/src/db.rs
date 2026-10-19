@@ -384,7 +384,7 @@ impl Db {
         )
         .execute(&mut *transaction)
         .await?;
-        let code = link_code::generate(verification_rules::CODE_LENGTH);
+        let code = link_code::generate(link_code::MAILED_LENGTH);
         let code_hash = link_code::hash(&code);
         let expires_at = verification_rules::expires_at(now);
         sqlx::query!(
@@ -1938,7 +1938,7 @@ pub(crate) mod tests {
 
         let issued = issue(&db, "alice", MAILED).await;
 
-        assert_eq!(issued.code.len(), verification_rules::CODE_LENGTH);
+        assert_eq!(issued.code.len(), link_code::MAILED_LENGTH);
         let expires_at = verification_rules::expires_at(MAILED);
         assert_eq!(
             (

@@ -12,8 +12,6 @@ const DAY: i64 = 24 * HOUR;
 /// How long a verification link lasts. The mailer gives up on a message
 /// after as long, so it never delivers a dead link.
 pub const LIFETIME: i64 = outbox::GIVE_UP_AFTER;
-/// The characters in a verification code, for 256 random bits.
-pub const CODE_LENGTH: usize = 43;
 /// How long a member has to verify, from the first verification email.
 pub const GRACE_PERIOD: i64 = 7 * DAY;
 /// When the one reminder goes out, after the first verification email.
@@ -114,8 +112,6 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::link_code;
-    use common::random;
 
     const SENT: i64 = 1_760_000_000;
 
@@ -139,11 +135,6 @@ mod tests {
     #[test]
     fn a_link_lasts_two_days() {
         assert_eq!(LIFETIME, 2 * DAY);
-    }
-
-    #[test]
-    fn codes_carry_256_bits() {
-        assert!(random::entropy_bits(link_code::ALPHABET, CODE_LENGTH) >= 256.0);
     }
 
     #[test]

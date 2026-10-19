@@ -157,7 +157,7 @@ pub async fn remind(db: &Db, outbox: &Outbox, public_url: &str, now: i64) -> any
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{db, nick};
+    use crate::{db, link_code, nick};
     use outbox::{Body, testing::TestKey};
 
     const PUBLIC_URL: &str = "https://members.weblounge.org";
@@ -165,7 +165,7 @@ mod tests {
 
     fn issued(account: &str) -> IssuedCode {
         IssuedCode {
-            code: "q".repeat(verification_rules::CODE_LENGTH),
+            code: "q".repeat(link_code::MAILED_LENGTH),
             account: account.into(),
             email: "bob@example.org".into(),
             expires_at: verification_rules::expires_at(SENT),
@@ -176,7 +176,7 @@ mod tests {
     fn link() -> String {
         format!(
             "{PUBLIC_URL}/verify#{}",
-            "q".repeat(verification_rules::CODE_LENGTH)
+            "q".repeat(link_code::MAILED_LENGTH)
         )
     }
 

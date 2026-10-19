@@ -1,12 +1,15 @@
-//! The secret codes in links concierge shows or mails once, for invites and
-//! email verification. Only their hashes are kept: nothing needs a code
-//! back.
+//! The secret codes in links concierge shows or mails once, for invites,
+//! email verification and password resets. Only their hashes are kept:
+//! nothing needs a code back.
 
 use common::random;
 use sha2::{Digest, Sha256};
 
 pub const ALPHABET: &[u8] = random::URL_SAFE;
 pub const HASH_LENGTH: usize = 32;
+/// The characters in the code of a link concierge mails, for 256 random
+/// bits.
+pub const MAILED_LENGTH: usize = 43;
 
 /// A new code of `length` characters, none of which a URL needs escaped.
 pub fn generate(length: usize) -> String {
@@ -43,6 +46,11 @@ pub fn hash(code: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mailed_codes_carry_256_bits() {
+        assert!(random::entropy_bits(ALPHABET, MAILED_LENGTH) >= 256.0);
+    }
 
     #[test]
     fn needs_no_escaping_in_a_url() {

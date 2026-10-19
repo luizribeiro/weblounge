@@ -37,7 +37,7 @@ pub const ACCOUNT_EMAIL: &str = "/account#email-and-news";
 pub async fn show(State(app): State<AppState>, visitor: Visitor) -> Response {
     render(&VerifyPage {
         layout: Layout::new(&app, visitor.nick()),
-        code_pattern: link_code::html_pattern(verification_rules::CODE_LENGTH),
+        code_pattern: link_code::html_pattern(link_code::MAILED_LENGTH),
     })
 }
 
@@ -52,7 +52,7 @@ pub async fn confirm(
     if !app.verifications.allows(address.0, Instant::now()) {
         return too_many(&app, &visitor);
     }
-    let outcome = match link_code::parse(&confirmation.code, verification_rules::CODE_LENGTH) {
+    let outcome = match link_code::parse(&confirmation.code, link_code::MAILED_LENGTH) {
         Some(code) => match app.db.verify_email(code, db::now()).await {
             Ok(outcome) => outcome,
             Err(error) => return internal_error("Verifying an email", error),
