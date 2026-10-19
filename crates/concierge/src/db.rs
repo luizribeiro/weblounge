@@ -19,11 +19,11 @@ pub use common::now;
 
 pub struct NewMember<'a> {
     /// Ergo's canonical spelling of the account name.
-    pub account: &'a str,
+    pub account: &'a MemberName,
     pub email: &'a str,
     pub news_opt_in: bool,
     /// `None` for a root of the invite tree.
-    pub invited_by: Option<&'a str>,
+    pub invited_by: Option<&'a MemberName>,
     pub joined_at: i64,
     pub is_admin: bool,
 }
@@ -99,7 +99,7 @@ pub struct NewInvite<'a> {
     /// The code itself, which only its hash is kept of.
     pub code: &'a str,
     /// `None` for a root invite.
-    pub created_by: Option<&'a str>,
+    pub created_by: Option<&'a MemberName>,
     pub created_at: i64,
     pub expires_at: i64,
     /// Whether whoever redeems it becomes an admin.
@@ -109,11 +109,11 @@ pub struct NewInvite<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invite {
     pub code_hash: Vec<u8>,
-    pub created_by: Option<String>,
+    pub created_by: Option<MemberName>,
     pub created_at: i64,
     pub expires_at: i64,
     pub claimed_at: Option<i64>,
-    pub redeemed_by: Option<String>,
+    pub redeemed_by: Option<MemberName>,
     pub redeemed_at: Option<i64>,
     pub revoked_at: Option<i64>,
     pub makes_admin: bool,
@@ -140,14 +140,14 @@ impl Invite {
 pub struct Claim {
     pub code_hash: Vec<u8>,
     pub claimed_at: i64,
-    pub created_by: Option<String>,
+    pub created_by: Option<MemberName>,
     pub makes_admin: bool,
 }
 
 /// Someone a member invited.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invitee {
-    pub account: String,
+    pub account: MemberName,
     pub joined_at: i64,
     pub removed: bool,
 }
@@ -818,7 +818,7 @@ impl Db {
 
     /// Revokes the invites `account` made that are still open, or being
     /// redeemed right now; answers how many.
-    pub async fn revoke_open_invites(&self, account: &str, now: i64) -> sqlx::Result<u64> {
+    pub async fn revoke_open_invites(&self, account: &MemberName, now: i64) -> sqlx::Result<u64> {
         revoke_open_invites(&self.pool, account, now).await
     }
 
@@ -837,8 +837,9 @@ impl Db {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let invites = sqlx::query_as!(
             Invite,
-            r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
-                      redeemed_by, redeemed_at, revoked_at, makes_admin
+            r#"SELECT code_hash AS "code_hash!", created_by AS "created_by: MemberName",
+                      created_at, expires_at, claimed_at,
+                      redeemed_by AS "redeemed_by: MemberName", redeemed_at, revoked_at, makes_admin
                FROM invites WHERE created_by = ?"#,
             invite.created_by,
         )
@@ -856,8 +857,9 @@ impl Db {
         let code_hash = invite_code::hash(code);
         sqlx::query_as!(
             Invite,
-            r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
-                      redeemed_by, redeemed_at, revoked_at, makes_admin
+            r#"SELECT code_hash AS "code_hash!", created_by AS "created_by: MemberName",
+                      created_at, expires_at, claimed_at,
+                      redeemed_by AS "redeemed_by: MemberName", redeemed_at, revoked_at, makes_admin
                FROM invites WHERE code_hash = ?"#,
             code_hash
         )
@@ -866,11 +868,12 @@ impl Db {
     }
 
     /// The invites `account` created, newest first.
-    pub async fn invites_created_by(&self, account: &str) -> sqlx::Result<Vec<Invite>> {
+    pub async fn invites_created_by(&self, account: &MemberName) -> sqlx::Result<Vec<Invite>> {
         sqlx::query_as!(
             Invite,
-            r#"SELECT code_hash AS "code_hash!", created_by, created_at, expires_at, claimed_at,
-                      redeemed_by, redeemed_at, revoked_at, makes_admin
+            r#"SELECT code_hash AS "code_hash!", created_by AS "created_by: MemberName",
+                      created_at, expires_at, claimed_at,
+                      redeemed_by AS "redeemed_by: MemberName", redeemed_at, revoked_at, makes_admin
                FROM invites WHERE created_by = ? ORDER BY created_at DESC, rowid DESC"#,
             account
         )
@@ -879,10 +882,10 @@ impl Db {
     }
 
     /// The people `account` invited, in the order they joined.
-    pub async fn invitees(&self, account: &str) -> sqlx::Result<Vec<Invitee>> {
+    pub async fn invitees(&self, account: &MemberName) -> sqlx::Result<Vec<Invitee>> {
         sqlx::query_as!(
             Invitee,
-            r#"SELECT account AS "account!", joined_at, removed_at IS NOT NULL AS "removed!: bool"
+            r#"SELECT account AS "account!: MemberName", joined_at, removed_at IS NOT NULL AS "removed!: bool"
                FROM members WHERE invited_by = ? ORDER BY joined_at, account"#,
             account
         )
@@ -1805,7 +1808,8 @@ pub(crate) mod tests {
         update_invite(&db, "redeemed", "redeemed_by = 'carol', redeemed_at = 60").await;
         update_invite(&db, "revoked", "revoked_at = 70").await;
 
-        let revoked = db.revoke_open_invites("alice", 200).await.unwrap();
+        let alice = MemberName::new("alice");
+        let revoked = db.revoke_open_invites(&alice, 200).await.unwrap();
 
         assert_eq!(revoked, 2);
         for (code, revoked_at) in [
@@ -1885,9 +1889,10 @@ pub(crate) mod tests {
         created_at: i64,
         expires_at: i64,
     ) {
+        let created_by = created_by.map(MemberName::new);
         let invite = NewInvite {
             code,
-            created_by,
+            created_by: created_by.as_ref(),
             created_at,
             expires_at,
             makes_admin: false,
@@ -1921,12 +1926,14 @@ pub(crate) mod tests {
         (db, dir)
     }
 
-    fn newcomer(account: &str, joined_at: i64) -> NewMember<'_> {
+    static ALICE: LazyLock<MemberName> = LazyLock::new(|| MemberName::new("alice"));
+
+    fn newcomer(account: &MemberName, joined_at: i64) -> NewMember<'_> {
         NewMember {
             account,
             email: "bob@example.org",
             news_opt_in: true,
-            invited_by: Some("alice"),
+            invited_by: Some(&ALICE),
             joined_at,
             is_admin: false,
         }
@@ -1942,7 +1949,7 @@ pub(crate) mod tests {
             Claim {
                 code_hash: invite_code::hash("open"),
                 claimed_at: now,
-                created_by: Some("alice".into()),
+                created_by: Some(ALICE.clone()),
                 makes_admin: false,
             }
         );
@@ -1967,11 +1974,15 @@ pub(crate) mod tests {
 
         db.release_claim(&stale).await.unwrap();
         assert_eq!(db.claim_invite("open", later).await.unwrap(), None);
-        let redeemed = db.redeem_invite(&stale, &newcomer("bob", later)).await;
+        let redeemed = db
+            .redeem_invite(&stale, &newcomer(&MemberName::new("bob"), later))
+            .await;
         assert_eq!(redeemed.unwrap(), Redemption::Lost);
         assert_eq!(db.member("bob").await.unwrap(), None);
 
-        let redeemed = db.redeem_invite(&fresh, &newcomer("carol", later)).await;
+        let redeemed = db
+            .redeem_invite(&fresh, &newcomer(&MemberName::new("carol"), later))
+            .await;
         assert_eq!(redeemed.unwrap(), Redemption::Redeemed);
     }
 
@@ -1981,7 +1992,9 @@ pub(crate) mod tests {
         let now = CREATED + 10;
         let claim = db.claim_invite("open", now).await.unwrap().unwrap();
 
-        let redeemed = db.redeem_invite(&claim, &newcomer("Bob", now)).await;
+        let redeemed = db
+            .redeem_invite(&claim, &newcomer(&MemberName::new("Bob"), now))
+            .await;
 
         assert_eq!(redeemed.unwrap(), Redemption::Redeemed);
         let bob = db.member("bob").await.unwrap().unwrap();
@@ -2000,7 +2013,9 @@ pub(crate) mod tests {
         let (db, _dir) = with_open_invite().await;
         let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
         update_invite(&db, "open", "revoked_at = 1").await;
-        let redeemed = db.redeem_invite(&claim, &newcomer("bob", CREATED)).await;
+        let redeemed = db
+            .redeem_invite(&claim, &newcomer(&MemberName::new("bob"), CREATED))
+            .await;
         assert_eq!(redeemed.unwrap(), Redemption::Lost);
         assert_eq!(db.member("bob").await.unwrap(), None);
     }
@@ -2010,7 +2025,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_open_invite().await;
         let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
         assert!(
-            db.redeem_invite(&claim, &newcomer("ALICE", CREATED))
+            db.redeem_invite(&claim, &newcomer(&MemberName::new("ALICE"), CREATED))
                 .await
                 .is_err()
         );
@@ -2021,7 +2036,7 @@ pub(crate) mod tests {
     async fn lists_a_members_invites_and_the_people_they_brought() {
         let (db, _dir) = with_open_invite().await;
         let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
-        db.redeem_invite(&claim, &newcomer("bob", CREATED + 5))
+        db.redeem_invite(&claim, &newcomer(&MemberName::new("bob"), CREATED + 5))
             .await
             .unwrap();
         let newer = CREATED + 10;
@@ -2036,19 +2051,20 @@ pub(crate) mod tests {
             .await;
         }
 
-        let invites = db.invites_created_by("alice").await.unwrap();
+        let invites = db.invites_created_by(&ALICE).await.unwrap();
         let hashes: Vec<_> = invites.into_iter().map(|invite| invite.code_hash).collect();
         let newest_first = ["made-in-the-same-second", "newer", "open"].map(invite_code::hash);
         assert_eq!(hashes, newest_first);
         assert_eq!(
-            db.invitees("alice").await.unwrap(),
+            db.invitees(&ALICE).await.unwrap(),
             [Invitee {
-                account: "bob".into(),
+                account: MemberName::new("bob"),
                 joined_at: CREATED + 5,
                 removed: false,
             }]
         );
-        assert!(db.invitees("bob").await.unwrap().is_empty());
+        let bob = MemberName::new("bob");
+        assert!(db.invitees(&bob).await.unwrap().is_empty());
     }
 
     #[tokio::test]

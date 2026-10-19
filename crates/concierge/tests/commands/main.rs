@@ -16,6 +16,7 @@ use concierge::{
     admin::{self, Command},
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
     db::{self, Db, NewMember, NewSession},
+    name::MemberName,
     origin::Origin,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
@@ -118,11 +119,12 @@ impl Fixture {
     }
 
     async fn insert_member(&self, account: &str, invited_by: Option<&str>) {
+        let invited_by = invited_by.map(MemberName::new);
         let member = NewMember {
-            account,
+            account: &MemberName::new(account),
             email: "someone@example.org",
             news_opt_in: false,
-            invited_by,
+            invited_by: invited_by.as_ref(),
             joined_at: 1_760_000_000,
             is_admin: false,
         };

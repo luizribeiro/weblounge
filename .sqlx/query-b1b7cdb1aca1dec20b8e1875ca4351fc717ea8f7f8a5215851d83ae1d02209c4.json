@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT code_hash AS \"code_hash!\", created_by, created_at, expires_at, claimed_at,\n                      redeemed_by, redeemed_at, revoked_at, makes_admin\n               FROM invites WHERE created_by = ?",
+  "query": "SELECT code_hash AS \"code_hash!\", created_by AS \"created_by: MemberName\",\n                      created_at, expires_at, claimed_at,\n                      redeemed_by AS \"redeemed_by: MemberName\", redeemed_at, revoked_at, makes_admin\n               FROM invites WHERE created_by = ? ORDER BY created_at DESC, rowid DESC",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Blob"
       },
       {
-        "name": "created_by",
+        "name": "created_by: MemberName",
         "ordinal": 1,
         "type_info": "Text"
       },
@@ -29,7 +29,7 @@
         "type_info": "Integer"
       },
       {
-        "name": "redeemed_by",
+        "name": "redeemed_by: MemberName",
         "ordinal": 5,
         "type_info": "Text"
       },
@@ -64,5 +64,5 @@
       false
     ]
   },
-  "hash": "e14200c1d46670ea9b449fa5ef00cbd657ac00ba4547388950cf4538713939f1"
+  "hash": "b1b7cdb1aca1dec20b8e1875ca4351fc717ea8f7f8a5215851d83ae1d02209c4"
 }

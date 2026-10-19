@@ -118,7 +118,7 @@ pub async fn invite(
     let code = invite_code::from_input(&lookup.code);
     let answer = match invite::open_invite(&app, code).await {
         Ok(Some(invite)) => InviteAnswer::Open {
-            inviter: invite.created_by,
+            inviter: invite.created_by.map(|inviter| inviter.to_string()),
         },
         Ok(None) => InviteAnswer::Unusable {
             error: invite::unusable_code(),

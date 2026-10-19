@@ -27,6 +27,7 @@ use crate::{
     db::{self, Claim, Invite, NewMember, Redemption},
     email::{self, Email},
     invite_code, invite_rules,
+    name::MemberName,
     nick::{self, Nick},
     oauth::Webchat,
     password_rules::{self, FieldErrors},
@@ -86,7 +87,8 @@ pub struct Signup {
 
 /// A signup that follows every rule.
 struct NewAccount {
-    nick: Nick,
+    /// The member it makes, under the nick they chose.
+    name: MemberName,
     email: Email,
     password: Passphrase,
     news: bool,
@@ -116,7 +118,8 @@ pub async fn redeem(
     };
     let inviter = invite
         .as_ref()
-        .and_then(|invite| invite.created_by.as_deref());
+        .and_then(|invite| invite.created_by.as_ref())
+        .map(MemberName::as_str);
     let refuse = |form| render_with(StatusCode::UNPROCESSABLE_ENTITY, &page(&app, inviter, form));
     let account = match validate(&signup, invite.is_some()) {
         Ok(account) => account,
@@ -131,17 +134,15 @@ pub async fn redeem(
         return render_with(StatusCode::TOO_MANY_REQUESTS, &page(&app, inviter, form));
     }
     let taken = || SignupForm {
-        nick_error: Some(format!("{} is taken.", account.nick)),
+        nick_error: Some(format!("{} is taken.", account.name)),
         ..form_for(&signup)
     };
-    match bots::name_claim(&app.db, account.nick.as_str(), None, app.history_expiry).await {
+    match bots::name_claim(&app.db, account.name.as_str(), None, app.history_expiry).await {
         Ok(NameClaim::Free | NameClaim::Reuses(_)) => {}
         Ok(NameClaim::Held) => return refuse(taken()),
         Err(error) => return internal_error("Looking up a name", error),
     }
-    let email_taken = app
-        .db
-        .email_taken(account.email.as_str(), account.nick.as_str());
+    let email_taken = app.db.email_taken(account.email.as_str(), &account.name);
     match email_taken.await {
         Ok(false) => {}
         Ok(true) => {
@@ -169,17 +170,17 @@ pub async fn redeem(
         Err(Failure::Unreachable) => return unreachable(&app, &visitor),
         Err(Failure::Unfinished) => return unfinished(&app, &visitor),
     }
-    let nick = account.nick.as_str();
-    let mailed = verify::mail_link(&app, nick, Recipient::NewAddress).await == Mailed::Sent;
+    let name = &account.name;
+    let mailed = verify::mail_link(&app, name, Recipient::NewAddress).await == Mailed::Sent;
     let mailed_to = mailed.then_some(account.email.as_str());
-    let cookie = match auth::start_session(&app, &visitor, nick).await {
+    let cookie = match auth::start_session(&app, &visitor, name).await {
         Ok(cookie) => Some(cookie),
         Err(error) => {
             eprintln!("Starting a new member's session failed: {error}");
             None
         }
     };
-    welcome(&app, nick, mailed_to, platform, cookie)
+    welcome(&app, name, mailed_to, platform, cookie)
 }
 
 /// Why [`create_account`] created no member.
@@ -199,10 +200,7 @@ async fn create_account(
     account: &NewAccount,
     now: i64,
 ) -> Result<(), Failure> {
-    let registered = app
-        .ergo
-        .register(account.nick.clone(), &account.password)
-        .await;
+    let registered = app.ergo.register(&account.name, &account.password).await;
     match registered {
         Ok(Registration::Created) => {}
         Ok(Registration::NameTaken) => {
@@ -216,10 +214,10 @@ async fn create_account(
         }
     }
     let member = NewMember {
-        account: account.nick.as_str(),
+        account: &account.name,
         email: account.email.as_str(),
         news_opt_in: account.news,
-        invited_by: claim.created_by.as_deref(),
+        invited_by: claim.created_by.as_ref(),
         joined_at: now,
         is_admin: claim.makes_admin,
     };
@@ -253,7 +251,7 @@ fn validate(signup: &Signup, invite_open: bool) -> Result<NewAccount, Box<Signup
     let password = password_rules::check(&signup.password, &signup.confirmation);
     match (code_error, nick, email, password) {
         (None, Ok(nick), Ok(email), Ok(password)) => Ok(NewAccount {
-            nick,
+            name: nick.into(),
             email,
             password,
             news: signup.news.is_some(),

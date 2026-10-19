@@ -75,7 +75,7 @@ mod delete {
         let now = db::now();
         let invite = NewInvite {
             code,
-            created_by: Some(created_by),
+            created_by: Some(&MemberName::new(created_by)),
             created_at: now,
             expires_at: now + 3600,
             makes_admin: false,

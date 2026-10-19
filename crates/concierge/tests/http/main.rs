@@ -36,6 +36,7 @@ use concierge::{
     config::{IrcServer, Presence},
     db::{self, Db, NewInvite, NewMember},
     invite_rules,
+    name::MemberName,
     oauth::Webchat,
     origin::Origin,
     rate_limit::{
@@ -195,7 +196,7 @@ impl Site {
     async fn add_member(&self, account: &str) {
         self.register(account).await;
         let member = NewMember {
-            account,
+            account: &MemberName::new(account),
             email: "someone@example.org",
             news_opt_in: false,
             invited_by: None,
@@ -244,9 +245,10 @@ impl Site {
     /// An open invite from `created_by`, or a root invite.
     async fn add_invite(&self, code: &str, created_by: Option<&str>) {
         let now = db::now();
+        let created_by = created_by.map(MemberName::new);
         let invite = NewInvite {
             code,
-            created_by,
+            created_by: created_by.as_ref(),
             created_at: now,
             expires_at: invite_rules::expires_at(now),
             makes_admin: false,

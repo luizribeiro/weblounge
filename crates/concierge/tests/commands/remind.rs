@@ -2,6 +2,7 @@ use std::process::{Command, Output};
 
 use concierge::{
     db::{self, NewMember},
+    name::MemberName,
     verification_mail::REMINDER_SUBJECT,
     verification_rules::REMINDER_AFTER,
 };
@@ -32,7 +33,7 @@ async fn mails_the_reminders_due_once_and_logs_only_how_many() {
     let db = fixture.db().await;
     for account in ["alice", "bob"] {
         let member = NewMember {
-            account,
+            account: &MemberName::new(account),
             email: &format!("{account}@example.org"),
             news_opt_in: false,
             invited_by: None,
