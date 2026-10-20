@@ -1,0 +1,29 @@
+@import "./tokens.css";
+@import "./base.css";
+@import "./components/type.css";
+@import "./components/chrome.css";
+@import "./components/button.css";
+@import "./components/card.css";
+@import "./components/chair.css";
+@import "./components/lockup.css";
+
+/* The not-found page: the landing page's lockup, smaller, over a line and
+   the way back. */
+.lost {
+  --w: min(360px, 60vw, 36vh);
+  margin: auto;
+  padding: 2rem var(--gutter);
+  text-align: center;
+
+  & h1 {
+    margin: 2.5rem 0 0.5rem;
+    font-size: clamp(1.75rem, 6vw, 2.25rem);
+  }
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    text-decoration: underline;
+  }
+}

@@ -14,6 +14,12 @@ let
       entryPoints = [ "styles/members.css" "scripts/members.ts" "images/favicon.svg" "images/wordmark.svg" "images/chair.svg" ];
       entryNames = "[name]-[hash]";
     };
+    # nginx serves the error pages, which link these by name, on every
+    # vhost, concierge's while it's down too.
+    errors = {
+      entryPoints = [ "styles/errors.css" "images/favicon.svg" "images/wordmark.svg" ];
+      entryNames = "[name]";
+    };
   };
 
   esbuildCommand = { dev }: bundle: flags: lib.escapeShellArgs (
@@ -60,6 +66,8 @@ stdenvNoCC.mkDerivation {
     ${renderPage} pages/index.html > dist/index.html
     install -Dm644 images/favicon.svg dist/favicon.svg
     ${release bundles.members [ "--minify" "--outdir=members" "--metafile=members/manifest.json" ]}
+    ${release bundles.errors [ "--minify" "--outdir=errors/_error/assets" ]}
+    ${renderPage} pages/errors/404.html > errors/_error/404.html
     runHook postBuild
   '';
 
@@ -68,6 +76,7 @@ stdenvNoCC.mkDerivation {
     mkdir -p $out
     cp -r dist $out/landing
     cp -r members $out/members
+    cp -r errors $out/errors
     runHook postInstall
   '';
 
