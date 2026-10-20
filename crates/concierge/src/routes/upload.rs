@@ -7,8 +7,9 @@ use std::time::Instant;
 
 use axum::{
     body::Body,
-    extract::State,
-    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
+    extract::{Request, State},
+    http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header},
+    middleware::Next,
     response::{IntoResponse, Response},
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -18,6 +19,7 @@ use crate::{
     app::{App, AppState},
     db::{self, NewUpload},
     name::{BotName, MemberName},
+    origin::WebchatOrigin,
     rate_limit::{self, ClientAddress},
     session::Token,
     upload_rules,
@@ -42,6 +44,57 @@ impl Uploader {
             .as_ref()
             .map_or(self.owner.as_str(), BotName::as_str)
     }
+}
+
+/// What the web client may send uploads with, and read of the answer.
+const ALLOWED_HEADERS: &str = "Authorization, Content-Type, Content-Disposition";
+const EXPOSED_HEADERS: &str = "Location, Upload-Limit";
+
+/// Lets the web client's pages, and no other site's, post uploads with
+/// their credentials and read the answer: browsers ask first, as its
+/// requests carry an `Authorization`.
+pub async fn allow_webchat(
+    State(webchat): State<WebchatOrigin>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let origin = request
+        .headers()
+        .get(header::ORIGIN)
+        .filter(|origin| origin.as_bytes() == webchat.as_str().as_bytes())
+        .cloned();
+    let preflight = request.method() == Method::OPTIONS;
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.append(header::VARY, HeaderValue::from_static("origin"));
+    let Some(origin) = origin else {
+        return response;
+    };
+    let static_value = HeaderValue::from_static;
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+        static_value("true"),
+    );
+    if preflight {
+        headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, static_value("POST"));
+        headers.insert(
+            header::ACCESS_CONTROL_ALLOW_HEADERS,
+            static_value(ALLOWED_HEADERS),
+        );
+    } else {
+        headers.insert(
+            header::ACCESS_CONTROL_EXPOSE_HEADERS,
+            static_value(EXPOSED_HEADERS),
+        );
+    }
+    response
+}
+
+/// What a browser asks before posting an upload from a page; the answer
+/// is [`allow_webchat`]'s to give.
+pub async fn preflight() -> StatusCode {
+    StatusCode::NO_CONTENT
 }
 
 /// The size a client says its upload is.

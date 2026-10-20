@@ -10,7 +10,7 @@ use concierge::{
 };
 use regex::Regex;
 
-use crate::{PASSWORD, Site, body_text, location};
+use crate::{PASSWORD, PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
 
 /// What starts like a PNG, which the fake scrubber stores as it is.
 pub const PNG: &[u8] = b"\x89PNG\r\n\x1a\nthe rest of a screenshot";
@@ -355,4 +355,89 @@ async fn an_owner_whose_uploads_fill_their_room_gets_507_for_theirs_and_their_bo
     site.execute("UPDATE uploads SET size = size - 1").await;
     let marvin = basic("Marvin", PASSWORD);
     assert_eq!(site.upload(PNG, Some(&marvin)).await.status(), 201);
+}
+
+/// What a browser asks before posting an upload from a page on `origin`.
+async fn preflight(site: &Site, origin: &str) -> Response {
+    let request = Request::options("/upload")
+        .header(header::ORIGIN, origin)
+        .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+        .header(
+            header::ACCESS_CONTROL_REQUEST_HEADERS,
+            "authorization,content-type,content-disposition",
+        );
+    site.send(request.body(Body::empty()).unwrap()).await
+}
+
+fn header_of(response: &Response, name: header::HeaderName) -> Option<&str> {
+    response
+        .headers()
+        .get(name)
+        .map(|value| value.to_str().unwrap())
+}
+
+#[tokio::test]
+async fn the_web_client_may_post_uploads_with_its_token_and_read_the_answer() {
+    let site = Site::start().await;
+    let bearer = site.member_with_bearer("alice").await;
+
+    let asked = preflight(&site, WEBCHAT_URL).await;
+
+    assert_eq!(asked.status(), 204);
+    let granted = |name| header_of(&asked, name);
+    assert_eq!(
+        granted(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+        Some(WEBCHAT_URL)
+    );
+    assert_eq!(
+        granted(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
+        Some("true")
+    );
+    assert_eq!(granted(header::ACCESS_CONTROL_ALLOW_METHODS), Some("POST"));
+    assert_eq!(
+        granted(header::ACCESS_CONTROL_ALLOW_HEADERS),
+        Some("Authorization, Content-Type, Content-Disposition")
+    );
+    let posted = site
+        .upload_with(
+            PNG,
+            Some(&bearer),
+            &[(header::ORIGIN.as_str(), WEBCHAT_URL)],
+        )
+        .await;
+    assert_eq!(posted.status(), 201);
+    let granted = |name| header_of(&posted, name);
+    assert_eq!(
+        granted(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+        Some(WEBCHAT_URL)
+    );
+    assert_eq!(
+        granted(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
+        Some("true")
+    );
+    assert_eq!(
+        granted(header::ACCESS_CONTROL_EXPOSE_HEADERS),
+        Some("Location, Upload-Limit")
+    );
+    assert_eq!(granted(header::VARY), Some("origin"));
+}
+
+#[tokio::test]
+async fn other_sites_get_no_grant_to_post_uploads_or_read_the_answer() {
+    let site = Site::start().await;
+    let bearer = site.member_with_bearer("alice").await;
+    for origin in ["https://evil.example", PUBLIC_URL, "null"] {
+        let asked = preflight(&site, origin).await;
+        let posted = site
+            .upload_with(PNG, Some(&bearer), &[(header::ORIGIN.as_str(), origin)])
+            .await;
+        for response in [&asked, &posted] {
+            let cors: Vec<_> = response
+                .headers()
+                .keys()
+                .filter(|name| name.as_str().starts_with("access-control-"))
+                .collect();
+            assert!(cors.is_empty(), "{origin}: {cors:?}");
+        }
+    }
 }

@@ -87,6 +87,7 @@ impl App {
 pub fn router(app: App) -> Router {
     let public_url = app.public_url.clone();
     let webchat_origin = app.webchat.origin.clone();
+    let upload_origin = webchat_origin.clone();
     let state = Arc::new(app);
     let pages = Router::new()
         .route(
@@ -225,7 +226,15 @@ pub fn router(app: App) -> Router {
         )
         // IRC clients post uploads with the credentials they log in with,
         // through files.weblounge.org alone; nginx keeps it off this site.
-        .route(routes::upload::PATH, post(routes::upload::upload))
+        .route(
+            routes::upload::PATH,
+            post(routes::upload::upload)
+                .options(routes::upload::preflight)
+                .layer(middleware::from_fn_with_state(
+                    upload_origin,
+                    routes::upload::allow_webchat,
+                )),
+        )
         .with_state(state);
     // Pages reload themselves when the dev loop restarts concierge.
     #[cfg(debug_assertions)]
