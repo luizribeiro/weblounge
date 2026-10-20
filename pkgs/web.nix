@@ -28,10 +28,11 @@ let
     ] ++ flags
   );
 
-  # The landing page inlines the SVGs its script animates, e.g. the chair
-  # concierge's home shares: `<!-- include images/chair.svg -->` becomes
-  # that file, indented like the comment. Run from web/.
-  renderLanding = writeShellScript "render-landing" ''
+  # Static pages inline SVGs, e.g. the chair the landing page's script
+  # animates and concierge's home shares: `<!-- include images/chair.svg -->`
+  # in the page given becomes that file, indented like the comment. Run
+  # from web/.
+  renderPage = writeShellScript "render-page" ''
     ${gawk}/bin/awk '
       $1 == "<!--" && $2 == "include" && $4 == "-->" {
         match($0, /^ */)
@@ -41,7 +42,7 @@ let
         next
       }
       { print }
-    ' pages/index.html
+    ' "$1"
   '';
 
   release = esbuildCommand { dev = false; };
@@ -56,7 +57,7 @@ stdenvNoCC.mkDerivation {
   buildPhase = ''
     runHook preBuild
     ${release bundles.landing [ "--minify" "--outdir=dist/assets" ]}
-    ${renderLanding} > dist/index.html
+    ${renderPage} pages/index.html > dist/index.html
     install -Dm644 images/favicon.svg dist/favicon.svg
     ${release bundles.members [ "--minify" "--outdir=members" "--metafile=members/manifest.json" ]}
     runHook postBuild
@@ -96,7 +97,7 @@ stdenvNoCC.mkDerivation {
         trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$served"' EXIT
         ln -s "$PWD/images/favicon.svg" "$served/favicon.svg"
         render() {
-          ${renderLanding} > "$served/next.html"
+          ${renderPage} pages/index.html > "$served/next.html"
           cmp -s "$served/next.html" "$served/index.html" || mv "$served/next.html" "$served/index.html"
         }
         render
