@@ -71,9 +71,14 @@ in
       recommendedOptimisation = true;
       recommendedProxySettings = true;
       recommendedTlsSettings = true;
-      # We promise members that no IP addresses are kept anywhere.
+      # We promise members that no IP addresses are kept anywhere. $uri
+      # becomes an error page's once nginx answers with one, so the log
+      # takes the path asked for from the request line, without its query.
       commonHttpConfig = ''
-        log_format anonymous '[$time_local] $host "$request_method $uri $server_protocol" '
+        map $request_uri $request_path {
+          ~^([^?]*) $1;
+        }
+        log_format anonymous '[$time_local] $host "$request_method $request_path $server_protocol" '
                              '$status $body_bytes_sent "$http_referer" "$http_user_agent"';
         access_log /var/log/nginx/access.log anonymous;
       '' + config.weblounge.nginx.securityHeaders { };

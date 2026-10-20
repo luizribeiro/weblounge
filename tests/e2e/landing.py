@@ -52,7 +52,8 @@ with subtest("the release build carries no live-reload code"):
     for path in ["/", *assets]:
         client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")
 
-with subtest("nginx logs requests without the client's address, even when they fail"):
-    client.succeed("curl -sk -o /dev/null https://credenza/no-such-page")
+with subtest("nginx logs requests without the client's address or query, even when they fail"):
+    client.succeed("curl -sk -o /dev/null 'https://credenza/no-such-page?code=a-secret'")
     credenza.succeed("grep -q 'GET /no-such-page HTTP/[0-9.]*\" 404' /var/log/nginx/access.log")
+    credenza.fail("grep -q a-secret /var/log/nginx/access.log")
     assert_client_address_absent("{ cat /var/log/nginx/*; journalctl -u nginx; }")
