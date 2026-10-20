@@ -24,11 +24,12 @@ if TYPE_CHECKING:
 mallory: Account = {"account": "mallory", "password": "an-insider-gone-bad"}
 tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
 sites = ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]
-pages_and_directives_they_need = {
-    "weblounge.org": ("/", {"script-src", "style-src", "img-src"}),
-    members: ("/signin", {"script-src", "style-src", "img-src"}),
-    "irc.weblounge.org": ("/", {"script-src", "style-src", "img-src", "manifest-src"}),
-}
+pages_and_directives_they_need = [
+    ("weblounge.org", "/", {"script-src", "style-src", "img-src"}),
+    *((members, path, {"script-src", "style-src", "img-src"}) for path in ["/signin", "/no-such-page"]),
+    ("irc.weblounge.org", "/", {"script-src", "style-src", "img-src", "manifest-src"}),
+    *((name, "/no-such-page", {"style-src", "img-src"}) for name in sites if name != members),
+]
 
 in_ram, on_disk = "/run/weblounge-secrets", "/var/lib/weblounge-secrets"
 generated = {
@@ -299,10 +300,10 @@ with subtest("every site sends HSTS, nosniff, a referrer policy and a CSP that f
             assert headers.get("referrer-policy") == "same-origin", (name, path, headers)
             assert "frame-ancestors 'none'" in headers.get("content-security-policy", ""), (name, path, headers)
 
-with subtest("the landing page, concierge and gamja load all they need under their CSP, and nothing inline"):
-    for name, (path, directives) in pages_and_directives_they_need.items():
+with subtest("every site's pages, error pages too, load all they need under their CSP, and nothing inline"):
+    for name, path, directives in pages_and_directives_they_need:
         policy = headers_of(name, path)["content-security-policy"]
-        needs = PageNeeds(https(name, path, "-f"))
+        needs = PageNeeds(https(name, path))
         assert needs.inline == [], (name, needs.inline)
         assert {directive for directive, _ in needs.fetches} == directives, (name, needs.fetches)
         for directive, url in needs.fetches:
