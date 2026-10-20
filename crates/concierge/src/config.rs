@@ -216,6 +216,27 @@ impl Databases {
     }
 }
 
+/// What `concierge expire-uploads` needs: concierge's database and the
+/// uploads directory. It talks to nothing else.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpiryConfig {
+    pub database: PathBuf,
+    pub uploads: Store,
+}
+
+impl ExpiryConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        Ok(Self {
+            database: database_in(Path::new(&required(&var, "STATE_DIRECTORY")?)),
+            uploads: Store::from_vars(&var)?,
+        })
+    }
+}
+
 impl RemindConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         Self::from_vars(|name| std::env::var(name).ok())

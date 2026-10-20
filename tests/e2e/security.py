@@ -208,6 +208,7 @@ with subtest("ergo, concierge and its other units, nginx, bender and the vacuum 
         "concierge",
         "concierge-migrate",
         "concierge-remind",
+        "concierge-expire-uploads",
         "concierge-mailer",
         "nginx",
         "weblounge-bot-bender",

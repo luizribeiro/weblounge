@@ -49,9 +49,10 @@ let
     CONCIERGE_FILES_URL = config.weblounge.origin files.hostName;
   };
   filesAccess = {
-    SupplementaryGroups = [ files.group files.scrubber.group ];
+    SupplementaryGroups = [ files.group ];
     ReadWritePaths = [ files.directory ];
   };
+  scrubberAccess.SupplementaryGroups = [ files.scrubber.group ];
   withAccess = accesses: lib.zipAttrsWith (_: lib.concatLists) accesses;
 
   # SQLite doesn't keep two processes from migrating at once, so one unit
@@ -165,7 +166,7 @@ in
         wantedBy = [ "multi-user.target" ];
         after = [ "network.target" ];
         serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // stateAccess // serviceOnly
-          // withAccess [ outboxAccess filesAccess ] // {
+          // withAccess [ outboxAccess filesAccess scrubberAccess ] // {
           RestrictAddressFamilies = config.weblounge.sandbox.RestrictAddressFamilies ++ [ "AF_UNIX" ];
           Environment = lib.mapAttrsToList (name: value: "${name}=${value}") filesEnvironment ++ [
             "CONCIERGE_OUTBOX=${outboxPath}"
@@ -206,6 +207,24 @@ in
     ];
     # A run missed while the machine was down happens once it's back.
     systemd.timers.concierge-remind.timerConfig.Persistent = true;
+
+    # Uploads stay 30 days. It touches nothing but concierge's database
+    # and the uploads directory.
+    systemd.services.concierge-expire-uploads = lib.mkMerge [
+      migrated
+      {
+        description = "Delete the uploads past their days";
+        startAt = "hourly";
+        environment = filesEnvironment;
+        serviceConfig = config.weblounge.sandbox // stateAccess // filesAccess // {
+          Type = "oneshot";
+          ExecStart = "${concierge} expire-uploads";
+          PrivateNetwork = true;
+          RestrictAddressFamilies = "none";
+        };
+      }
+    ];
+    systemd.timers.concierge-expire-uploads.timerConfig.Persistent = true;
 
     environment.systemPackages = [ admin ];
 

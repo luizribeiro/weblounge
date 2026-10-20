@@ -2,6 +2,7 @@
 //! credentials and a fake Ergo.
 
 mod bot;
+mod expire;
 mod invite;
 mod mail;
 mod member;
@@ -39,7 +40,7 @@ struct Fixture {
     /// The key the mailer published, which opens the mail sealed to it.
     mailer_key: TestKey,
     /// Takes the uploads concierge hands over, and stores them.
-    _scrubber: FakeScrubber,
+    scrubber: FakeScrubber,
     _state: TempDir,
     _outbox: TempDir,
     _credentials: TempDir,
@@ -86,7 +87,7 @@ impl Fixture {
             config,
             ergo,
             mailer_key,
-            _scrubber: scrubber,
+            scrubber,
             _state: state,
             _outbox: outbox,
             _credentials: credentials,
@@ -100,6 +101,14 @@ impl Fixture {
             panic!("{args:?} is not an admin command");
         };
         admin::run(command, &self.config).await
+    }
+
+    /// Runs SQL the commands have no query for, to set up a test.
+    async fn execute(&self, sql: &str) {
+        let url = format!("sqlite://{}", self.config.database_path().display());
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        sqlx::raw_sql(sql).execute(&pool).await.unwrap();
+        pool.close().await;
     }
 
     async fn db(&self) -> Db {

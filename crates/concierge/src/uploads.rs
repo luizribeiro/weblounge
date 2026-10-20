@@ -3,7 +3,12 @@
 //! that sees nothing but the uploads directory, which answers what it made
 //! of them. Concierge only deletes the files the scrubber stored.
 
-use std::{io, path::PathBuf, time::Duration};
+use std::{
+    collections::HashSet,
+    io,
+    path::PathBuf,
+    time::{Duration, SystemTime},
+};
 
 use axum::body::Body;
 use common::config::{ConfigError, required};
@@ -17,10 +22,26 @@ use tokio::{
     net::UnixStream,
 };
 
-use crate::db::{Db, Upload};
+use crate::{
+    db::{Db, Upload},
+    upload_rules,
+};
 
 /// How long the scrubber has to answer once it has the whole upload.
 const ANSWER_WAIT: Duration = Duration::from_secs(30);
+/// How old a file in the uploads directory with no row must be to be
+/// deleted: well past any upload still being handed over or recorded.
+const STRAY_AGE: Duration = Duration::from_secs(60 * 60);
+
+/// What an expiry run deleted.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Expiry {
+    /// Uploads past their days.
+    pub expired: usize,
+    /// Files without a row, as a crash between storing and recording
+    /// leaves behind.
+    pub strays: usize,
+}
 
 /// Where uploads are handed over and stored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +132,35 @@ impl Store {
         }
         Ok(())
     }
+
+    /// Deletes the uploads made [`upload_rules::RETENTION`] before `now`,
+    /// and the files older than [`STRAY_AGE`] at `clock` that no row
+    /// stands for.
+    pub async fn expire(&self, db: &Db, now: i64, clock: SystemTime) -> anyhow::Result<Expiry> {
+        let expired = db.uploads_before(upload_rules::expired_before(now)).await?;
+        self.delete(db, &expired).await?;
+        let recorded: HashSet<_> = db.upload_ids().await?.into_iter().collect();
+        let mut strays = 0;
+        for entry in std::fs::read_dir(&self.directory)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let has_row = name
+                .to_str()
+                .and_then(filehost::parse_file_name)
+                .is_some_and(|(id, _)| recorded.contains(&id));
+            let age = clock
+                .duration_since(entry.metadata()?.modified()?)
+                .unwrap_or_default();
+            if !has_row && age >= STRAY_AGE {
+                std::fs::remove_file(entry.path())?;
+                strays += 1;
+            }
+        }
+        Ok(Expiry {
+            expired: expired.len(),
+            strays,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -195,6 +245,63 @@ mod tests {
         assert!(
             matches!(answer, Err(HandOffError::Scrubber(_))),
             "{answer:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn expiry_deletes_uploads_past_their_days_and_old_files_without_a_row() {
+        let scrubber = FakeScrubber::start();
+        let store = store(&scrubber);
+        let (db, _dir) = temp_db().await;
+        crate::db::tests::execute(
+            &db,
+            "INSERT INTO members (account, email, joined_at) VALUES ('alice', 'a@example.org', 0)",
+        )
+        .await
+        .unwrap();
+        let alice = MemberName::new("alice");
+        let now = 1_760_000_000 + upload_rules::RETENTION;
+        let [old, new] = [UploadId::generate(), UploadId::generate()];
+        for (id, created_at) in [(&old, now - upload_rules::RETENTION - 1), (&new, now - 60)] {
+            store.hand_off(id, Body::from(PNG)).await.unwrap();
+            let upload = NewUpload {
+                id,
+                kind: ImageType::Png,
+                owner: &alice,
+                bot: None,
+                size: PNG.len() as i64,
+                created_at,
+            };
+            db.insert_upload(&upload, i64::MAX).await.unwrap();
+        }
+        for stray in [".tmpAbC123", "q7Hx2mZp9vLcT4wRfBa-_w.gif", "notes.txt"] {
+            std::fs::write(scrubber.uploads.join(stray), "left behind").unwrap();
+        }
+        let later = SystemTime::now() + STRAY_AGE;
+
+        let soon = store.expire(&db, now, SystemTime::now()).await.unwrap();
+        assert_eq!(
+            soon,
+            Expiry {
+                expired: 1,
+                strays: 0
+            }
+        );
+        assert_eq!(scrubber.stored().len(), 4);
+        let expiry = store.expire(&db, now, later).await.unwrap();
+
+        assert_eq!(
+            expiry,
+            Expiry {
+                expired: 0,
+                strays: 3
+            }
+        );
+        assert_eq!(scrubber.stored(), [new.file_name(ImageType::Png)]);
+        let left: Vec<_> = db.uploads_of(&alice).await.unwrap();
+        assert_eq!(
+            left.iter().map(|upload| &upload.id).collect::<Vec<_>>(),
+            [&new]
         );
     }
 

@@ -7,7 +7,7 @@ use concierge::{
     app::{self, App},
     assets::Assets,
     background::Background,
-    config::{Config, Databases, RemindConfig},
+    config::{Config, Databases, ExpiryConfig, RemindConfig},
     db::{self, Db},
     oauth::Webchat,
     rate_limit::{
@@ -27,6 +27,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Migrate => migrate(&Databases::from_env()?).await,
         Command::Serve => serve(Config::from_env()?).await,
         Command::Remind => remind(&RemindConfig::from_env()?).await,
+        Command::ExpireUploads => expire_uploads(&ExpiryConfig::from_env()?).await,
         Command::Admin(command) => admin::run(command, &Config::from_env()?)
             .await
             .map(|output| print!("{output}")),
@@ -59,6 +60,19 @@ async fn remind(config: &RemindConfig) -> anyhow::Result<()> {
     if batch.left > 0 {
         eprintln!("{} more are due; the next run mails them", batch.left);
     }
+    Ok(())
+}
+
+async fn expire_uploads(config: &ExpiryConfig) -> anyhow::Result<()> {
+    let db = Db::open(&config.database).await?;
+    let expiry = config
+        .uploads
+        .expire(&db, db::now(), std::time::SystemTime::now())
+        .await?;
+    eprintln!(
+        "Deleted {} uploads past their days and {} files without one",
+        expiry.expired, expiry.strays
+    );
     Ok(())
 }
 

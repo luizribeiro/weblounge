@@ -30,6 +30,9 @@ pub enum Command {
     /// CONCIERGE_PUBLIC_URL, to every member whose one reminder is due, a
     /// batch at a time.
     Remind,
+    /// Delete the uploads in CONCIERGE_UPLOADS past their days, and files
+    /// there no upload stands for.
+    ExpireUploads,
     #[command(flatten)]
     Admin(AdminCommand),
 }
