@@ -51,6 +51,12 @@ with subtest("ergo hashes passwords with bcrypt at cost 12"):
     # base64 of "$2a$12$", the start of the stored hash.
     credenza.wait_until_succeeds('grep -q \'"PassphraseHash":"JDJhJDEyJ\' /var/lib/ergo/ircd.db', timeout=10)
 
+with subtest("ISUPPORT tells clients where to upload, under the token they read and the draft's"):
+    advertised = re.findall(r" 005 alice .*", session)
+    tokens = dict(token.split("=", 1) for line in advertised for token in line.split() if "FILEHOST=" in token)
+    endpoint = "https://files.weblounge.org/upload"
+    assert tokens == {"soju.im/FILEHOST": endpoint, "draft/FILEHOST": endpoint}, advertised
+
 with subtest("logging in shows weblounge's MOTD"):
     assert ":- Pull up a chair and make yourself at home." in session, session
 

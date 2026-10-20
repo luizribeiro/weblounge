@@ -120,6 +120,11 @@ in
       };
     };
 
+    # IRC clients find the upload endpoint in ISUPPORT: gamja and senpai read
+    # soju.im/FILEHOST, the draft spec draft/FILEHOST.
+    weblounge.ergo.settings.server.additional-isupport =
+      lib.genAttrs [ "soju.im/FILEHOST" "draft/FILEHOST" ] (_: "${config.weblounge.origin cfg.hostName}/upload");
+
     services.nginx.virtualHosts.${cfg.hostName} = {
       enableACME = true;
       forceSSL = true;

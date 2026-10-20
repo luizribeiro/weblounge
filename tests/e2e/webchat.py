@@ -19,6 +19,8 @@ if TYPE_CHECKING:
         ergo_api,
         exchange,
         files_host,
+        fixtures,
+        get_file,
         https,
         irc,
         irc_command,
@@ -150,6 +152,14 @@ with subtest("a token for a member without an Ergo account creates none"):
 with subtest("in a browser, a signed-in member opens irc.weblounge.org and lands in #lounge"):
     page = client.succeed(f"webchat-browser {grace['account']} {shlex.quote(grace['password'])} 2>&1")
     assert "#lounge" in page, page
+
+with subtest("in a browser, pasting an image into gamja's composer, on a phone or a desktop, puts its link there"):
+    paste = ["webchat-paste-browser", grace["account"], grace["password"], f"{fixtures}/photo.png"]
+    links = json.loads(client.succeed(shlex.join(paste)))
+    assert set(links) == {"phone", "desktop"}, links
+    for width, link in links.items():
+        assert re.fullmatch(rf"https://{files_host}/[A-Za-z0-9_-]{{22}}\.png", link), (width, link)
+        assert get_file(link)["status"] == 200, link
 
 with subtest("gamja shows each line once when one arrives while it catches up after a reconnect"):
     add_member(**ada)
