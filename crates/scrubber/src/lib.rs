@@ -8,6 +8,7 @@
 mod exif;
 mod jpeg;
 mod png;
+mod webp;
 
 use filehost::ImageType;
 
@@ -26,7 +27,8 @@ pub fn scrub(upload: &[u8]) -> Option<Scrubbed> {
     let bytes = match kind {
         ImageType::Png => png::scrub(upload),
         ImageType::Jpeg => jpeg::scrub(upload),
-        ImageType::Gif | ImageType::Webp => None,
+        ImageType::Webp => webp::scrub(upload),
+        ImageType::Gif => None,
     }?;
     Some(Scrubbed { kind, bytes })
 }
@@ -84,6 +86,26 @@ mod tests {
     pub fn assert_same_pixels(original: &[u8], scrubbed: &[u8]) {
         let decode = |bytes| image::load_from_memory(bytes).unwrap().to_rgba8();
         assert_eq!(decode(original), decode(scrubbed));
+    }
+
+    /// Asserts both animations of `kind` decode to the same frames.
+    pub fn assert_same_frames(kind: ImageType, original: &[u8], scrubbed: &[u8]) {
+        use image::{
+            AnimationDecoder, RgbaImage,
+            codecs::{gif::GifDecoder, webp::WebPDecoder},
+        };
+        let frames = |bytes: &[u8]| -> Vec<RgbaImage> {
+            let bytes = std::io::Cursor::new(bytes.to_vec());
+            let frames = match kind {
+                ImageType::Gif => GifDecoder::new(bytes).unwrap().into_frames(),
+                ImageType::Webp => WebPDecoder::new(bytes).unwrap().into_frames(),
+                ImageType::Png | ImageType::Jpeg => unreachable!("{kind:?} isn't animated"),
+            };
+            frames.map(|frame| frame.unwrap().into_buffer()).collect()
+        };
+        let (before, after) = (frames(original), frames(scrubbed));
+        assert!(before.len() > 1, "{} frames", before.len());
+        assert_eq!(before, after);
     }
 
     /// Asserts scrubbing `upload` gives it back unchanged.
