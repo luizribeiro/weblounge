@@ -122,7 +122,7 @@ fn page<'a>(
 
 /// Whether the form holds something worth asking Ergo about, and counting
 /// against the limits.
-fn plausible(nick: &str, password: &str) -> bool {
+pub(super) fn plausible(nick: &str, password: &str) -> bool {
     (1..=nick::MAX_LENGTH).contains(&nick.len())
         && (1..=password_rules::MAX_BYTES).contains(&password.len())
 }

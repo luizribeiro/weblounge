@@ -3,22 +3,28 @@
 //! credentials it logs in to IRC with, and gets back the link to it.
 //! Concierge reads none of the image; the scrubber does.
 
+use std::time::Instant;
+
 use axum::{
     body::Body,
     extract::State,
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
 use filehost::{UploadId, handoff::Answer};
 
 use crate::{
     app::{App, AppState},
     db::{self, NewUpload},
     name::{BotName, MemberName},
+    rate_limit::{self, ClientAddress},
     session::Token,
     upload_rules,
     uploads::HandOffError,
 };
+
+use super::signin;
 
 pub const PATH: &str = "/upload";
 
@@ -32,6 +38,9 @@ pub struct Uploader {
 enum Credentials {
     /// The web client's OAuth access token.
     Bearer(Token),
+    /// A nick and password, as every other client logs in to IRC with:
+    /// a member's, or a bot's.
+    Basic { nick: String, password: String },
 }
 
 impl Credentials {
@@ -40,16 +49,39 @@ impl Credentials {
         let (scheme, value) = authorization.split_once(' ')?;
         if scheme.eq_ignore_ascii_case("bearer") {
             Token::parse(value.trim()).map(Self::Bearer)
+        } else if scheme.eq_ignore_ascii_case("basic") {
+            let decoded = String::from_utf8(STANDARD.decode(value.trim()).ok()?).ok()?;
+            let (nick, password) = decoded.split_once(':')?;
+            Some(Self::Basic {
+                nick: nick.to_owned(),
+                password: password.to_owned(),
+            })
         } else {
             None
         }
     }
 }
 
-pub async fn upload(State(app): State<AppState>, headers: HeaderMap, body: Body) -> Response {
-    let uploader = match authenticate(&app, &headers).await {
-        Ok(Some(uploader)) => uploader,
-        Ok(None) => return unauthorized(),
+/// What came of checking an uploader's credentials.
+enum Authentication {
+    Uploader(Uploader),
+    Refused,
+    /// Too many wrong passwords for the nick or from the address lately.
+    Throttled,
+}
+
+pub async fn upload(
+    State(app): State<AppState>,
+    address: ClientAddress,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let uploader = match authenticate(&app, &headers, &address).await {
+        Ok(Authentication::Uploader(uploader)) => uploader,
+        Ok(Authentication::Refused) => return unauthorized(),
+        Ok(Authentication::Throttled) => {
+            return plain(StatusCode::TOO_MANY_REQUESTS, rate_limit::TRY_LATER);
+        }
         Err(error) => return unavailable("Checking an uploader's credentials", error),
     };
     let id = UploadId::generate();
@@ -92,20 +124,67 @@ pub async fn upload(State(app): State<AppState>, headers: HeaderMap, body: Body)
 }
 
 /// The member, or member's bot, whose credentials `headers` carry.
-async fn authenticate(app: &App, headers: &HeaderMap) -> anyhow::Result<Option<Uploader>> {
-    let Some(credentials) = Credentials::of(headers) else {
-        return Ok(None);
-    };
-    match credentials {
-        Credentials::Bearer(token) => {
+/// Passwords are checked by Ergo, behind the sign-in form's limits.
+async fn authenticate(
+    app: &App,
+    headers: &HeaderMap,
+    address: &ClientAddress,
+) -> anyhow::Result<Authentication> {
+    let uploader = match Credentials::of(headers) {
+        None => None,
+        Some(Credentials::Bearer(token)) => {
             let hash = app.sessions.hash(&token);
             let token = app.db.access_token(&hash, db::now()).await?;
-            Ok(token.map(|token| Uploader {
+            token.map(|token| Uploader {
                 owner: token.account,
                 bot: None,
-            }))
+            })
         }
+        Some(Credentials::Basic { nick, password }) => {
+            if !signin::plausible(&nick, &password) {
+                return Ok(Authentication::Refused);
+            }
+            let now = Instant::now();
+            if !app.limiter.allows(&nick, address.0, now) {
+                return Ok(Authentication::Throttled);
+            }
+            let uploader = match app
+                .ergo
+                .check_auth(nick.as_str(), password.as_str())
+                .await?
+            {
+                Some(account) => uploader_named(app, account.as_str()).await?,
+                None => None,
+            };
+            match &uploader {
+                Some(_) => app.limiter.record_success(&nick),
+                None => app.limiter.record_failure(&nick, address.0, now),
+            }
+            uploader
+        }
+    };
+    Ok(uploader.map_or(Authentication::Refused, Authentication::Uploader))
+}
+
+/// The current member named `account`, or the live bot of a current
+/// member.
+async fn uploader_named(app: &App, account: &str) -> sqlx::Result<Option<Uploader>> {
+    let current = |member: Option<db::Member>| member.filter(|member| member.removed_at.is_none());
+    if let Some(member) = current(app.db.member(account).await?) {
+        return Ok(Some(Uploader {
+            owner: member.account,
+            bot: None,
+        }));
     }
+    let bot = app.db.bot(account).await?;
+    let Some(bot) = bot.filter(|bot| bot.removed_at.is_none()) else {
+        return Ok(None);
+    };
+    let owner = current(app.db.member(bot.owner.as_str()).await?);
+    Ok(owner.map(|owner| Uploader {
+        owner: owner.account,
+        bot: Some(bot.account),
+    }))
 }
 
 /// `201 Created`, with the link to the file named `file_name`.

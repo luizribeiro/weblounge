@@ -3,9 +3,11 @@ use axum::{
     http::{Request, header},
     response::Response,
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
+use concierge::rate_limit::{PER_ACCOUNT, TRY_LATER};
 use regex::Regex;
 
-use crate::{Site, body_text, location};
+use crate::{PASSWORD, Site, body_text, location};
 
 /// What starts like a PNG, which the fake scrubber stores as it is.
 pub const PNG: &[u8] = b"\x89PNG\r\n\x1a\nthe rest of a screenshot";
@@ -167,4 +169,110 @@ async fn while_the_scrubber_is_down_uploads_get_503() {
 
     assert_eq!(response.status(), 503);
     assert_eq!(site.upload_rows().await, 0);
+}
+
+/// The `Authorization` senpai and bots send: Basic, with the IRC login.
+pub(crate) fn basic(nick: &str, password: &str) -> String {
+    format!("Basic {}", STANDARD.encode(format!("{nick}:{password}")))
+}
+
+impl Site {
+    /// alice, a member, and her bot Marvin, both with [`PASSWORD`].
+    pub(crate) async fn alice_and_marvin(&self) {
+        self.add_member("alice").await;
+        self.register("Marvin").await;
+        self.execute("INSERT INTO bots (account, owner, created_at) VALUES ('Marvin', 'alice', 0)")
+            .await;
+    }
+}
+
+#[tokio::test]
+async fn a_member_uploads_with_the_nick_and_password_they_use_on_irc() {
+    let site = Site::start().await;
+    site.alice_and_marvin().await;
+
+    let response = site.upload(PNG, Some(&basic("ALICE", PASSWORD))).await;
+
+    assert_eq!(response.status(), 201);
+    let id = id_in(location(&response), "png");
+    assert_eq!(
+        site.upload_row(&id).await,
+        format!("alice alice image/png {}", PNG.len())
+    );
+}
+
+#[tokio::test]
+async fn a_bots_upload_counts_against_its_owner() {
+    let site = Site::start().await;
+    site.alice_and_marvin().await;
+
+    let response = site.upload(PNG, Some(&basic("marvin", PASSWORD))).await;
+
+    assert_eq!(response.status(), 201);
+    let id = id_in(location(&response), "png");
+    assert_eq!(
+        site.upload_row(&id).await,
+        format!("Marvin alice image/png {}", PNG.len())
+    );
+}
+
+#[tokio::test]
+async fn a_deleted_bot_or_a_removed_members_bot_uploads_nothing() {
+    let site = Site::start().await;
+    site.alice_and_marvin().await;
+    let marvin = basic("Marvin", PASSWORD);
+    site.execute("UPDATE bots SET removed_at = 1").await;
+    assert_eq!(site.upload(PNG, Some(&marvin)).await.status(), 401);
+    site.execute("UPDATE bots SET removed_at = NULL").await;
+    site.execute("UPDATE members SET email = NULL, removed_at = 1 WHERE account = 'alice'")
+        .await;
+    assert_eq!(site.upload(PNG, Some(&marvin)).await.status(), 401);
+}
+
+#[tokio::test]
+async fn an_ergo_account_that_is_no_member_or_bot_uploads_nothing() {
+    let site = Site::start().await;
+    site.register("stranger").await;
+    let response = site.upload(PNG, Some(&basic("stranger", PASSWORD))).await;
+    assert_eq!(response.status(), 401);
+}
+
+#[tokio::test]
+async fn wrong_passwords_count_against_the_sign_in_limits() {
+    let site = Site::start().await;
+    site.alice_and_marvin().await;
+    let from = |address| [("x-real-ip", address)];
+    for _ in 0..PER_ACCOUNT {
+        let wrong = basic("alice", "not-her-password");
+        let response = site
+            .upload_with(PNG, Some(&wrong), &from("192.0.2.7"))
+            .await;
+        assert_eq!(response.status(), 401);
+    }
+
+    let right = basic("alice", PASSWORD);
+    let response = site
+        .upload_with(PNG, Some(&right), &from("198.51.100.9"))
+        .await;
+
+    assert_eq!(response.status(), 429);
+    assert_eq!(body_text(response).await, format!("{TRY_LATER}\n"));
+    assert_eq!(site.sign_in_form("alice", PASSWORD).await.status(), 429);
+    assert!(site.scrubber.stored().is_empty());
+}
+
+#[tokio::test]
+async fn a_password_may_hold_a_colon() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let password = "correct:horse:battery";
+    let client = site.ergo.client();
+    client
+        .set_password("alice", &password.parse().unwrap())
+        .await
+        .unwrap();
+
+    let response = site.upload(PNG, Some(&basic("alice", password))).await;
+
+    assert_eq!(response.status(), 201);
 }
