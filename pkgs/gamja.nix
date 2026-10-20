@@ -1,6 +1,21 @@
-{ gamja }:
+{ gamja, fetchFromCodeberg, fetchNpmDeps }:
 
-gamja.overrideAttrs (old: {
+gamja.overrideAttrs (finalAttrs: old: {
+  version = "1.0.0-beta.11-unstable-2026-09-13";
+
+  src = fetchFromCodeberg {
+    owner = "emersion";
+    repo = "gamja";
+    rev = "59ed8b13efadc4753efc29afb8e9437bd3df3875";
+    hash = "sha256-nLxmKMxcY9gfIrgvFJvm4vDWkESz4wzZKDLNCqu4sIE=";
+  };
+
+  npmDeps = fetchNpmDeps {
+    inherit (finalAttrs) src;
+    name = "${finalAttrs.pname}-${finalAttrs.version}-npm-deps";
+    hash = "sha256-BMiDE1rBb4XkWEmGxhkZPF5hDoV4BksfwU094BuBkKI=";
+  };
+
   patches = (old.patches or [ ]) ++ [
     # gamja's OAuth 2.0 client sends neither a state nor a PKCE challenge,
     # and puts the page's fragment in its redirect URI; concierge's
@@ -19,7 +34,7 @@ gamja.overrideAttrs (old: {
   postInstall = (old.postInstall or "") + ''
     install -Dm644 ${../web/images/favicon.svg} $out/favicon.svg
     substituteInPlace $out/index.html --replace-fail \
-      '<link rel="manifest"' \
-      '<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="manifest"'
+      '<link rel=manifest' \
+      '<link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel=manifest'
   '';
 })

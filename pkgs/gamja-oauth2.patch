@@ -1,8 +1,8 @@
 diff --git a/components/app.js b/components/app.js
-index d1c8f15..1099af4 100644
+index 39d7744..0a285f9 100644
 --- a/components/app.js
 +++ b/components/app.js
-@@ -362,7 +362,8 @@ export default class App extends Component {
+@@ -397,7 +397,8 @@ export default class App extends Component {
  
  			let saslOauthBearer;
  			try {
@@ -12,7 +12,7 @@ index d1c8f15..1099af4 100644
  			} catch (err) {
  				this.showError(err);
  				return;
-@@ -403,15 +404,19 @@ export default class App extends Component {
+@@ -438,15 +439,19 @@ export default class App extends Component {
  			return;
  		}
  
@@ -35,7 +35,7 @@ index d1c8f15..1099af4 100644
  		let serverMetadata = await oauth2.fetchServerMetadata(this.config.oauth2.url);
  
  		let redirectUri = new URL(window.location.toString());
-@@ -422,6 +427,7 @@ export default class App extends Component {
+@@ -457,6 +462,7 @@ export default class App extends Component {
  			serverMetadata,
  			redirectUri: redirectUri.toString(),
  			code,
@@ -44,7 +44,7 @@ index d1c8f15..1099af4 100644
  			clientSecret: this.config.oauth2.client_secret,
  		});
 diff --git a/lib/oauth2.js b/lib/oauth2.js
-index 02abdbc..b8ed612 100644
+index 55eb3a2..d370380 100644
 --- a/lib/oauth2.js
 +++ b/lib/oauth2.js
 @@ -38,14 +38,47 @@ export async function fetchServerMetadata(url) {
