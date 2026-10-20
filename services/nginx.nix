@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   defaultPolicy = {
@@ -26,6 +26,30 @@ let
   addHeaders = policy: lib.concatStrings (lib.mapAttrsToList
     (name: value: "add_header ${name} \"${value}\" always;\n")
     (securityHeaders policy));
+
+  # The not-found page links back to the landing page, whose origin the
+  # web build doesn't know.
+  errorPages = pkgs.runCommand "weblounge-error-pages" { } ''
+    cp -r --no-preserve=mode ${pkgs.weblounge.web}/errors $out
+    substituteInPlace $out/_error/404.html \
+      --replace-fail @landing@ ${config.weblounge.origin config.weblounge.domain}/
+  '';
+
+  # The pages are only for nginx to answer errors with; what they load is
+  # public. Neither is proxied, so they work while an upstream is down.
+  serveErrorPages = pages: {
+    extraConfig = lib.concatStrings (lib.mapAttrsToList
+      (codes: page: "error_page ${codes} /_error/${page};\n")
+      pages);
+    locations."^~ /_error/" = {
+      root = errorPages;
+      extraConfig = "internal;";
+    };
+    locations."^~ /_error/assets/" = {
+      root = errorPages;
+      extraConfig = "expires 1h;";
+    };
+  };
 in
 {
   # Every vhost inherits the security headers, as long as it sets no
@@ -35,6 +59,13 @@ in
     readOnly = true;
     default = addHeaders;
     description = "add_header lines for the security headers, with these CSP directives over the default policy.";
+  };
+
+  options.weblounge.nginx.errorPages = lib.mkOption {
+    type = lib.types.functionTo lib.types.attrs;
+    readOnly = true;
+    default = serveErrorPages;
+    description = "A vhost's settings to answer errors with our pages, given as { \"<codes>\" = \"<page>.html\"; }.";
   };
 
   config = {

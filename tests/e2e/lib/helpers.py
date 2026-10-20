@@ -54,6 +54,27 @@ def https(name: str, path: str = "/", *flags: str) -> str:
 members = "members.weblounge.org"
 outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
 
+asset_types = {"css": "text/css", "svg": "image/svg+xml", "png": "image/png", "avif": "image/avif"}
+
+
+def error_page(name: str, path: str, status: int) -> str:
+    """The page nginx answers `path` on `name` with, once its status, its
+    security headers and the files it loads, from nginx itself, check out."""
+    head, page = https(name, path, "-D", "-").split("\r\n\r\n", 1)
+    head = head.lower()
+    assert head.split()[1] == str(status), head
+    assert "x-content-type-options: nosniff" in head, head
+    assert re.search(r"content-security-policy: .*style-src 'self'", head), head
+    assets = set(re.findall(r'href="(/_error/assets/[^"#]+)', page))
+    [stylesheet] = [asset for asset in assets if asset.endswith(".css")]
+    css = https(name, stylesheet, "-f")
+    felt = {f"/_error/assets/{tile}" for tile in re.findall(r'url\("\./(felt-[^"]+)"\)', css)}
+    assert felt, css
+    for asset in assets | felt:
+        loaded = https(name, asset, "-o", "/dev/null", "-w", "%{http_code} %{content_type}")
+        assert loaded == f"200 {asset_types[asset.rsplit('.', 1)[1]]}", (name, asset, loaded)
+    return page
+
 
 def concierge_admin_command(*args: str) -> str:
     return f"su - luiz -c {shlex.quote(shlex.join(['concierge-admin', *args]))}"
