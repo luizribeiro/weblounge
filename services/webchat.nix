@@ -6,6 +6,7 @@ let
   origin = config.weblounge.origin hostName;
   socket = "${lib.replaceStrings [ "https://" ] [ "wss://" ] origin}/socket";
   members = config.weblounge.concierge.publicUrl;
+  upload = "${config.weblounge.origin config.weblounge.files.hostName}/upload";
 
   gamjaConfig = pkgs.writeText "gamja-config.json" (builtins.toJSON {
     server = {
@@ -28,10 +29,10 @@ in
     {
       globalRedirect = null;
       root = pkgs.weblounge.gamja;
-      # gamja connects to Ergo's WebSocket and fetches the OAuth metadata and
-      # token from concierge.
+      # gamja connects to Ergo's WebSocket, fetches the OAuth metadata and
+      # token from concierge, and posts pasted images to the upload endpoint.
       extraConfig = config.weblounge.nginx.securityHeaders {
-        connect-src = "'self' ${socket} ${members}";
+        connect-src = "'self' ${socket} ${members} ${upload}";
         manifest-src = "'self'";
       };
       locations."= /config.json".alias = gamjaConfig;

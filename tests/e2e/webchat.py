@@ -18,6 +18,7 @@ if TYPE_CHECKING:
         concierge_sql,
         ergo_api,
         exchange,
+        files_host,
         https,
         irc,
         irc_command,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
 ada: Account = {"account": "ada", "password": "the-analytical-engine"}
 graces_browser = Browser("grace")
+gamja_connects = f"connect-src 'self' wss://irc.weblounge.org/socket https://{members} https://{files_host}/upload;"
 
 
 credenza.wait_for_unit("nginx.service")
@@ -82,12 +84,12 @@ with subtest("gamja wears the network's favicon"):
 with subtest("unknown paths on irc.weblounge.org get the not-found page, gamja's CSP and all"):
     not_found_page("irc.weblounge.org", "/no-such-page")
     headers = https("irc.weblounge.org", "/no-such-page", "-I").lower()
-    assert f"connect-src 'self' wss://irc.weblounge.org/socket https://{members};" in headers, headers
+    assert gamja_connects in headers, headers
 
-with subtest("gamja's CSP lets it reach Ergo's WebSocket and concierge, and nothing else"):
+with subtest("gamja's CSP lets it reach Ergo's WebSocket, concierge and the upload endpoint, and nothing else"):
     headers = https("irc.weblounge.org", "/", "-fI").lower()
     [policy] = re.findall(r"^content-security-policy: (.*)$", headers, re.M)
-    assert f"connect-src 'self' wss://irc.weblounge.org/socket https://{members};" in policy, policy
+    assert gamja_connects in policy, policy
     assert "default-src 'none'" in policy and "frame-ancestors 'none'" in policy, policy
 
 with subtest("the token logs in over gamja's WebSocket too"):
