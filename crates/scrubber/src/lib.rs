@@ -6,6 +6,7 @@
 //! goes too.
 
 mod exif;
+mod gif;
 mod jpeg;
 mod png;
 mod webp;
@@ -27,8 +28,8 @@ pub fn scrub(upload: &[u8]) -> Option<Scrubbed> {
     let bytes = match kind {
         ImageType::Png => png::scrub(upload),
         ImageType::Jpeg => jpeg::scrub(upload),
+        ImageType::Gif => gif::scrub(upload),
         ImageType::Webp => webp::scrub(upload),
-        ImageType::Gif => None,
     }?;
     Some(Scrubbed { kind, bytes })
 }
