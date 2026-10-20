@@ -1,0 +1,116 @@
+//! The scrubber: the one process that reads what members upload. It tells
+//! the images the network takes from anything else by their bytes, and
+//! strips what they say about the photo and its taker (EXIF, XMP, GPS,
+//! comments) without decoding a pixel. Each format keeps an allowlist of
+//! what draws the image, so whatever an encoder adds that isn't on it
+//! goes too.
+
+mod exif;
+mod png;
+
+use filehost::ImageType;
+
+/// An upload stripped down to what draws it.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Scrubbed {
+    pub kind: ImageType,
+    pub bytes: Vec<u8>,
+}
+
+/// `upload` without its metadata, if it's a well-formed image of a type
+/// the network takes; anything else, a polyglot that is something more
+/// besides, or an image cut short, is refused.
+pub fn scrub(upload: &[u8]) -> Option<Scrubbed> {
+    let kind = sniff(upload)?;
+    let bytes = match kind {
+        ImageType::Png => png::scrub(upload),
+        ImageType::Jpeg | ImageType::Gif | ImageType::Webp => None,
+    }?;
+    Some(Scrubbed { kind, bytes })
+}
+
+/// The type `upload` starts out as.
+fn sniff(upload: &[u8]) -> Option<ImageType> {
+    if upload.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(ImageType::Png)
+    } else if upload.starts_with(b"\xff\xd8\xff") {
+        Some(ImageType::Jpeg)
+    } else if upload.starts_with(b"GIF87a") || upload.starts_with(b"GIF89a") {
+        Some(ImageType::Gif)
+    } else if upload.starts_with(b"RIFF") && upload.get(8..12) == Some(b"WEBP") {
+        Some(ImageType::Webp)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What a phone or an editor leaves in an image, which the fixtures
+    /// all carry some of.
+    pub const METADATA: [&[u8]; 6] = [
+        b"Pixelphone",
+        b"Zoe Example",
+        b"2026:10:01 12:34:56",
+        b"the-comment-canary",
+        b"the-xmp-canary",
+        b"the-iptc-canary",
+    ];
+
+    pub fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+    }
+
+    /// Asserts `scrubbed` holds none of the fixtures' metadata, and that
+    /// `original` held some.
+    pub fn assert_stripped(original: &[u8], scrubbed: &[u8]) {
+        assert!(METADATA.iter().any(|text| contains(original, text)));
+        for text in METADATA {
+            assert!(
+                !contains(scrubbed, text),
+                "{:?} survived",
+                String::from_utf8_lossy(text)
+            );
+        }
+    }
+
+    /// Asserts both images decode to the same pixels.
+    pub fn assert_same_pixels(original: &[u8], scrubbed: &[u8]) {
+        let decode = |bytes| image::load_from_memory(bytes).unwrap().to_rgba8();
+        assert_eq!(decode(original), decode(scrubbed));
+    }
+
+    /// Asserts scrubbing `upload` gives it back unchanged.
+    pub fn assert_idempotent(upload: &[u8]) {
+        let again = scrub(upload).unwrap();
+        assert_eq!(again.bytes, upload);
+    }
+
+    #[test]
+    fn refuses_what_isnt_an_image_whatever_it_is_called() {
+        let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><rect width="8" height="8"/></svg>"#;
+        let html = b"<!doctype html><title>x</title><script>alert(document.domain)</script>";
+        let pdf = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n";
+        for upload in [&svg[..], html, pdf, b"", b"\x89PNG"] {
+            assert_eq!(scrub(upload), None, "{}", String::from_utf8_lossy(upload));
+        }
+    }
+
+    #[test]
+    fn refuses_html_dressed_up_as_each_image_type() {
+        let html = b"<html><script>alert(document.domain)</script></html>";
+        for magic in [
+            &b"\x89PNG\r\n\x1a\n"[..],
+            b"\xff\xd8\xff\xe0",
+            b"GIF89a",
+            b"RIFF\x40\x00\x00\x00WEBP",
+        ] {
+            let disguised = [magic, html].concat();
+            assert_eq!(scrub(&disguised), None, "{magic:?}");
+        }
+    }
+}

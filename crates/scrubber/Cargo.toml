@@ -1,0 +1,13 @@
+[package]
+name = "scrubber"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+filehost = { path = "../filehost" }
+img-parts = "0.4.1"
+
+[dev-dependencies]
+# Only the tests decode pixels, to show stripping metadata changed none.
+image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
