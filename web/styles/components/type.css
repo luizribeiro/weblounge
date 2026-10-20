@@ -40,6 +40,11 @@ code {
   color: var(--muted);
 }
 
+.lede {
+  font-size: 1.125rem;
+  color: var(--muted);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

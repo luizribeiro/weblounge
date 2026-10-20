@@ -159,11 +159,6 @@
   text-decoration: underline;
 }
 
-.lede {
-  font-size: 1.125rem;
-  color: var(--muted);
-}
-
 .open-chat {
   display: flex;
   flex-wrap: wrap;
