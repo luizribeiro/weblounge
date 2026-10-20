@@ -67,7 +67,9 @@ stdenvNoCC.mkDerivation {
     install -Dm644 images/favicon.svg dist/favicon.svg
     ${release bundles.members [ "--minify" "--outdir=members" "--metafile=members/manifest.json" ]}
     ${release bundles.errors [ "--minify" "--outdir=errors/_error/assets" ]}
-    ${renderPage} pages/errors/404.html > errors/_error/404.html
+    for page in pages/errors/*.html; do
+      ${renderPage} "$page" > errors/_error/"$(basename "$page")"
+    done
     runHook postBuild
   '';
 
