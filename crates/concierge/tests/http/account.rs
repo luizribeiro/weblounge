@@ -64,7 +64,7 @@ fn by_deadline(deadline: i64) -> String {
     format!(
         r#"by <time class="deadline" datetime="{}">{}</time>"#,
         concierge::tree::date(deadline),
-        verification_rules::deadline_in_words(deadline)
+        concierge::tree::day_in_words(deadline)
     )
 }
 

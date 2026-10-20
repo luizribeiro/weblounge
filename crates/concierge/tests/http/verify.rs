@@ -243,7 +243,7 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
     let deadline = verification_rules::deadline(first_sent_at);
     let (date, day) = (
         concierge::tree::date(deadline),
-        verification_rules::deadline_in_words(deadline),
+        concierge::tree::day_in_words(deadline),
     );
 
     let pages = pages_of_alice(&site, &["/", "/clients", "/privacy"]).await;

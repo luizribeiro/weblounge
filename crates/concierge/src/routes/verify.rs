@@ -104,7 +104,7 @@ impl Unconfirmed {
             let deadline = verification_rules::deadline(first_sent_at);
             Due {
                 date: tree::date(deadline),
-                day: verification_rules::deadline_in_words(deadline),
+                day: tree::day_in_words(deadline),
                 left: (now < deadline).then(|| invite_rules::in_words(deadline - now)),
             }
         });

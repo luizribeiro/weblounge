@@ -73,7 +73,7 @@ pub fn message(
         link: format!("{public_url}/verify#{}", issued.code),
         lifetime: invite_rules::in_words(verification_rules::LIFETIME),
         grace_period: invite_rules::in_words(verification_rules::GRACE_PERIOD),
-        due: verification_rules::deadline_in_words(issued.deadline),
+        due: crate::tree::day_in_words(issued.deadline),
         overdue: now >= issued.deadline,
         reminder: kind == Kind::Reminder,
     };

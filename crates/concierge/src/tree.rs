@@ -76,6 +76,29 @@ pub fn date(unix: i64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// A day as members read it, such as "24 October", in UTC: for days
+/// within weeks of today, where the year goes without saying.
+pub fn day_in_words(unix: i64) -> String {
+    let (_, month, day) = civil(unix);
+    let month = usize::try_from(month - 1).expect("months run from 1");
+    format!("{day} {}", MONTHS[month])
+}
+
 /// The UTC year, month (1 to 12) and day of `unix` seconds.
 pub fn civil(unix: i64) -> (i64, i64, i64) {
     // Howard Hinnant's days-to-civil algorithm.
