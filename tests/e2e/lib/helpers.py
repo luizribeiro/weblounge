@@ -1,10 +1,13 @@
+import base64
+import hashlib
 import json
 import re
+import secrets
 import shlex
 import time
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, TypedDict
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 if TYPE_CHECKING:
     from test_driver.machine import QemuMachine
@@ -155,6 +158,55 @@ class Browser:
         page = self.post("/invites", flags=["-f"])
         [link] = re.findall(r'<code class="invite-link">([^<]+)</code>', page)
         return page, link
+
+
+webchat = "https://irc.weblounge.org"
+
+
+def authorize(browser, challenge, state="a-random-state"):
+    """What gamja does on load: answers the code concierge sends back."""
+    query = urlencode(
+        {
+            "response_type": "code",
+            "client_id": "gamja",
+            "redirect_uri": f"{webchat}/",
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
+    )
+    redirect = browser.get(f"/oauth/authorize?{query}", *outcome).split(" ", 1)[1]
+    assert redirect.startswith(f"{webchat}/?"), redirect
+    params = parse_qs(urlsplit(redirect).query)
+    assert params["state"] == [state], redirect
+    return params["code"][0]
+
+
+def exchange(code, verifier, origin=webchat):
+    fields = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": f"{webchat}/",
+        "client_id": "gamja",
+        "code_verifier": verifier,
+    }
+    flags = [arg for field in fields.items() for arg in ["--data-urlencode", "=".join(field)]]
+    response = https(members, "/oauth/token", "-H", f"Origin: {origin}", "-w", "\n%{http_code}", *flags)
+    body, status = response.rsplit("\n", 1)
+    return status, json.loads(body)
+
+
+def pkce():
+    verifier = secrets.token_urlsafe(32)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    return verifier, challenge
+
+
+def access_token(browser):
+    verifier, challenge = pkce()
+    status, answer = exchange(authorize(browser, challenge), verifier)
+    assert status == "200", (status, answer)
+    return answer["access_token"]
 
 
 def add_member(account: str, password: str, admin: bool = False) -> None:

@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import hmac
 import json
@@ -6,75 +5,30 @@ import re
 import secrets
 import shlex
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs, urlencode, urlsplit
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
     from helpers import (
         Account,
         Browser,
+        access_token,
         add_member,
+        authorize,
         concierge_admin,
         concierge_sql,
         ergo_api,
+        exchange,
         https,
         irc,
         irc_command,
         members,
         not_found_page,
-        outcome,
+        pkce,
     )
 
-webchat = "https://irc.weblounge.org"
 grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
 ada: Account = {"account": "ada", "password": "the-analytical-engine"}
 graces_browser = Browser("grace")
-
-
-def authorize(browser, challenge, state="a-random-state"):
-    """What gamja does on load: answers the code concierge sends back."""
-    query = urlencode(
-        {
-            "response_type": "code",
-            "client_id": "gamja",
-            "redirect_uri": f"{webchat}/",
-            "state": state,
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-        }
-    )
-    redirect = browser.get(f"/oauth/authorize?{query}", *outcome).split(" ", 1)[1]
-    assert redirect.startswith(f"{webchat}/?"), redirect
-    params = parse_qs(urlsplit(redirect).query)
-    assert params["state"] == [state], redirect
-    return params["code"][0]
-
-
-def exchange(code, verifier, origin=webchat):
-    fields = {
-        "grant_type": "authorization_code",
-        "code": code,
-        "redirect_uri": f"{webchat}/",
-        "client_id": "gamja",
-        "code_verifier": verifier,
-    }
-    flags = [arg for field in fields.items() for arg in ["--data-urlencode", "=".join(field)]]
-    response = https(members, "/oauth/token", "-H", f"Origin: {origin}", "-w", "\n%{http_code}", *flags)
-    body, status = response.rsplit("\n", 1)
-    return status, json.loads(body)
-
-
-def pkce():
-    verifier = secrets.token_urlsafe(32)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-    return verifier, challenge
-
-
-def access_token(browser):
-    verifier, challenge = pkce()
-    status, answer = exchange(authorize(browser, challenge), verifier)
-    assert status == "200", (status, answer)
-    return answer["access_token"]
 
 
 credenza.wait_for_unit("nginx.service")
