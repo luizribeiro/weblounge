@@ -1,7 +1,7 @@
 { vmTest, ... }:
 
 let
-  cert = "irc.weblounge.org";
+  cert = "files.weblounge.org";
   attempted = "/var/lib/acme/.attempted-${cert}";
 in
 vmTest {
@@ -10,7 +10,8 @@ vmTest {
 
   # One certificate's order, which the VM otherwise leaves off, stands in
   # for one the CA refuses the first time, the way it does while a new name
-  # hasn't reached every nameserver.
+  # hasn't reached every nameserver. It's the first of the ACME account's
+  # certificates by name, whose order the others' wait for.
   credenza = { lib, ... }: {
     systemd.services."acme-order-renew-${cert}" = {
       enable = lib.mkForce true;

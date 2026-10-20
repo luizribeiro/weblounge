@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from helpers import add_member, ergo_api_token
 
 # As in host.nix, whose stand-in certificate order fails its first attempt.
-cert = "irc.weblounge.org"
+cert = "files.weblounge.org"
 attempted = f"/var/lib/acme/.attempted-{cert}"
 
 with subtest("sshd only accepts keys"):
