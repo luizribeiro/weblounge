@@ -47,8 +47,10 @@ use concierge::{
     },
     secret_hash::{InviteCodeHash, SessionHash},
     session::{self, Token},
+    uploads::Store,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
+use filehost::testing::FakeScrubber;
 use http_body_util::BodyExt;
 use outbox::{Outbox, QueuedMessage, testing::TestKey};
 use tempfile::TempDir;
@@ -57,6 +59,7 @@ use tower::ServiceExt;
 const PUBLIC_URL: &str = "https://members.weblounge.org";
 const WEBCHAT_URL: &str = "https://irc.weblounge.org";
 const JOIN_URL: &str = "https://join.weblounge.org";
+const FILES_URL: &str = "https://files.weblounge.org";
 const SESSION_KEY: &[u8] = b"a session key for tests, at least 32 bytes";
 const PASSWORD: &str = "correct-horse-battery";
 const INTROSPECTION_SECRET: &str = "a secret Ergo introspects tokens with";
@@ -75,6 +78,8 @@ struct Site {
     state: TempDir,
     /// What requests left running when they answered.
     background: Background,
+    /// Takes the uploads the site hands over.
+    _scrubber: FakeScrubber,
 }
 
 impl Site {
@@ -86,6 +91,7 @@ impl Site {
     /// than its fake.
     async fn start_with(change: impl FnOnce(&mut App)) -> Self {
         let fake = FakeErgo::start().await;
+        let scrubber = FakeScrubber::start();
         let state = tempfile::tempdir().unwrap();
         let db = Db::migrate(&state.path().join("concierge.db"))
             .await
@@ -123,6 +129,11 @@ impl Site {
                 auto_away: true,
             },
             history_expiry: HISTORY_EXPIRY,
+            uploads: Store {
+                directory: scrubber.uploads.clone(),
+                scrubber: scrubber.socket.clone(),
+            },
+            files_url: Origin::parse(FILES_URL).unwrap(),
         };
         change(&mut app);
         Self {
@@ -133,6 +144,7 @@ impl Site {
             ergo: fake,
             state,
             background,
+            _scrubber: scrubber,
         }
     }
 

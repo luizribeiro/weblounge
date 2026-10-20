@@ -9,7 +9,8 @@ use ergo_api::{Client, Url};
 pub use crate::routes::presence::Presence;
 use crate::{
     history,
-    origin::{self, Origin, SiteOrigin, WebchatOrigin},
+    origin::{self, FilesOrigin, Origin, SiteOrigin, WebchatOrigin},
+    uploads::Store,
 };
 pub use common::config::ConfigError;
 
@@ -28,6 +29,10 @@ pub struct Config {
     pub invite_links: String,
     /// The web client's origin, the one OAuth client.
     pub webchat_url: WebchatOrigin,
+    /// Where uploads are served from.
+    pub files_url: FilesOrigin,
+    /// Where uploads are handed to the scrubber, and stored.
+    pub uploads: Store,
     pub irc_server: IrcServer,
     pub ergo_api: Url,
     pub assets_dir: PathBuf,
@@ -119,6 +124,8 @@ impl Config {
             invite_links: invite_links(public_url.as_str(), join_url.as_deref()),
             public_url,
             webchat_url: origin("CONCIERGE_WEBCHAT_URL", webchat_url)?,
+            files_url: origin("CONCIERGE_FILES_URL", require("CONCIERGE_FILES_URL")?)?,
+            uploads: Store::from_vars(&var)?,
             irc_server: IrcServer::parse(&irc_server).ok_or_else(|| {
                 invalid(
                     "CONCIERGE_IRC_SERVER",
@@ -272,11 +279,14 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 12] = [
+    const PRODUCTION: [(&str, &str); 15] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
         ("CONCIERGE_WEBCHAT_URL", "https://irc.weblounge.org"),
+        ("CONCIERGE_FILES_URL", "https://files.weblounge.org"),
+        ("CONCIERGE_UPLOADS", "/var/lib/concierge-files"),
+        ("CONCIERGE_SCRUBBER", "/run/concierge-scrubber.sock"),
         ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
         ("CONCIERGE_ALWAYS_ON_DEFAULT", "opt-out"),
         ("CONCIERGE_AUTO_AWAY_DEFAULT", "opt-out"),
@@ -322,6 +332,11 @@ mod tests {
                 public_url: origin("https://members.weblounge.org"),
                 invite_links: "https://join.weblounge.org/#".into(),
                 webchat_url: origin("https://irc.weblounge.org"),
+                files_url: origin("https://files.weblounge.org"),
+                uploads: Store {
+                    directory: "/var/lib/concierge-files".into(),
+                    scrubber: "/run/concierge-scrubber.sock".into(),
+                },
                 irc_server: IrcServer {
                     host: "irc.weblounge.org".into(),
                     port: 6697,
@@ -517,6 +532,19 @@ mod tests {
     fn names_a_missing_variable() {
         let error = parse_with(&[("CREDENTIALS_DIRECTORY", None)]).unwrap_err();
         assert_eq!(error, ConfigError::Missing("CREDENTIALS_DIRECTORY"));
+    }
+
+    #[test]
+    fn needs_where_uploads_go_and_where_they_are_served() {
+        for name in [
+            "CONCIERGE_FILES_URL",
+            "CONCIERGE_UPLOADS",
+            "CONCIERGE_SCRUBBER",
+        ] {
+            assert_eq!(parse_with(&[(name, None)]), Err(ConfigError::Missing(name)));
+        }
+        let files = parse_with(&[("CONCIERGE_FILES_URL", Some("https://files.weblounge.org/x"))]);
+        assert!(matches!(files, Err(ConfigError::Invalid { .. })));
     }
 
     fn config_with_credentials(dir: &std::path::Path) -> Config {

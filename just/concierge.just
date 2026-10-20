@@ -15,12 +15,16 @@ export CONCIERGE_ASSETS := dev_dir / "assets"
 export STATE_DIRECTORY := dev_dir / "state"
 export CONCIERGE_OUTBOX := dev_dir / "outbox.db"
 export CREDENTIALS_DIRECTORY := dev_dir / "credentials"
+export CONCIERGE_UPLOADS := dev_dir / "uploads"
+export CONCIERGE_SCRUBBER := dev_dir / "scrubber.sock"
+# Nothing serves the uploads in the dev loop, so the Uploads tab's images don't load.
+export CONCIERGE_FILES_URL := "https://files.weblounge.localhost:10443"
 
 # Run concierge and a throwaway Ergo natively, restarting concierge and reloading the page on every save
 dev:
   #!/usr/bin/env bash
   set -euo pipefail
-  mkdir -p "$STATE_DIRECTORY" "$CREDENTIALS_DIRECTORY"
+  mkdir -p "$STATE_DIRECTORY" "$CREDENTIALS_DIRECTORY" "$CONCIERGE_UPLOADS"
   for secret in session-key ergo-api-token oauth-introspection-secret; do
     [ -e "$CREDENTIALS_DIRECTORY/$secret" ] || od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$CREDENTIALS_DIRECTORY/$secret"
   done
@@ -35,6 +39,14 @@ dev:
     kill -0 $ergo 2>/dev/null || { cat "{{dev_dir}}/ergo.log"; exit 1; }
     sleep 0.2
   done
+  # A scrubber per upload, as systemd's socket runs them; without systemd,
+  # uploads answer that they can't be stored.
+  if command -v systemd-socket-activate >/dev/null; then
+    cargo build --quiet --package scrubber
+    rm -f "$CONCIERGE_SCRUBBER"
+    systemd-socket-activate --inetd --accept --listen="$CONCIERGE_SCRUBBER" \
+      --setenv=CONCIERGE_UPLOADS target/debug/scrubber 2>> "{{dev_dir}}/scrubber.log" &
+  fi
   nix run .#web.watchMembers -- web "$CONCIERGE_ASSETS" &
   until [ -e "$CONCIERGE_ASSETS/manifest.json" ]; do sleep 0.2; done
   bacon --headless serve

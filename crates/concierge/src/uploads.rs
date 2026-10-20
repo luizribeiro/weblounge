@@ -6,6 +6,7 @@
 use std::{io, path::PathBuf, time::Duration};
 
 use axum::body::Body;
+use common::config::{ConfigError, required};
 use filehost::{
     UploadId,
     handoff::{self, Answer},
@@ -49,6 +50,14 @@ impl From<io::Error> for HandOffError {
 }
 
 impl Store {
+    /// The store CONCIERGE_UPLOADS and CONCIERGE_SCRUBBER name.
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        Ok(Self {
+            directory: required(&var, "CONCIERGE_UPLOADS")?.into(),
+            scrubber: required(&var, "CONCIERGE_SCRUBBER")?.into(),
+        })
+    }
+
     /// Streams `body` to a scrubber, to store under `id` if it's an image,
     /// and answers what the scrubber made of it. A body past the limit
     /// is cut off as soon as it's past it.

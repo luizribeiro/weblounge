@@ -19,9 +19,10 @@ use crate::{
     csrf,
     db::Db,
     oauth::Webchat,
-    origin::SiteOrigin,
+    origin::{FilesOrigin, SiteOrigin},
     rate_limit::{AddressLimiter, Limiter, MailLimiter},
     reset_mail, routes, session,
+    uploads::Store,
 };
 
 /// What every request handler shares.
@@ -59,6 +60,10 @@ pub struct App {
     pub presence_defaults: Presence,
     /// How long Ergo keeps chat history, in seconds.
     pub history_expiry: i64,
+    /// Where uploads are handed to the scrubber, and stored.
+    pub uploads: Store,
+    /// Where uploads are served from.
+    pub files_url: FilesOrigin,
 }
 
 pub type AppState = Arc<App>;

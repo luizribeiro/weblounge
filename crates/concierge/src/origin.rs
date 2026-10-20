@@ -1,7 +1,8 @@
 //! The web origins concierge answers to: the members' site, whose own
-//! pages post to it, and the web client's, which posts to its token
-//! endpoint alone. Each has its own type, so where a request is checked
-//! against one, the other can't stand in.
+//! pages post to it, the web client's, which posts to its token endpoint
+//! and uploads, and the one uploads are served from. Each has its own
+//! type, so where a request is checked against one, another can't stand
+//! in.
 
 use std::{fmt, marker::PhantomData};
 
@@ -22,8 +23,13 @@ pub enum Members {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Webchat {}
 
+/// Where uploads are served, and taken.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Files {}
+
 pub type SiteOrigin = Origin<Members>;
 pub type WebchatOrigin = Origin<Webchat>;
+pub type FilesOrigin = Origin<Files>;
 
 impl<S> Origin<S> {
     /// `url` as an origin, if it's an http(s) one without a path.

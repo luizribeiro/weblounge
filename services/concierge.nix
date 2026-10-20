@@ -40,6 +40,20 @@ let
     ReadWritePaths = [ "-${outboxDir}" ];
   };
 
+  # Concierge hands uploads to the scrubber, and deletes the files it
+  # stored; it never reads them.
+  inherit (config.weblounge) files;
+  filesEnvironment = {
+    CONCIERGE_UPLOADS = files.directory;
+    CONCIERGE_SCRUBBER = files.scrubber.socket;
+    CONCIERGE_FILES_URL = config.weblounge.origin files.hostName;
+  };
+  filesAccess = {
+    SupplementaryGroups = [ files.group files.scrubber.group ];
+    ReadWritePaths = [ files.directory ];
+  };
+  withAccess = accesses: lib.zipAttrsWith (_: lib.concatLists) accesses;
+
   # SQLite doesn't keep two processes from migrating at once, so one unit
   # migrates before any other opens either database.
   migrated = {
@@ -150,8 +164,10 @@ in
         description = "Concierge, the members' site";
         wantedBy = [ "multi-user.target" ];
         after = [ "network.target" ];
-        serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // stateAccess // outboxAccess // serviceOnly // {
-          Environment = [
+        serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // stateAccess // serviceOnly
+          // withAccess [ outboxAccess filesAccess ] // {
+          RestrictAddressFamilies = config.weblounge.sandbox.RestrictAddressFamilies ++ [ "AF_UNIX" ];
+          Environment = lib.mapAttrsToList (name: value: "${name}=${value}") filesEnvironment ++ [
             "CONCIERGE_OUTBOX=${outboxPath}"
             "CONCIERGE_LISTEN=${cfg.listen}"
             "CONCIERGE_PUBLIC_URL=${publicUrl}"

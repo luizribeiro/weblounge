@@ -89,6 +89,8 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         irc_server: config.irc_server.clone(),
         presence_defaults: config.presence_defaults,
         history_expiry: config.history_expiry,
+        uploads: config.uploads.clone(),
+        files_url: config.files_url.clone(),
     };
     let listener = TcpListener::bind(config.listen).await?;
     eprintln!("Serving {} on {}", config.public_url, config.listen);

@@ -20,8 +20,10 @@ use concierge::{
     name::MemberName,
     origin::Origin,
     secret_hash::SessionHash,
+    uploads::Store,
 };
 use ergo_api::{Passphrase, Registration, fake::FakeErgo};
+use filehost::testing::FakeScrubber;
 use outbox::{Outbox, QueuedMessage, testing::TestKey};
 use tempfile::TempDir;
 
@@ -36,6 +38,8 @@ struct Fixture {
     ergo: FakeErgo,
     /// The key the mailer published, which opens the mail sealed to it.
     mailer_key: TestKey,
+    /// Takes the uploads concierge hands over, and stores them.
+    _scrubber: FakeScrubber,
     _state: TempDir,
     _outbox: TempDir,
     _credentials: TempDir,
@@ -44,6 +48,7 @@ struct Fixture {
 impl Fixture {
     async fn start() -> Self {
         let ergo = FakeErgo::start().await;
+        let scrubber = FakeScrubber::start();
         let [state, outbox, credentials] = [(); 3].map(|()| tempfile::tempdir().unwrap());
         let credential =
             |name, value: &str| fs::write(credentials.path().join(name), value).unwrap();
@@ -54,6 +59,11 @@ impl Fixture {
             public_url: Origin::parse("https://members.weblounge.localhost:10443").unwrap(),
             invite_links: "https://join.weblounge.localhost:10443/#".into(),
             webchat_url: Origin::parse("https://irc.weblounge.localhost:10443").unwrap(),
+            files_url: Origin::parse("https://files.weblounge.localhost:10443").unwrap(),
+            uploads: Store {
+                directory: scrubber.uploads.clone(),
+                scrubber: scrubber.socket.clone(),
+            },
             irc_server: IrcServer {
                 host: "irc.weblounge.localhost".into(),
                 port: 16697,
@@ -76,6 +86,7 @@ impl Fixture {
             config,
             ergo,
             mailer_key,
+            _scrubber: scrubber,
             _state: state,
             _outbox: outbox,
             _credentials: credentials,
