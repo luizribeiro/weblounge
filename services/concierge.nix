@@ -216,11 +216,14 @@ in
 
     # Invite links' short home. Browsers carry the code in the fragment
     # across the redirect, and never send it here.
-    services.nginx.virtualHosts.${joinHostName} = {
-      enableACME = true;
-      forceSSL = true;
-      locations."= /".return = "302 ${publicUrl}/invite";
-      locations."/".return = "404";
-    };
+    services.nginx.virtualHosts.${joinHostName} = lib.mkMerge [
+      (config.weblounge.nginx.errorPages { "404" = "404.html"; })
+      {
+        enableACME = true;
+        forceSSL = true;
+        locations."= /".return = "302 ${publicUrl}/invite";
+        locations."/".return = "404";
+      }
+    ];
   };
 }

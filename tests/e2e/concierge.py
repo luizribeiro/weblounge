@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         concierge_sql,
         confirm_email,
         ergo_api,
+        error_page,
         https,
         irc,
         irc_command,
@@ -56,7 +57,8 @@ with subtest("concierge answers health checks"):
 
 with subtest("join.weblounge.org sends invite links on to the invite page, and nothing else anywhere"):
     assert https("join.weblounge.org", "/", *outcome) == f"302 https://{members}/invite"
-    assert https("join.weblounge.org", "/invite", *outcome) == "404 "
+    lost = error_page("join.weblounge.org", "/invite", 404)
+    assert '<a href="https://weblounge.org/">Back to weblounge.org →</a>' in lost, lost
 
 with subtest("concierge's release build carries no live-reload code"):
     assert "livereload" not in page, page
