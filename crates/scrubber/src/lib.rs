@@ -27,7 +27,7 @@ pub struct Scrubbed {
 /// the network takes; anything else, a polyglot that is something more
 /// besides, or an image cut short, is refused.
 pub fn scrub(upload: &[u8]) -> Option<Scrubbed> {
-    let kind = sniff(upload)?;
+    let kind = ImageType::sniff(upload)?;
     let bytes = match kind {
         ImageType::Png => png::scrub(upload),
         ImageType::Jpeg => jpeg::scrub(upload),
@@ -35,21 +35,6 @@ pub fn scrub(upload: &[u8]) -> Option<Scrubbed> {
         ImageType::Webp => webp::scrub(upload),
     }?;
     Some(Scrubbed { kind, bytes })
-}
-
-/// The type `upload` starts out as.
-fn sniff(upload: &[u8]) -> Option<ImageType> {
-    if upload.starts_with(b"\x89PNG\r\n\x1a\n") {
-        Some(ImageType::Png)
-    } else if upload.starts_with(b"\xff\xd8\xff") {
-        Some(ImageType::Jpeg)
-    } else if upload.starts_with(b"GIF87a") || upload.starts_with(b"GIF89a") {
-        Some(ImageType::Gif)
-    } else if upload.starts_with(b"RIFF") && upload.get(8..12) == Some(b"WEBP") {
-        Some(ImageType::Webp)
-    } else {
-        None
-    }
 }
 
 #[cfg(test)]

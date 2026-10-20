@@ -3,6 +3,8 @@
 //! linked under.
 
 pub mod handoff;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 use std::fmt;
 
@@ -47,6 +49,22 @@ impl ImageType {
         Self::ALL
             .into_iter()
             .find(|kind| kind.extension() == extension)
+    }
+
+    /// The type `bytes` start out as, by their signature alone; whether
+    /// they're a well-formed image of it is the scrubber's to find out.
+    pub fn sniff(bytes: &[u8]) -> Option<Self> {
+        if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+            Some(Self::Png)
+        } else if bytes.starts_with(b"\xff\xd8\xff") {
+            Some(Self::Jpeg)
+        } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+            Some(Self::Gif)
+        } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+            Some(Self::Webp)
+        } else {
+            None
+        }
     }
 
     /// Its name for people.

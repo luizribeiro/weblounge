@@ -513,6 +513,7 @@ dependencies = [
  "ergo-api",
  "filehost",
  "form_urlencoded",
+ "futures-util",
  "hmac",
  "http-body-util",
  "outbox",
@@ -822,6 +823,7 @@ name = "filehost"
 version = "0.1.0"
 dependencies = [
  "common",
+ "tempfile",
 ]
 
 [[package]]
