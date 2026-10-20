@@ -206,6 +206,7 @@ pub fn not_found() -> Response {
 #[derive(Clone, Copy)]
 enum ErrorPage {
     NotFound,
+    Internal,
 }
 
 impl ErrorPage {
@@ -217,12 +218,19 @@ impl ErrorPage {
                 "There's nothing here.",
                 "Check the address, or go back home.",
             ),
+            Self::Internal => (
+                "Error",
+                "Something went wrong on our end.",
+                "Nothing you did caused this. Try again in a minute.",
+            ),
         }
     }
 }
 
 /// Gives the errors handlers answer a page, for whoever asked: members
-/// keep their header and tabs. The errors' status and headers stay.
+/// keep their header and tabs. The errors' status and headers stay, and
+/// an error whose page can't render either, as when assets are missing,
+/// answers bare.
 pub async fn error_pages(State(app): State<AppState>, request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     let Some(&error) = response.extensions().get::<ErrorPage>() else {
@@ -254,7 +262,8 @@ pub async fn error_pages(State(app): State<AppState>, request: Request, next: Ne
 /// Logs what failed, without anything about the request, and answers 500.
 pub fn internal_error(what: &str, error: impl Display) -> Response {
     eprintln!("{what} failed: {error}");
-    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    let error = Extension(ErrorPage::Internal);
+    (StatusCode::INTERNAL_SERVER_ERROR, error).into_response()
 }
 
 /// For pages that carry secrets (invite links, a signup's answer): no

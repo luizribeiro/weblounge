@@ -1,6 +1,7 @@
 //! The pages concierge's errors get.
 
 use axum::response::Response;
+use concierge::assets::Assets;
 
 use crate::{Site, body_text};
 
@@ -8,6 +9,13 @@ const NOT_FOUND: &str = r#"<section class="card narrow">
         <p class="eyebrow">Not found</p>
         <h1>There&#39;s nothing here.</h1>
         <p class="lede">Check the address, or go back home.</p>
+        <p><a class="button button-primary" href="/">Go home</a></p>
+      </section>"#;
+
+const INTERNAL_ERROR: &str = r#"<section class="card narrow">
+        <p class="eyebrow">Error</p>
+        <h1>Something went wrong on our end.</h1>
+        <p class="lede">Nothing you did caused this. Try again in a minute.</p>
         <p><a class="button button-primary" href="/">Go home</a></p>
       </section>"#;
 
@@ -59,4 +67,47 @@ async fn missing_client_guides_and_bots_get_the_same_card() {
     }
     let response = site.post("/bots/nobody/delete", &[], Some(&cookie)).await;
     assert!(error_page(response, 404).await.contains(NOT_FOUND));
+}
+
+#[tokio::test]
+async fn a_failing_page_gives_members_the_error_card_under_their_header() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    site.execute("DROP TABLE bots").await;
+    let page = error_page(site.get("/bots", Some(&cookie)).await, 500).await;
+    assert!(page.contains(INTERNAL_ERROR), "{page}");
+    assert!(
+        page.contains(r#"<span class="session-nick">alice</span>"#),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn a_failing_session_lookup_gives_the_error_card_to_a_visitor() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    site.execute("DROP TABLE sessions").await;
+    let page = error_page(site.get("/rules", Some(&cookie)).await, 500).await;
+    assert!(page.contains(INTERNAL_ERROR), "{page}");
+    assert!(page.contains(r#"<a href="/signin">Sign in</a>"#), "{page}");
+}
+
+#[tokio::test]
+async fn an_error_whose_page_cannot_render_answers_bare() {
+    let built_nothing = tempfile::tempdir().unwrap();
+    std::fs::write(
+        built_nothing.path().join("manifest.json"),
+        r#"{"outputs": {}}"#,
+    )
+    .unwrap();
+    let site =
+        Site::start_with(|app| app.assets = Assets::load(built_nothing.path()).unwrap()).await;
+    for (path, status) in [("/rules", 500), ("/no-such-page", 404)] {
+        let response = site.get(path, None).await;
+        assert_eq!(response.status(), status, "{path}");
+        assert!(!response.headers().contains_key("content-type"), "{path}");
+        assert_eq!(body_text(response).await, "", "{path}");
+    }
 }
