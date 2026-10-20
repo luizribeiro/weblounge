@@ -9,9 +9,12 @@ mod exif;
 mod gif;
 mod jpeg;
 mod png;
+mod store;
 mod webp;
 
 use filehost::ImageType;
+
+pub use store::take;
 
 /// An upload stripped down to what draws it.
 #[derive(Debug, PartialEq, Eq)]
