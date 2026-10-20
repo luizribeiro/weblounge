@@ -78,6 +78,26 @@ fn message(
     })
 }
 
+/// Tells `account`, at their confirmed `email`, that their password
+/// changed, whether that was a reset link or the Account tab. A failure
+/// to queue it is only logged: it must never fail whatever changed the
+/// password.
+pub async fn notify_changed(
+    outbox: &Outbox,
+    account: &MemberName,
+    email: &Email,
+    public_url: &str,
+    now: i64,
+) {
+    let queued = match changed_message(account, email, public_url) {
+        Ok(message) => outbox.queue(&message, now).await.map_err(Into::into),
+        Err(error) => Err(error),
+    };
+    if let Err(error) = queued {
+        eprintln!("Queueing a password-changed email failed: {error}");
+    }
+}
+
 /// Issues `account` a reset link, replacing their last, and queues the
 /// email that carries it, sealed; answers its id, unless they have no
 /// confirmed email. Fails with [`outbox::NoKey`] while the mailer is down.
@@ -153,7 +173,8 @@ mod tests {
         let body = message.body;
         assert!(body.starts_with("Hi Bob,\n"), "{body}");
         assert!(body.contains("was just changed"), "{body}");
-        assert!(body.contains("signed out of the members' site"), "{body}");
+        assert!(body.contains("other sessions"), "{body}");
+        assert!(body.contains("were ended"), "{body}");
         assert!(
             body.contains(&format!("{PUBLIC_URL}/forgot-password and tell an admin.")),
             "{body}"

@@ -19,9 +19,11 @@ use super::{
 use crate::{
     app::{App, AppState},
     auth::CurrentMember,
+    db,
     name::MemberName,
     password_rules,
     rate_limit::{self, ClientAddress},
+    reset_mail,
 };
 
 const WRONG: &str = "Wrong password.";
@@ -107,8 +109,24 @@ pub async fn change(
         )
         .await;
     }
-    match app.db.end_other_sessions(account, &me.token_hash).await {
-        Ok(_) => Redirect::to("/account?password#change-password").into_response(),
-        Err(error) => internal_error("Ending a member's other sessions", error),
+    if let Err(error) = app.db.end_other_sessions(account, &me.token_hash).await {
+        return internal_error("Ending a member's other sessions", error);
     }
+    // Only a confirmed address proves it's the member's; an unconfirmed
+    // one could be anyone's.
+    if let Some(email) = member
+        .email
+        .as_ref()
+        .filter(|_| member.email_verified_at.is_some())
+    {
+        reset_mail::notify_changed(
+            &app.outbox,
+            account,
+            email,
+            app.public_url.as_str(),
+            db::now(),
+        )
+        .await;
+    }
+    Redirect::to("/account?password#change-password").into_response()
 }

@@ -105,9 +105,22 @@ with subtest("a used link and an expired one fail cleanly and change nothing"):
     used = post_reset(link, "another-new-password-1")
     assert used.endswith("\n422") and "This link doesn&#39;t work any more." in used, used
     assert forgot("quinn").endswith("\n200")
-    quinns = link_in(wait_for_mail("quinn@example.org", reset_subject), reset_link)
+    quinns_link = link_in(wait_for_mail("quinn@example.org", reset_subject), reset_link)
     concierge_sql("UPDATE password_reset_codes SET expires_at = unixepoch() WHERE account = 'quinn'", write=True)
-    expired = post_reset(quinns, "another-new-password-2")
+    expired = post_reset(quinns_link, "another-new-password-2")
     assert expired.endswith("\n422") and "This link doesn&#39;t work any more." in expired, expired
     assert " 903 " in irc(**quinn)
     assert " 903 " in irc(account="olive", password=new_password)
+
+with subtest("changing a password on the Account tab tells the confirmed address too"):
+    quinns = Browser("quinn")
+    assert quinns.sign_in(**quinn).startswith("303 ")
+    newer_password = "saffron-meadow-25"
+    changed = quinns.post(
+        "/password", f"current={quinn['password']}", f"password={newer_password}", f"confirmation={newer_password}"
+    )
+    assert changed == f"303 https://{members}/account?password#change-password", changed
+    notice = wait_for_mail("quinn@example.org", changed_subject)
+    assert notice["text"].splitlines()[0] == "Hi quinn,", notice
+    client.fail(irc_command(**quinn))
+    assert " 903 " in irc(account="quinn", password=newer_password)

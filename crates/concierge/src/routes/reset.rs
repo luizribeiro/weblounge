@@ -18,9 +18,7 @@ use super::{ERGO_UNAVAILABLE, Layout, Link, UNSENT, internal_error, render, rend
 use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
-    db,
-    email::Email,
-    invite_rules, link_code,
+    db, invite_rules, link_code,
     name::MemberName,
     password_rules::{self, FieldErrors},
     rate_limit::{self, ClientAddress, MailRefusal, Recipient},
@@ -254,7 +252,14 @@ pub async fn reset(
     if let Err(error) = app.db.end_sessions(&taken.account).await {
         return internal_error("Ending a reset member's sessions", error);
     }
-    notify(&app, &taken.account, &taken.email).await;
+    reset_mail::notify_changed(
+        &app.outbox,
+        &taken.account,
+        &taken.email,
+        app.public_url.as_str(),
+        db::now(),
+    )
+    .await;
     let ended_here = visitor
         .0
         .as_ref()
@@ -264,22 +269,6 @@ pub async fn reset(
         (cookie, changed(&app)).into_response()
     } else {
         changed(&app)
-    }
-}
-
-/// Tells `account`'s confirmed address their password changed, in mail
-/// that carries no secret, so it waits for the mailer as it is.
-async fn notify(app: &App, account: &MemberName, email: &Email) {
-    let queued = match reset_mail::changed_message(account, email, app.public_url.as_str()) {
-        Ok(message) => app
-            .outbox
-            .queue(&message, db::now())
-            .await
-            .map_err(Into::into),
-        Err(error) => Err(error),
-    };
-    if let Err(error) = queued {
-        eprintln!("Queueing a password-changed email failed: {error}");
     }
 }
 

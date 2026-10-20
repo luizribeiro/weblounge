@@ -1,6 +1,7 @@
 use axum::http::header;
-use concierge::rate_limit::PER_ACCOUNT;
+use concierge::{rate_limit::PER_ACCOUNT, reset_mail};
 use ergo_api::fake::Failure;
+use outbox::Body;
 
 use crate::{PASSWORD, Site, body_text, location};
 
@@ -31,6 +32,14 @@ impl Site {
 async fn signed_in_alice() -> (Site, String) {
     let site = Site::start().await;
     site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    (site, cookie)
+}
+
+/// Alice, as `signed_in_alice` makes her, with her email confirmed.
+async fn signed_in_confirmed_alice() -> (Site, String) {
+    let site = Site::start().await;
+    site.add_verified_member("alice").await;
     let cookie = site.sign_in("alice").await;
     (site, cookie)
 }
@@ -99,8 +108,47 @@ async fn changes_the_password_and_ends_every_other_session_and_its_tokens() {
 }
 
 #[tokio::test]
-async fn a_wrong_current_password_changes_nothing() {
+async fn a_confirmed_members_change_tells_their_confirmed_address() {
+    let (site, cookie) = signed_in_confirmed_alice().await;
+
+    let response = site
+        .change_password(&cookie, PASSWORD, NEW_PASSWORD, NEW_PASSWORD)
+        .await;
+
+    assert_eq!(response.status(), 303);
+    let mail = site.mail().await;
+    let notices: Vec<_> = mail
+        .iter()
+        .filter(|message| message.subject == reset_mail::CHANGED_SUBJECT)
+        .collect();
+    let [notice] = notices[..] else {
+        panic!("one notice, got {mail:?}");
+    };
+    assert_eq!(notice.recipient, "someone@example.org");
+    assert!(matches!(notice.body, Body::Plain(_)), "{notice:?}");
+}
+
+#[tokio::test]
+async fn an_unconfirmed_members_change_sends_no_notice() {
     let (site, cookie) = signed_in_alice().await;
+
+    let response = site
+        .change_password(&cookie, PASSWORD, NEW_PASSWORD, NEW_PASSWORD)
+        .await;
+
+    assert_eq!(response.status(), 303);
+    let mail = site.mail().await;
+    assert!(
+        !mail
+            .iter()
+            .any(|message| message.subject == reset_mail::CHANGED_SUBJECT),
+        "{mail:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_wrong_current_password_changes_nothing() {
+    let (site, cookie) = signed_in_confirmed_alice().await;
     let phone = site.sign_in("alice").await;
     for current in ["not-the-password", ""] {
         let response = site
@@ -114,6 +162,7 @@ async fn a_wrong_current_password_changes_nothing() {
     }
     assert!(site.opens("alice", PASSWORD).await);
     assert!(site.session_expiry(&phone).await.is_some());
+    assert!(site.mail().await.is_empty());
 }
 
 #[tokio::test]
