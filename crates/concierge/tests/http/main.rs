@@ -6,6 +6,7 @@ mod bots;
 mod certificates;
 mod checks;
 mod clients;
+mod errors;
 mod home;
 mod invite;
 mod invites;

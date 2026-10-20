@@ -185,13 +185,10 @@ async fn only_built_assets_are_served() {
         "/assets/members.css",
         "/assets/..%2Fmanifest.json",
     ] {
-        assert_eq!(site.get(path, None).await.status(), 404, "{path}");
+        let response = site.get(path, None).await;
+        assert_eq!(response.status(), 404, "{path}");
+        assert_eq!(body_text(response).await, "", "{path}");
     }
-}
-
-#[tokio::test]
-async fn unknown_paths_are_not_found() {
-    assert_eq!(Site::start().await.get("/nope", None).await.status(), 404);
 }
 
 #[tokio::test]

@@ -3,7 +3,7 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
-      <section class="message">
+      <section class="{% if card %}card narrow{% else %}message{% endif %}">
         <p class="eyebrow">{{ eyebrow }}</p>
         <h1>{{ title }}</h1>
         {%- for line in lines %}

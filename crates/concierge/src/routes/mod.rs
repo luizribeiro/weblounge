@@ -18,14 +18,17 @@ use std::fmt::Display;
 
 use askama::Template;
 use axum::{
+    Extension,
+    extract::{Request, State},
     http::{HeaderValue, StatusCode, header},
+    middleware::Next,
     response::{Html, IntoResponse, Response},
 };
 
 use serde::Deserialize;
 
 use crate::{
-    app::App,
+    app::{App, AppState},
     assets::Assets,
     auth::Visitor,
     db::{self, Member},
@@ -140,6 +143,8 @@ struct Message<'a> {
     title: &'a str,
     lines: &'a [&'a str],
     next: Option<Link<'a>>,
+    /// Errors stand alone on a card, as the sign-in form does.
+    card: bool,
 }
 
 /// Where a page sends the reader next.
@@ -176,6 +181,7 @@ pub fn message_with_link(
         title,
         lines,
         next,
+        card: false,
     };
     render_with(status, &page)
 }
@@ -193,7 +199,56 @@ pub fn render_with(status: StatusCode, template: &impl Template) -> Response {
 
 /// What a page that doesn't exist answers.
 pub fn not_found() -> Response {
-    StatusCode::NOT_FOUND.into_response()
+    (StatusCode::NOT_FOUND, Extension(ErrorPage::NotFound)).into_response()
+}
+
+/// An error [`error_pages`] gives a page of its own.
+#[derive(Clone, Copy)]
+enum ErrorPage {
+    NotFound,
+}
+
+impl ErrorPage {
+    /// The page's eyebrow, title and line.
+    fn message(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::NotFound => (
+                "Not found",
+                "There's nothing here.",
+                "Check the address, or go back home.",
+            ),
+        }
+    }
+}
+
+/// Gives the errors handlers answer a page, for whoever asked: members
+/// keep their header and tabs. The errors' status and headers stay.
+pub async fn error_pages(State(app): State<AppState>, request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    let Some(&error) = response.extensions().get::<ErrorPage>() else {
+        return response;
+    };
+    let visitor = response.extensions().get::<Visitor>().cloned();
+    let (eyebrow, title, line) = error.message();
+    let page = Message {
+        layout: Layout::new(&app, visitor.as_ref().and_then(Visitor::nick)),
+        eyebrow,
+        title,
+        lines: &[line],
+        next: Some(Link {
+            href: Tab::Home.path(),
+            label: "Go home",
+        }),
+        card: true,
+    };
+    let (parts, body) = response.into_parts();
+    match page.render() {
+        Ok(html) => (parts, Html(html)).into_response(),
+        Err(error) => {
+            eprintln!("Rendering an error page failed: {error}");
+            Response::from_parts(parts, body)
+        }
+    }
 }
 
 /// Logs what failed, without anything about the request, and answers 500.

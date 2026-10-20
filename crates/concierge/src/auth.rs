@@ -41,7 +41,8 @@ impl Visitor {
 }
 
 /// Looks the session cookie up, renews the session at most once a day, and
-/// hands the result to the handler as a [`Visitor`].
+/// hands the result to the handler as a [`Visitor`], leaving it on the
+/// response too for [`crate::routes::error_pages`].
 pub async fn resolve(State(app): State<AppState>, mut request: Request, next: Next) -> Response {
     let now = db::now();
     let mut renewal = None;
@@ -66,8 +67,9 @@ pub async fn resolve(State(app): State<AppState>, mut request: Request, next: Ne
             })));
         }
     }
-    request.extensions_mut().insert(visitor);
+    request.extensions_mut().insert(visitor.clone());
     let mut response = next.run(request).await;
+    response.extensions_mut().insert(visitor);
     if let Some(cookie) = renewal
         && !response.headers().contains_key(header::SET_COOKIE)
     {

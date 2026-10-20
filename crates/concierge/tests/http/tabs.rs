@@ -61,9 +61,11 @@ async fn other_pages_show_members_the_tabs_with_none_open() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    let page = body_text(site.get("/rules", Some(&cookie)).await).await;
-    assert_eq!(tab_links(&page).len(), TABS.len(), "{page}");
-    assert_eq!(open_tab(&page), None, "{page}");
+    for path in ["/rules", "/no-such-page"] {
+        let page = body_text(site.get(path, Some(&cookie)).await).await;
+        assert_eq!(tab_links(&page).len(), TABS.len(), "{page}");
+        assert_eq!(open_tab(&page), None, "{page}");
+    }
 }
 
 #[tokio::test]

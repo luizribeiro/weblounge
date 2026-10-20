@@ -182,7 +182,11 @@ pub fn router(app: App) -> Router {
                 .layer(map_response(routes::no_store)),
         )
         .fallback(|| async { routes::not_found() })
-        .layer(middleware::from_fn_with_state(state.clone(), auth::resolve));
+        .layer(middleware::from_fn_with_state(state.clone(), auth::resolve))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            routes::error_pages,
+        ));
     // The web client calls these from its own origin, so they sit outside
     // the guard for our pages; the token endpoint takes posts from that
     // origin alone, and PKCE and single-use codes protect it.
