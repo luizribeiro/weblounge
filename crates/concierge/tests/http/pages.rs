@@ -200,3 +200,18 @@ async fn guests_asking_for_the_account_home_are_sent_to_sign_in() {
     let response = site.get("/?saved", None).await;
     assert_eq!(location(&response), "/signin?next=%2F%3Fsaved");
 }
+
+#[tokio::test]
+async fn privacy_says_uploads_are_public_by_link_stripped_and_kept_thirty_days() {
+    let page = body_text(Site::start().await.get("/privacy", None).await).await;
+    for promise in [
+        "<h2>Uploads</h2>",
+        "is public to anyone with its link.",
+        "Where and when a photo was taken, the camera and anything else stored in the file are removed",
+        "never where from.",
+        "Uploads are deleted after 30 days, and you can delete them sooner on your Uploads tab.",
+        "your email, sessions, uploads and bots go",
+    ] {
+        assert!(page.contains(promise), "{promise}: {page}");
+    }
+}
