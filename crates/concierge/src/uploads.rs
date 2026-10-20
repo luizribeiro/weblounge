@@ -93,9 +93,9 @@ impl Store {
             .map_err(HandOffError::from)
     }
 
-    /// Deletes `upload`'s file, unless it's gone already.
-    pub fn remove_file(&self, upload: &Upload) -> io::Result<()> {
-        match std::fs::remove_file(self.directory.join(upload.file_name())) {
+    /// Deletes the file named `file_name`, unless it's gone already.
+    pub fn remove_file(&self, file_name: &str) -> io::Result<()> {
+        match std::fs::remove_file(self.directory.join(file_name)) {
             Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
             _ => Ok(()),
         }
@@ -106,7 +106,7 @@ impl Store {
     /// owner's Uploads tab to delete again.
     pub async fn delete(&self, db: &Db, uploads: &[Upload]) -> anyhow::Result<()> {
         for upload in uploads {
-            self.remove_file(upload)?;
+            self.remove_file(&upload.file_name())?;
             db.delete_upload(&upload.id).await?;
         }
         Ok(())
@@ -225,7 +225,7 @@ mod tests {
             db.insert_upload(&upload, i64::MAX).await.unwrap();
         }
         let uploads = db.uploads_of(&alice).await.unwrap();
-        store.remove_file(&uploads[0]).unwrap();
+        store.remove_file(&uploads[0].file_name()).unwrap();
 
         store.delete(&db, &uploads).await.unwrap();
 

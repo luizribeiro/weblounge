@@ -20,6 +20,7 @@ mod signin;
 mod signup;
 mod tabs;
 mod tree;
+mod upload;
 mod verify;
 
 use std::path::Path;
@@ -79,7 +80,7 @@ struct Site {
     /// What requests left running when they answered.
     background: Background,
     /// Takes the uploads the site hands over.
-    _scrubber: FakeScrubber,
+    scrubber: FakeScrubber,
 }
 
 impl Site {
@@ -144,7 +145,7 @@ impl Site {
             ergo: fake,
             state,
             background,
-            _scrubber: scrubber,
+            scrubber,
         }
     }
 

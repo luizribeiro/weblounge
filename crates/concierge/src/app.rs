@@ -221,6 +221,9 @@ pub fn router(app: App) -> Router {
             routes::oauth::INTROSPECTION_PATH,
             post(routes::oauth::introspect).layer(map_response(routes::no_store)),
         )
+        // IRC clients post uploads with the credentials they log in with,
+        // through files.weblounge.org alone; nginx keeps it off this site.
+        .route(routes::upload::PATH, post(routes::upload::upload))
         .with_state(state);
     // Pages reload themselves when the dev loop restarts concierge.
     #[cfg(debug_assertions)]

@@ -12,6 +12,7 @@ pub mod password;
 pub mod presence;
 pub mod reset;
 pub mod signin;
+pub mod upload;
 pub mod verify;
 
 use std::fmt::Display;
