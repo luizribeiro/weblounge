@@ -60,6 +60,27 @@ with subtest("join.weblounge.org sends invite links on to the invite page, and n
     lost = error_page("join.weblounge.org", "/invite", 404)
     assert '<a href="https://weblounge.org/">Back to weblounge.org →</a>' in lost, lost
 
+with subtest("concierge answers unknown paths with its own not-found page"):
+    lost = https(members, "/no-such-page", "-w", "\n%{http_code}")
+    assert lost.endswith("\n404") and "<h1>There&#39;s nothing here.</h1>" in lost, lost
+    assert re.search(r'href="/assets/members-[A-Z0-9]+\.css"', lost), lost
+
+with subtest("introspection stays nginx's bare 404 from outside, error pages or not"):
+    for flags in [[], ["-d", "token=x"]]:
+        response = https(members, "/oauth/introspect", "-i", *flags)
+        assert response.startswith("HTTP/2 404") and "<center>nginx</center>" in response, response
+        assert "_error" not in response, response
+
+with subtest("while concierge is down, nginx says it's back in a moment, and it's back once it starts"):
+    credenza.systemctl("stop concierge.service")
+    down = error_page(members, "/account?saved", 502)
+    assert "<h1>Back in a moment.</h1>" in down, down
+    assert '<a class="button button-primary" href="">Try again</a>' in down, down
+    assert "<script" not in down and "Sign in" not in down, down
+    credenza.systemctl("start concierge.service")
+    credenza.wait_for_open_port(8080)
+    assert "Sign in." in https(members, "/signin", "-f")
+
 with subtest("concierge's release build carries no live-reload code"):
     assert "livereload" not in page, page
     credenza.fail("grep -aq tower-livereload /proc/$(systemctl show -P MainPID concierge)/exe")

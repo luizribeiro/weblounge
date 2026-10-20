@@ -193,26 +193,33 @@ in
 
     environment.systemPackages = [ admin ];
 
-    services.nginx.virtualHosts.${hostName} = {
-      enableACME = true;
-      forceSSL = true;
-      # Signup and password forms fetch the password rules and nick
-      # availability as members type.
-      extraConfig = config.weblounge.nginx.securityHeaders { connect-src = "'self'"; };
-      locations."/" = {
-        proxyPass = "http://${cfg.listen}";
-        # Concierge trusts X-Real-IP for its sign-in limits, so nginx sets it
-        # from the connection, replacing anything the client sent. The
-        # recommended settings would add X-Forwarded-For too, which nothing
-        # reads.
-        recommendedProxySettings = false;
-        extraConfig = ''
-          proxy_set_header X-Real-IP $remote_addr;
-        '';
-      };
-      # Only Ergo introspects tokens, on loopback.
-      locations."= /oauth/introspect".return = "404";
-    };
+    services.nginx.virtualHosts.${hostName} = lib.mkMerge [
+      # While concierge is down or stuck. The page keeps nginx's status,
+      # which tells a 502's refused connection from a 504's timeout to
+      # deploy checks and logs. Concierge's own errors pass through, and it
+      # answers its own 404s, so the bare one below stays bare.
+      (config.weblounge.nginx.errorPages { "502 503 504" = "down.html"; })
+      {
+        enableACME = true;
+        forceSSL = true;
+        # Signup and password forms fetch the password rules and nick
+        # availability as members type.
+        extraConfig = config.weblounge.nginx.securityHeaders { connect-src = "'self'"; };
+        locations."/" = {
+          proxyPass = "http://${cfg.listen}";
+          # Concierge trusts X-Real-IP for its sign-in limits, so nginx sets it
+          # from the connection, replacing anything the client sent. The
+          # recommended settings would add X-Forwarded-For too, which nothing
+          # reads.
+          recommendedProxySettings = false;
+          extraConfig = ''
+            proxy_set_header X-Real-IP $remote_addr;
+          '';
+        };
+        # Only Ergo introspects tokens, on loopback.
+        locations."= /oauth/introspect".return = "404";
+      }
+    ];
 
     # Invite links' short home. Browsers carry the code in the fragment
     # across the redirect, and never send it here.
