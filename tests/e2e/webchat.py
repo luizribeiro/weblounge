@@ -17,6 +17,7 @@ if TYPE_CHECKING:
         concierge_admin,
         concierge_sql,
         ergo_api,
+        error_page,
         https,
         irc,
         irc_command,
@@ -123,6 +124,12 @@ with subtest("gamja wears the network's favicon"):
     icon = https("irc.weblounge.org", "/favicon.svg", "-f", "-w", "\n%{content_type}")
     svg, content_type = icon.rsplit("\n", 1)
     assert content_type == "image/svg+xml" and 'id="mark"' in svg, icon
+
+with subtest("unknown paths on irc.weblounge.org get the not-found page, gamja's CSP and all"):
+    lost = error_page("irc.weblounge.org", "/no-such-page", 404)
+    assert '<a href="https://weblounge.org/">Back to weblounge.org →</a>' in lost, lost
+    headers = https("irc.weblounge.org", "/no-such-page", "-I").lower()
+    assert f"connect-src 'self' wss://irc.weblounge.org/socket https://{members};" in headers, headers
 
 with subtest("gamja's CSP lets it reach Ergo's WebSocket and concierge, and nothing else"):
     headers = https("irc.weblounge.org", "/", "-fI").lower()
