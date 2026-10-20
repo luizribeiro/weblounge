@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id: UploadId\", account, owner AS \"owner: MemberName\",\n                      content_type, size, created_at\n               FROM uploads WHERE created_at < ?",
+  "query": "SELECT id AS \"id: UploadId\", account, owner AS \"owner: MemberName\",\n                      content_type, size, created_at\n               FROM uploads WHERE created_at <= ?",
   "describe": {
     "columns": [
       {
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "b574398e995908c0c87c447e68d9819783e4bf44e39faa74fe55730fc5569b3a"
+  "hash": "3e2e7249a4b8c2d26c5bd96764816661036e3bb9dc2b5adb4abb1bd9bbf25af5"
 }

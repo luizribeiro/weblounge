@@ -123,14 +123,14 @@ impl Db {
         Ok(uploads(rows))
     }
 
-    /// The uploads made before `before`.
-    pub async fn uploads_before(&self, before: i64) -> sqlx::Result<Vec<Upload>> {
+    /// The uploads made at or before `at`.
+    pub async fn uploads_made_by(&self, at: i64) -> sqlx::Result<Vec<Upload>> {
         let rows = sqlx::query_as!(
             Row,
             r#"SELECT id AS "id: UploadId", account, owner AS "owner: MemberName",
                       content_type, size, created_at
-               FROM uploads WHERE created_at < ?"#,
-            before
+               FROM uploads WHERE created_at <= ?"#,
+            at
         )
         .fetch_all(&self.pool)
         .await?;
@@ -335,10 +335,10 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        assert_eq!(ids(db.uploads_before(200).await.unwrap()), [ALICES]);
+        assert_eq!(ids(db.uploads_made_by(199).await.unwrap()), [ALICES]);
         let mut all = vec![ALICES, MARVINS, LUIZS];
         all.sort();
-        assert_eq!(ids(db.uploads_before(301).await.unwrap()), all);
+        assert_eq!(ids(db.uploads_made_by(300).await.unwrap()), all);
         let mut every_id: Vec<_> = db.upload_ids().await.unwrap();
         every_id.sort_by(|a, b| a.as_str().cmp(b.as_str()));
         assert_eq!(

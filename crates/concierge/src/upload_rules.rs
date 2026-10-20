@@ -36,8 +36,8 @@ pub fn expires_at(created_at: i64) -> i64 {
     created_at + RETENTION
 }
 
-/// The uploads made before this are deleted by `now`.
-pub fn expired_before(now: i64) -> i64 {
+/// The uploads made at or before this have expired by `now`.
+pub fn expired_by(now: i64) -> i64 {
     now - RETENTION
 }
 
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn uploads_stay_thirty_days() {
         assert_eq!(expires_at(CREATED), CREATED + 30 * DAY);
-        assert_eq!(expired_before(CREATED + 30 * DAY), CREATED);
+        assert_eq!(expired_by(CREATED + 30 * DAY), CREATED);
     }
 
     #[test]

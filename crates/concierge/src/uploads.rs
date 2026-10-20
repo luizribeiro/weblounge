@@ -137,7 +137,7 @@ impl Store {
     /// and the files older than [`STRAY_AGE`] at `clock` that no row
     /// stands for.
     pub async fn expire(&self, db: &Db, now: i64, clock: SystemTime) -> anyhow::Result<Expiry> {
-        let expired = db.uploads_before(upload_rules::expired_before(now)).await?;
+        let expired = db.uploads_made_by(upload_rules::expired_by(now)).await?;
         self.delete(db, &expired).await?;
         let recorded: HashSet<_> = db.upload_ids().await?.into_iter().collect();
         let mut strays = 0;
