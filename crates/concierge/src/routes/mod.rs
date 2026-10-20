@@ -191,6 +191,11 @@ pub fn render_with(status: StatusCode, template: &impl Template) -> Response {
     }
 }
 
+/// What a page that doesn't exist answers.
+pub fn not_found() -> Response {
+    StatusCode::NOT_FOUND.into_response()
+}
+
 /// Logs what failed, without anything about the request, and answers 500.
 pub fn internal_error(what: &str, error: impl Display) -> Response {
     eprintln!("{what} failed: {error}");

@@ -16,7 +16,8 @@ use ergo_api::Passphrase;
 use serde::Deserialize;
 
 use super::{
-    ERGO_UNAVAILABLE, Layout, Tab, internal_error, render, render_with, verify::Unconfirmed,
+    ERGO_UNAVAILABLE, Layout, Tab, internal_error, not_found, render, render_with,
+    verify::Unconfirmed,
 };
 use crate::{
     app::{App, AppState},
@@ -301,7 +302,7 @@ async fn owned_bot(app: &App, member: &Member, name: &str) -> sqlx::Result<Optio
 async fn owned_or_not_found(app: &App, member: &Member, name: &str) -> Result<Bot, Response> {
     match owned_bot(app, member, name).await {
         Ok(Some(bot)) => Ok(bot),
-        Ok(None) => Err(StatusCode::NOT_FOUND.into_response()),
+        Ok(None) => Err(not_found()),
         Err(error) => Err(internal_error("Looking up a bot", error)),
     }
 }

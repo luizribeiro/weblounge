@@ -4,11 +4,10 @@
 use askama::Template;
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
-    response::{IntoResponse, Response},
+    response::Response,
 };
 
-use super::{Layout, certificates::Certificates, render};
+use super::{Layout, certificates::Certificates, not_found, render};
 use crate::{
     app::AppState,
     auth::Visitor,
@@ -57,7 +56,7 @@ pub async fn show(
     Path(slug): Path<String>,
 ) -> Response {
     let Some(client) = clients::by_slug(&slug) else {
-        return StatusCode::NOT_FOUND.into_response();
+        return not_found();
     };
     let nick = visitor.nick();
     render(&Guide {
