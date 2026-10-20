@@ -10,6 +10,7 @@ use crate::{
     name::{BotName, MemberName},
     nick::{self, InvalidNick, Nick},
     password,
+    uploads::Store,
 };
 
 /// What bot changes work with.
@@ -19,6 +20,8 @@ pub struct Bots<'a> {
     /// How long Ergo keeps chat history, in seconds, which deleted bots'
     /// names wait out before others may take them.
     pub history_expiry: i64,
+    /// Where bots' uploads are, which go with them.
+    pub uploads: &'a Store,
 }
 
 /// Why a bot wasn't created, in terms its owner can act on.
@@ -138,10 +141,12 @@ impl Bots<'_> {
         password::set_generated(self.ergo, account).await
     }
 
-    /// Erases the live bot `account` in Ergo, which disconnects it and
-    /// frees the name there, and marks it deleted. An account Ergo has no
-    /// record of was erased already.
+    /// Deletes the live bot `account`'s uploads, erases it in Ergo, which
+    /// disconnects it and frees the name there, and marks it deleted. An
+    /// account Ergo has no record of was erased already.
     pub async fn remove(&self, account: &BotName) -> anyhow::Result<()> {
+        let uploads = self.db.uploads_by(account).await?;
+        self.uploads.delete(self.db, &uploads).await?;
         let _: Erasure = self
             .ergo
             .erase(account)

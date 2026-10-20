@@ -871,3 +871,25 @@ async fn the_old_password_stays_when_ergo_fails() {
     assert!(passwords(&page).is_empty(), "{page}");
     assert!(signs_in_to_ergo(&site, "bender", &password).await);
 }
+
+#[tokio::test]
+async fn deleting_a_bot_deletes_its_uploads_and_leaves_its_owners() {
+    let site = Site::start().await;
+    site.alice_and_marvin().await;
+    let cookie = site.sign_in("alice").await;
+    let mut links = Vec::new();
+    for uploader in ["alice", "Marvin"] {
+        let basic = crate::upload::basic(uploader, crate::PASSWORD);
+        let response = site.upload(crate::upload::PNG, Some(&basic)).await;
+        assert_eq!(response.status(), 201);
+        links.push(location(&response).to_owned());
+    }
+
+    let response = site.post("/bots/Marvin/delete", &[], Some(&cookie)).await;
+
+    assert_eq!(response.status(), 303);
+    let [stored] = site.scrubber.stored().try_into().unwrap();
+    assert!(links[0].ends_with(&format!("/{stored}")), "{links:?}");
+    let rows: i64 = site.query_scalar("SELECT COUNT(*) FROM uploads").await;
+    assert_eq!(rows, 1);
+}

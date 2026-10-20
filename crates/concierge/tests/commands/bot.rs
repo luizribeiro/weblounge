@@ -749,3 +749,24 @@ mod list {
         assert_eq!(error.to_string(), "nobody is not a member");
     }
 }
+
+#[tokio::test]
+async fn deleting_a_bot_deletes_its_uploads_and_leaves_its_owners() {
+    let fixture = Fixture::start().await;
+    fixture.add_member("alice", None).await;
+    fixture
+        .run(&["bot", "create", "alice", "Marvin"])
+        .await
+        .unwrap();
+    fixture
+        .add_upload("AAAAAAAAAAAAAAAAAAAAAA", "alice", "alice", 1)
+        .await;
+    fixture
+        .add_upload("BBBBBBBBBBBBBBBBBBBBBB", "Marvin", "alice", 2)
+        .await;
+
+    fixture.run(&["bot", "delete", "marvin"]).await.unwrap();
+
+    let alices = vec!["AAAAAAAAAAAAAAAAAAAAAA".to_owned()];
+    assert_eq!(fixture.uploads_left().await, (alices.clone(), alices));
+}

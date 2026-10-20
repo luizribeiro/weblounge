@@ -289,6 +289,7 @@ fn bots(app: &App) -> Bots<'_> {
         db: &app.db,
         ergo: &app.ergo,
         history_expiry: app.history_expiry,
+        uploads: &app.uploads,
     }
 }
 

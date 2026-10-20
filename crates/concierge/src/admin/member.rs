@@ -15,9 +15,9 @@ pub enum MemberCommand {
     /// Give a member a new generated password, end their sessions, and print
     /// the password once.
     ResetPassword { account: String },
-    /// Lock a member out of IRC, remove their personal data, sessions and
-    /// bots, and revoke their open invites, keeping their place in the
-    /// invite tree.
+    /// Lock a member out of IRC, remove their personal data, sessions,
+    /// uploads and bots, and revoke their open invites, keeping their
+    /// place in the invite tree.
     Delete { account: String },
     /// List Ergo accounts that are neither members nor bots, members and
     /// bots Ergo lacks, removed ones whose accounts are still to be erased,
@@ -61,6 +61,8 @@ async fn delete(admin: &Admin, name: &str) -> anyhow::Result<String> {
     for bot in admin.db.bots(Some(account)).await? {
         bots_removed += &bot::remove(admin, &bot.account).await?;
     }
+    let uploads = admin.db.uploads_of(account).await?;
+    admin.config.uploads.delete(&admin.db, &uploads).await?;
     password::set_generated(&admin.ergo, account).await?;
     let mail = admin.outbox.delete_for(account.as_str()).await?;
     let removal = admin.db.remove_member(account, db::now()).await?;

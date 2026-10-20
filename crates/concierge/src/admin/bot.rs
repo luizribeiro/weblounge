@@ -75,6 +75,7 @@ impl Admin {
             db: &self.db,
             ergo: &self.ergo,
             history_expiry: self.config.history_expiry,
+            uploads: &self.config.uploads,
         }
     }
 }

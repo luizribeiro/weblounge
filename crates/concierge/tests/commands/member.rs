@@ -465,3 +465,28 @@ mod send_verification {
         );
     }
 }
+
+#[tokio::test]
+async fn deleting_a_member_deletes_their_uploads_and_their_bots() {
+    let fixture = Fixture::start().await;
+    fixture.add_member("alice", None).await;
+    fixture.add_member("bob", None).await;
+    fixture
+        .run(&["bot", "create", "alice", "Marvin"])
+        .await
+        .unwrap();
+    fixture
+        .add_upload("AAAAAAAAAAAAAAAAAAAAAA", "alice", "alice", 1)
+        .await;
+    fixture
+        .add_upload("BBBBBBBBBBBBBBBBBBBBBB", "Marvin", "alice", 2)
+        .await;
+    fixture
+        .add_upload("CCCCCCCCCCCCCCCCCCCCCC", "bob", "bob", 3)
+        .await;
+
+    fixture.run(&["member", "delete", "alice"]).await.unwrap();
+
+    let bobs = vec!["CCCCCCCCCCCCCCCCCCCCCC".to_owned()];
+    assert_eq!(fixture.uploads_left().await, (bobs.clone(), bobs));
+}

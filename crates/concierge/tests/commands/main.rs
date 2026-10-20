@@ -111,6 +111,34 @@ impl Fixture {
         pool.close().await;
     }
 
+    /// An upload by `account`, counted against `owner`, made at
+    /// `created_at`, with its file as the scrubber stores it.
+    async fn add_upload(&self, id: &str, account: &str, owner: &str, created_at: i64) {
+        let file = self.config.uploads.directory.join(format!("{id}.png"));
+        std::fs::write(file, "a scrubbed screenshot").unwrap();
+        self.execute(&format!(
+            "INSERT INTO uploads (id, account, owner, content_type, size, created_at)
+             VALUES ('{id}', '{account}', '{owner}', 'image/png', 21, {created_at})"
+        ))
+        .await;
+    }
+
+    /// The ids of the uploads left, files and rows, in order.
+    async fn uploads_left(&self) -> (Vec<String>, Vec<String>) {
+        let files = self.scrubber.stored();
+        let files = files
+            .iter()
+            .map(|file| file.trim_end_matches(".png").to_owned());
+        let url = format!("sqlite://{}", self.config.database_path().display());
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        let rows = sqlx::query_scalar("SELECT id FROM uploads ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        (files.collect(), rows)
+    }
+
     async fn db(&self) -> Db {
         Db::open(&self.config.database_path()).await.unwrap()
     }

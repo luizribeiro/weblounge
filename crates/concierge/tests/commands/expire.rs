@@ -1,8 +1,11 @@
 use std::process::{Command, Output};
 
-use concierge::{db, name::MemberName, upload_rules::RETENTION};
+use concierge::{db, upload_rules::RETENTION};
 
 use crate::Fixture;
+
+const OLD: &str = "AAAAAAAAAAAAAAAAAAAAAA";
+const NEW: &str = "BBBBBBBBBBBBBBBBBBBBBB";
 
 /// `concierge expire-uploads` with only what its unit sets.
 fn expire(fixture: &Fixture) -> Output {
@@ -21,17 +24,8 @@ async fn deletes_the_uploads_past_their_days_and_logs_how_many() {
     let fixture = Fixture::start().await;
     fixture.insert_member("alice", None).await;
     let old = db::now() - RETENTION - 1;
-    let ids = ["AAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBB"];
-    for (id, created_at) in ids.iter().zip([old, db::now()]) {
-        let upload = fixture.config.uploads.directory.join(format!("{id}.jpg"));
-        std::fs::write(upload, "a scrubbed photo").unwrap();
-        fixture
-            .execute(&format!(
-                "INSERT INTO uploads (id, account, owner, content_type, size, created_at)
-                 VALUES ('{id}', 'alice', 'alice', 'image/jpeg', 16, {created_at})"
-            ))
-            .await;
-    }
+    fixture.add_upload(OLD, "alice", "alice", old).await;
+    fixture.add_upload(NEW, "alice", "alice", db::now()).await;
 
     let output = expire(&fixture);
 
@@ -41,14 +35,8 @@ async fn deletes_the_uploads_past_their_days_and_logs_how_many() {
         log,
         "Deleted 1 uploads past their days and 0 files without one\n"
     );
-    assert_eq!(fixture.scrubber.stored(), ["BBBBBBBBBBBBBBBBBBBBBB.jpg"]);
-    let left = fixture
-        .db()
-        .await
-        .uploads_of(&MemberName::new("alice"))
-        .await
-        .unwrap();
-    assert_eq!(left.len(), 1);
+    let left = vec![NEW.to_owned()];
+    assert_eq!(fixture.uploads_left().await, (left.clone(), left));
 }
 
 #[test]
