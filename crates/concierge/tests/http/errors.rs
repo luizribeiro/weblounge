@@ -1,9 +1,9 @@
 //! The pages concierge's errors get.
 
 use axum::response::Response;
-use concierge::assets::Assets;
+use concierge::{assets::Assets, db, session};
 
-use crate::{Site, body_text};
+use crate::{Site, body_text, session_cookie};
 
 const NOT_FOUND: &str = r#"<section class="card narrow">
         <p class="eyebrow">Not found</p>
@@ -50,6 +50,19 @@ async fn members_get_the_card_under_their_own_header() {
         "{page}"
     );
     assert!(page.contains("Sign out"), "{page}");
+}
+
+#[tokio::test]
+async fn the_card_keeps_a_renewed_session_cookie() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let hash = site.session_hash(&cookie).await;
+    let two_days_old = session::expires_at(db::now()) - 2 * 24 * 60 * 60;
+    site.db.renew_session(&hash, two_days_old).await.unwrap();
+    let response = site.get("/no-such-page", Some(&cookie)).await;
+    assert_eq!(session_cookie(&response).as_deref(), Some(cookie.as_str()));
+    assert!(error_page(response, 404).await.contains(NOT_FOUND));
 }
 
 #[tokio::test]
