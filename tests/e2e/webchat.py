@@ -153,12 +153,13 @@ with subtest("in a browser, a signed-in member opens irc.weblounge.org and lands
     page = client.succeed(f"webchat-browser {grace['account']} {shlex.quote(grace['password'])} 2>&1")
     assert "#lounge" in page, page
 
-with subtest("in a browser, pasting an image into gamja's composer, on a phone or a desktop, puts its link there"):
-    paste = ["webchat-paste-browser", grace["account"], grace["password"], f"{fixtures}/photo.png"]
+with subtest("in a browser, pasting an image or picking one with gamja's upload button puts its link in the composer"):
+    paste = ["webchat-upload-browser", grace["account"], grace["password"], f"{fixtures}/photo.png"]
     links = json.loads(client.succeed(shlex.join(paste)))
-    assert set(links) == {"phone", "desktop"}, links
-    for width, link in links.items():
-        assert re.fullmatch(rf"https://{files_host}/[A-Za-z0-9_-]{{22}}\.png", link), (width, link)
+    ways = {f"{width} {how}" for width in ["phone", "desktop"] for how in ["paste", "button"]}
+    assert set(links) == ways and len(set(links.values())) == len(ways), links
+    for way, link in links.items():
+        assert re.fullmatch(rf"https://{files_host}/[A-Za-z0-9_-]{{22}}\.png", link), (way, link)
         assert get_file(link)["status"] == 200, link
 
 with subtest("gamja shows each line once when one arrives while it catches up after a reconnect"):
