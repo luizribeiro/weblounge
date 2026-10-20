@@ -69,6 +69,10 @@ async fn the_form_lets_password_managers_update_the_saved_password() {
         page.contains(r#"data-password-rules="/password-rules.json""#),
         "{page}"
     );
+    assert!(
+        page.contains("IRC apps that are connected now stay connected."),
+        "{page}"
+    );
 }
 
 // Bitwarden takes the username from a field before the password, and would

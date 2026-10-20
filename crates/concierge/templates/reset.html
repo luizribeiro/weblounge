@@ -13,7 +13,7 @@
         <form class="form" method="post" action="{{ crate::reset_mail::RESET_PATH }}">
           {%- call components::link_code_field(code_pattern, code) %}{% endcall %}
           {%- call components::new_password("New password", password) %}{% endcall %}
-          <p class="hint">This signs you out of this site and the web client everywhere. IRC apps that are connected now stay connected, and logins with a client certificate keep working.</p>
+          <p class="hint">This signs you out of this site and the web client everywhere. {% call components::irc_stays_connected() %}{% endcall %}, and logins with a client certificate keep working.</p>
           <button class="button button-primary" type="submit">Set my password</button>
         </form>
       </section>

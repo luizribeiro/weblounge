@@ -20,6 +20,7 @@
             {%- endif %}
           </div>
           {%- call components::new_password("New password", password.new) %}{% endcall %}
+          <p class="hint">{% call components::irc_stays_connected() %}{% endcall %}.</p>
           <button class="button button-primary" type="submit">Change password</button>
         </form>
       </section>

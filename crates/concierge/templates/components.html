@@ -136,6 +136,11 @@
 by <time class="deadline" datetime="{{ due.date }}">{{ due.day }}</time>
 {%- endmacro %}
 
+{# Shared so the reset page and the Account tab can't say this differently. #}
+{% macro irc_stays_connected() -%}
+IRC apps that are connected now stay connected
+{%- endmacro %}
+
 {% macro send_link_form() %}
         <form id="send-link" method="post" action="/verification-link"></form>
 {%- endmacro %}
