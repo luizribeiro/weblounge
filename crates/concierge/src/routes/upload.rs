@@ -157,12 +157,12 @@ pub async fn upload(
         }
         Err(error) => return unavailable("Checking an uploader's credentials", error),
     };
-    let account = uploader.account().to_owned();
+    let account = uploader.account();
     let announced = content_length(&headers);
     if announced.is_some_and(|length| length > upload_rules::MAX_BYTES) {
         return too_large();
     }
-    if !app.recent_uploads.allows(&account, Instant::now()) {
+    let Some(reservation) = app.recent_uploads.reserve(account, Instant::now()) else {
         return plain(
             StatusCode::TOO_MANY_REQUESTS,
             &format!(
@@ -170,7 +170,7 @@ pub async fn upload(
                 upload_rules::PER_HOUR
             ),
         );
-    }
+    };
     match app.db.upload_usage(&uploader.owner).await {
         Ok(used) if !upload_rules::fits(used, announced.unwrap_or(0)) => return no_room(),
         Ok(_) => {}
@@ -210,7 +210,7 @@ pub async fn upload(
     }
     match inserted {
         Ok(true) => {
-            app.recent_uploads.record(&account, Instant::now());
+            reservation.keep();
             created(&app, &file_name)
         }
         Ok(false) => no_room(),

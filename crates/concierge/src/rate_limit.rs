@@ -138,15 +138,44 @@ impl Default for UploadLimiter {
 }
 
 impl UploadLimiter {
-    /// Whether `account` may upload another now.
-    pub fn allows(&self, account: &str, now: Instant) -> bool {
-        self.stored
-            .under(&account.to_ascii_lowercase(), upload_rules::PER_HOUR, now)
+    /// Counts an upload `account` is about to make, if the hour has room
+    /// for it, so uploads at once can't all take the last of it. The count
+    /// is given back unless the upload is stored and its reservation kept.
+    pub fn reserve(&self, account: &str, now: Instant) -> Option<Reservation<'_>> {
+        let account = account.to_ascii_lowercase();
+        let taken = self
+            .stored
+            .take(account.clone(), upload_rules::PER_HOUR, now);
+        taken.then(|| Reservation {
+            limiter: self,
+            account,
+            at: now,
+            kept: false,
+        })
     }
+}
 
-    /// Counts an upload `account` stored, so refused ones don't count.
-    pub fn record(&self, account: &str, now: Instant) {
-        self.stored.record(account.to_ascii_lowercase(), now);
+/// An upload counted against its account's hour, until it's dropped
+/// without being kept.
+pub struct Reservation<'a> {
+    limiter: &'a UploadLimiter,
+    account: String,
+    at: Instant,
+    kept: bool,
+}
+
+impl Reservation<'_> {
+    /// Keeps the upload counted: it was stored.
+    pub fn keep(mut self) {
+        self.kept = true;
+    }
+}
+
+impl Drop for Reservation<'_> {
+    fn drop(&mut self) {
+        if !self.kept {
+            self.limiter.stored.forget_one(&self.account, self.at);
+        }
     }
 }
 
@@ -386,14 +415,24 @@ mod tests {
     fn an_account_stores_its_hourly_uploads_whatever_its_owner_does() {
         let (uploads, start) = (UploadLimiter::default(), Instant::now());
         for _ in 0..upload_rules::PER_HOUR {
-            assert!(uploads.allows("Marvin", start));
-            uploads.record("Marvin", start);
+            uploads.reserve("Marvin", start).unwrap().keep();
         }
-        assert!(!uploads.allows("marvin", start));
-        assert!(uploads.allows("alice", start));
+        assert!(uploads.reserve("marvin", start).is_none());
+        assert!(uploads.reserve("alice", start).is_some());
         let almost = start + HOUR - Duration::from_secs(1);
-        assert!(!uploads.allows("MARVIN", almost));
-        assert!(uploads.allows("marvin", start + HOUR));
+        assert!(uploads.reserve("MARVIN", almost).is_none());
+        assert!(uploads.reserve("marvin", start + HOUR).is_some());
+    }
+
+    #[test]
+    fn uploads_under_way_hold_their_place_and_refused_ones_give_it_back() {
+        let (uploads, now) = (UploadLimiter::default(), Instant::now());
+        let under_way: Vec<_> = (0..upload_rules::PER_HOUR)
+            .map(|_| uploads.reserve("alice", now).unwrap())
+            .collect();
+        assert!(uploads.reserve("alice", now).is_none());
+        drop(under_way);
+        assert!(uploads.reserve("alice", now).is_some());
     }
 
     #[test]
