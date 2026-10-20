@@ -264,6 +264,19 @@ with subtest("the mailer sees the outbox, the store and /etc, and none of creden
     credenza.fail(f"as-concierge-mailer bash -c 'cp {true_binary} /tmp/true && /tmp/true'")
     credenza.succeed("systemd-analyze security --threshold=11 --no-pager concierge-mailer.service")
 
+with subtest("the scrubber sees the uploads and the store alone, and can't reach anything"):
+    assert credenza.succeed("as-concierge-scrubber ls /var/lib").split() == ["concierge-files"]
+    for path in ["/var/lib/concierge", "/var/lib/concierge-outbox", "/run/credentials", in_ram, "/var/log"]:
+        credenza.fail(f"as-concierge-scrubber test -e {path}")
+    credenza.succeed("as-concierge-scrubber touch /var/lib/concierge-files/.probe")
+    credenza.succeed("rm /var/lib/concierge-files/.probe")
+    for family, address in [("AF_INET", "('127.0.0.1', 8080)"), ("AF_UNIX", "'/run/concierge-scrubber.sock'")]:
+        connect = shlex.quote(f"import socket; socket.socket(socket.{family}).connect({address})")
+        credenza.fail(f"as-concierge-scrubber {tools['python3']} -c {connect}")
+    analysis = credenza.succeed("systemd-analyze security --threshold=10 --no-pager concierge-scrubber@probe.service")
+    for setting in ["PrivateNetwork=", "RestrictAddressFamilies=~AF_(INET|INET6)", "RestrictAddressFamilies=~AF_UNIX"]:
+        assert f"✓ {setting} " in analysis, (setting, analysis)
+
 with subtest("concierge and its mailer share the outbox alone: neither sees the other's state or credentials"):
     credenza.wait_for_unit("concierge-mailer.service")
     uids = {

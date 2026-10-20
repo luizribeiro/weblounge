@@ -58,7 +58,7 @@ let
   };
 in
 {
-  imports = [ ./ergo.nix ./loopback.nix ./nginx.nix ./sandbox.nix ./secrets.nix ./sqlite-vacuum.nix ];
+  imports = [ ./ergo.nix ./files.nix ./loopback.nix ./nginx.nix ./sandbox.nix ./secrets.nix ./sqlite-vacuum.nix ];
 
   options.weblounge.concierge.publicUrl = lib.mkOption {
     type = lib.types.str;

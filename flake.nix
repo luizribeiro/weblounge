@@ -45,7 +45,7 @@
 
       packages = lib.recursiveUpdate weblounge.vmPackages
         (forEachSystem (pkgs: {
-          inherit (pkgs.weblounge) web concierge mailer;
+          inherit (pkgs.weblounge) web concierge mailer scrubber;
           dnsconfig = dnsconfig pkgs;
         }));
 

@@ -11,20 +11,26 @@ in
 vmTest {
   credenza = { config, lib, pkgs, ... }:
     let
-      # as-<unit> runs a command confined the way the unit is, from the
-      # store, as a unit may not see /run/current-system.
+      # as-<unit> runs a command confined the way the unit, or the template
+      # unit <unit>@, is, from the store, as a unit may not see
+      # /run/current-system.
       bins = lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.getent ];
-      confinedAs = unit: pkgs.writeShellScriptBin "as-${unit}" ''
+      unitOnly = [ "ExecStart" "ExecStopPost" "Restart" "StandardInput" "StandardOutput" ];
+      # systemd-run can't set RestrictAddressFamilies=none; the subtests
+      # read it off the unit with systemd-analyze instead.
+      runnable = lib.filterAttrs (name: value: name != "RestrictAddressFamilies" || value != "none");
+      confinedAs = unit: pkgs.writeShellScriptBin "as-${lib.removeSuffix "@" unit}" ''
         PATH=${bins}:$PATH
         exec systemd-run --quiet --pipe --wait --collect --service-type=exec --setenv=PATH=${bins} \
           ${lib.escapeShellArgs (config.weblounge.runProperties
-            (removeAttrs config.systemd.services.${unit}.serviceConfig [ "ExecStart" "ExecStopPost" "Restart" ]))} \
+            (runnable (removeAttrs config.systemd.services.${unit}.serviceConfig unitOnly)))} \
           "$(command -v "$1")" "''${@:2}"
       '';
     in
     {
       imports = [ (onTheInternet public.credenza) ];
-      environment.systemPackages = [ pkgs.nftables ] ++ map confinedAs [ "concierge" "concierge-mailer" ];
+      environment.systemPackages = [ pkgs.nftables ]
+        ++ map confinedAs [ "concierge" "concierge-mailer" "concierge-scrubber@" ];
     };
 
   client = {
