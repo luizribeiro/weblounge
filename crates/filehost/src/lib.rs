@@ -49,6 +49,16 @@ impl ImageType {
             .find(|kind| kind.extension() == extension)
     }
 
+    /// Its name for people.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Png => "PNG",
+            Self::Jpeg => "JPEG",
+            Self::Gif => "GIF",
+            Self::Webp => "WebP",
+        }
+    }
+
     pub fn from_content_type(content_type: &str) -> Option<Self> {
         Self::ALL
             .into_iter()

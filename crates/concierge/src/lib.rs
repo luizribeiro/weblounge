@@ -31,5 +31,6 @@ pub mod secret_hash;
 pub mod session;
 pub mod status;
 pub mod tree;
+pub mod upload_rules;
 pub mod verification_mail;
 pub mod verification_rules;
