@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import assert_client_address_absent, error_page
+    from helpers import assert_client_address_absent, error_page, not_found_page
 
 with subtest("nginx redirects to HTTPS and serves the parking page"):
     credenza.wait_for_unit("nginx.service")
@@ -53,9 +53,8 @@ with subtest("the release build carries no live-reload code"):
         client.succeed(f"curl -sfk -o body https://credenza{path} && ! grep -qE 'EventSource|/esbuild' body")
 
 with subtest("unknown paths get the not-found page, in its own stylesheet and still guarded"):
-    lost = error_page("weblounge.org", "/no-such-page", 404)
+    lost = not_found_page("weblounge.org", "/no-such-page")
     assert "<h1>There's nothing here.</h1>" in lost, lost
-    assert '<a href="https://weblounge.org/">Back to weblounge.org →</a>' in lost, lost
     assert '<svg xmlns="http://www.w3.org/2000/svg" id="chair"' in lost and "<script" not in lost, lost
     assert error_page("weblounge.org", "/_error/404.html", 404) == lost
 

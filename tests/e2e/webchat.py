@@ -17,11 +17,11 @@ if TYPE_CHECKING:
         concierge_admin,
         concierge_sql,
         ergo_api,
-        error_page,
         https,
         irc,
         irc_command,
         members,
+        not_found_page,
         outcome,
     )
 
@@ -126,8 +126,7 @@ with subtest("gamja wears the network's favicon"):
     assert content_type == "image/svg+xml" and 'id="mark"' in svg, icon
 
 with subtest("unknown paths on irc.weblounge.org get the not-found page, gamja's CSP and all"):
-    lost = error_page("irc.weblounge.org", "/no-such-page", 404)
-    assert '<a href="https://weblounge.org/">Back to weblounge.org →</a>' in lost, lost
+    not_found_page("irc.weblounge.org", "/no-such-page")
     headers = https("irc.weblounge.org", "/no-such-page", "-I").lower()
     assert f"connect-src 'self' wss://irc.weblounge.org/socket https://{members};" in headers, headers
 

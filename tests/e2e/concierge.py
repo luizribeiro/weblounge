@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         irc,
         irc_command,
         members,
+        not_found_page,
         outcome,
     )
 
@@ -57,8 +58,7 @@ with subtest("concierge answers health checks"):
 
 with subtest("join.weblounge.org sends invite links on to the invite page, and nothing else anywhere"):
     assert https("join.weblounge.org", "/", *outcome) == f"302 https://{members}/invite"
-    lost = error_page("join.weblounge.org", "/invite", 404)
-    assert '<a href="https://weblounge.org/">Back to weblounge.org →</a>' in lost, lost
+    not_found_page("join.weblounge.org", "/invite")
 
 with subtest("concierge answers unknown paths with its own not-found page"):
     lost = https(members, "/no-such-page", "-w", "\n%{http_code}")

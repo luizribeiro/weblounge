@@ -76,6 +76,14 @@ def error_page(name: str, path: str, status: int) -> str:
     return page
 
 
+def not_found_page(name: str, path: str) -> str:
+    """The landing page's not-found page nginx answers `path` on `name` with,
+    linking back to the landing page whichever site it's on."""
+    page = error_page(name, path, 404)
+    assert '<a href="https://weblounge.org/">Back to weblounge.org →</a>' in page, page
+    return page
+
+
 def concierge_admin_command(*args: str) -> str:
     return f"su - luiz -c {shlex.quote(shlex.join(['concierge-admin', *args]))}"
 
