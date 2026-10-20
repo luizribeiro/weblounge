@@ -48,6 +48,12 @@ impl ImageType {
             .into_iter()
             .find(|kind| kind.extension() == extension)
     }
+
+    pub fn from_content_type(content_type: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.content_type() == content_type)
+    }
 }
 
 /// The random name an upload is stored and linked under, which is all
@@ -157,6 +163,11 @@ mod tests {
         );
         for kind in ImageType::ALL {
             assert_eq!(ImageType::from_extension(kind.extension()), Some(kind));
+            assert_eq!(
+                ImageType::from_content_type(kind.content_type()),
+                Some(kind)
+            );
         }
+        assert_eq!(ImageType::from_content_type("image/svg+xml"), None);
     }
 }

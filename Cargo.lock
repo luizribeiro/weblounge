@@ -511,6 +511,7 @@ dependencies = [
  "clap",
  "common",
  "ergo-api",
+ "filehost",
  "form_urlencoded",
  "hmac",
  "http-body-util",

@@ -1,3 +1,5 @@
+mod uploads;
+
 use std::{fmt, path::Path};
 
 use anyhow::Context;
@@ -21,6 +23,7 @@ use crate::{
 static MIGRATOR: Migrator = sqlx::migrate!();
 
 pub use common::now;
+pub use uploads::{NewUpload, Upload};
 
 pub struct NewMember<'a> {
     /// Ergo's canonical spelling of the account name.

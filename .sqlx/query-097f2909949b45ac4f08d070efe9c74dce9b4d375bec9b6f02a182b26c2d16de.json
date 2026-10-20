@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id: UploadId\" FROM uploads",
+  "describe": {
+    "columns": [
+      {
+        "name": "id: UploadId",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "097f2909949b45ac4f08d070efe9c74dce9b4d375bec9b6f02a182b26c2d16de"
+}

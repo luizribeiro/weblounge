@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(SUM(size), 0) AS \"used!: i64\" FROM uploads WHERE owner = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "used!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "073aa4ebfcc499882cc5f8a3f38dc1237194c65224d3309164300315fa28d47a"
+}

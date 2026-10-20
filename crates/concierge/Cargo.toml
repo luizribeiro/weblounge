@@ -12,6 +12,7 @@ base64 = "0.22.1"
 clap = { version = "4.6.7", features = ["derive"] }
 common = { path = "../common" }
 ergo-api = { path = "../ergo-api" }
+filehost = { path = "../filehost" }
 form_urlencoded = "1.2.2"
 hmac = "0.12.1"
 outbox = { path = "../outbox" }

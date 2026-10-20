@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO uploads (id, account, owner, content_type, size, created_at)\n             VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "b60156cfc6d09ea5e89069582b3a2723e3c348f6f3cff1ee81411cf9db97ae9c"
+}
