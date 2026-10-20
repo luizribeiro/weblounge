@@ -7,14 +7,14 @@ const EXTENSION: u8 = 0x21;
 const IMAGE: u8 = 0x2c;
 const TRAILER: u8 = 0x3b;
 const GRAPHIC_CONTROL: u8 = 0xf9;
-const PLAIN_TEXT: u8 = 0x01;
 const APPLICATION: u8 = 0xff;
 /// The application extensions that say how often an animation loops.
 const LOOPING: [&[u8]; 2] = [b"NETSCAPE2.0", b"ANIMEXTS1.0"];
 
 /// `upload` with only its images, their timing and how often they loop,
 /// if it's a GIF with an image and nothing after its trailer: comments,
-/// XMP and other applications' extensions go.
+/// plain text, which browsers don't draw, XMP and other applications'
+/// extensions go.
 pub fn scrub(upload: &[u8]) -> Option<Vec<u8>> {
     let header = 6 + 7;
     let screen_flags = *upload.get(10)?;
@@ -27,16 +27,8 @@ pub fn scrub(upload: &[u8]) -> Option<Vec<u8>> {
             EXTENSION => {
                 let label = *upload.get(at + 1)?;
                 let end = sub_blocks_end(upload, at + 2)?;
-                let first_block = &upload[at + 2..end];
-                let kept = match label {
-                    GRAPHIC_CONTROL | PLAIN_TEXT => true,
-                    APPLICATION => LOOPING.iter().any(|name| {
-                        first_block.first() == Some(&11) && first_block[1..].starts_with(name)
-                    }),
-                    _ => false,
-                };
-                if kept {
-                    scrubbed.extend(&upload[at..end]);
+                if let Some(kept) = kept_extension(label, &upload[at + 2..end]) {
+                    scrubbed.extend(kept);
                 }
                 at = end;
             }
@@ -57,6 +49,44 @@ pub fn scrub(upload: &[u8]) -> Option<Vec<u8>> {
             _ => return None,
         }
     }
+}
+
+/// The extension labelled `label`, whose sub-blocks are `sub_blocks`,
+/// rebuilt from just the sub-blocks that time a frame or loop an
+/// animation, if it's one that does: whatever else it carries goes with
+/// every other extension.
+fn kept_extension(label: u8, sub_blocks: &[u8]) -> Option<Vec<u8>> {
+    let blocks = split_sub_blocks(sub_blocks);
+    let kept = match (label, blocks.as_slice()) {
+        (GRAPHIC_CONTROL, [control, ..]) if control.len() == 4 => vec![*control],
+        (APPLICATION, [name, looping, ..])
+            if LOOPING.contains(name) && looping.len() == 3 && looping[0] == 1 =>
+        {
+            vec![*name, *looping]
+        }
+        _ => return None,
+    };
+    let mut extension = vec![EXTENSION, label];
+    for block in kept {
+        extension.push(u8::try_from(block.len()).expect("a sub-block is shorter than 256 bytes"));
+        extension.extend(block);
+    }
+    extension.push(0);
+    Some(extension)
+}
+
+/// The data of each sub-block in `sub_blocks`, which [`sub_blocks_end`]
+/// found well-formed.
+fn split_sub_blocks(mut sub_blocks: &[u8]) -> Vec<&[u8]> {
+    let mut blocks = Vec::new();
+    while let Some((&length, rest)) = sub_blocks.split_first()
+        && length > 0
+    {
+        let (block, after) = rest.split_at(usize::from(length));
+        blocks.push(block);
+        sub_blocks = after;
+    }
+    blocks
 }
 
 /// The length of the colour table a descriptor's `flags` announce.
@@ -99,6 +129,40 @@ mod tests {
         assert!(contains(&scrubbed, b"NETSCAPE2.0"));
         assert_same_frames(ImageType::Gif, ANIMATED, &scrubbed);
         assert_idempotent(&scrubbed);
+    }
+
+    /// `ANIMATED` with `extra`, a sub-block of `payload`, added to the
+    /// extension that starts with `start`.
+    fn smuggling(start: &[u8], payload: &[u8]) -> Vec<u8> {
+        let at = ANIMATED
+            .windows(start.len())
+            .position(|window| window == start)
+            .unwrap();
+        let end = sub_blocks_end(ANIMATED, at + 2).unwrap();
+        let extra = [&[payload.len() as u8][..], payload].concat();
+        [&ANIMATED[..end - 1], &extra, &ANIMATED[end - 1..]].concat()
+    }
+
+    #[test]
+    fn keeps_nothing_smuggled_into_the_extensions_it_keeps() {
+        let looping = b"\x21\xff\x0bNETSCAPE2.0";
+        let timing = b"\x21\xf9\x04";
+        for start in [&looping[..], timing] {
+            let smuggled = smuggling(start, b"the-xmp-canary");
+            let scrubbed = scrub(&smuggled).unwrap();
+            assert_stripped(&smuggled, &scrubbed);
+            assert_eq!(scrubbed, scrub(ANIMATED).unwrap());
+        }
+    }
+
+    #[test]
+    fn drops_plain_text_which_browsers_dont_draw() {
+        let text = [&b"\x21\x01\x0c"[..], &[0; 12], b"\x0ethe-xmp-canary\x00"].concat();
+        let at = ANIMATED.len() - 1;
+        let with_text = [&ANIMATED[..at], &text, &ANIMATED[at..]].concat();
+        let scrubbed = scrub(&with_text).unwrap();
+        assert_stripped(&with_text, &scrubbed);
+        assert_eq!(scrubbed, scrub(ANIMATED).unwrap());
     }
 
     #[test]
