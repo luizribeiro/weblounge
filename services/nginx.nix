@@ -11,8 +11,10 @@ let
     frame-ancestors = "'none'";
   };
 
-  renderPolicy = policy: lib.concatStringsSep "; "
-    (lib.mapAttrsToList (directive: sources: "${directive} ${sources}") policy);
+  # A directive set to null is left out, and one set to "" stands alone.
+  renderPolicy = policy: lib.concatStringsSep "; " (lib.mapAttrsToList
+    (directive: sources: lib.concatStringsSep " " ([ directive ] ++ lib.optional (sources != "") sources))
+    (lib.filterAttrs (_: sources: sources != null) policy));
 
   securityHeaders = policy: {
     Strict-Transport-Security = "max-age=31536000; includeSubDomains";
@@ -23,9 +25,9 @@ let
     Content-Security-Policy = renderPolicy (defaultPolicy // policy);
   };
 
-  addHeaders = policy: lib.concatStrings (lib.mapAttrsToList
+  addHeaders = headers: lib.concatStrings (lib.mapAttrsToList
     (name: value: "add_header ${name} \"${value}\" always;\n")
-    (securityHeaders policy));
+    headers);
 
   # The not-found page links back to the landing page, whose origin the
   # web build doesn't know.
@@ -57,8 +59,15 @@ in
   options.weblounge.nginx.securityHeaders = lib.mkOption {
     type = lib.types.functionTo lib.types.lines;
     readOnly = true;
-    default = addHeaders;
+    default = policy: addHeaders (securityHeaders policy);
     description = "add_header lines for the security headers, with these CSP directives over the default policy.";
+  };
+
+  options.weblounge.nginx.securityHeadersWith = lib.mkOption {
+    type = lib.types.functionTo (lib.types.functionTo lib.types.lines);
+    readOnly = true;
+    default = policy: headers: addHeaders (securityHeaders policy // headers);
+    description = "add_header lines for the security headers, with these CSP directives over the default policy, and these headers over theirs.";
   };
 
   options.weblounge.nginx.errorPages = lib.mkOption {
