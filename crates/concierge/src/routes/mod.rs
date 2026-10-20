@@ -13,6 +13,7 @@ pub mod presence;
 pub mod reset;
 pub mod signin;
 pub mod upload;
+pub mod uploads;
 pub mod verify;
 
 use std::fmt::Display;
@@ -100,17 +101,25 @@ pub enum Tab {
     Home,
     Invites,
     Bots,
+    Uploads,
     Account,
 }
 
 impl Tab {
-    pub const ALL: [Self; 4] = [Self::Home, Self::Invites, Self::Bots, Self::Account];
+    pub const ALL: [Self; 5] = [
+        Self::Home,
+        Self::Invites,
+        Self::Bots,
+        Self::Uploads,
+        Self::Account,
+    ];
 
     pub fn path(self) -> &'static str {
         match self {
             Self::Home => "/",
             Self::Invites => "/invites",
             Self::Bots => "/bots",
+            Self::Uploads => uploads::PATH,
             Self::Account => "/account",
         }
     }
@@ -120,6 +129,7 @@ impl Tab {
             Self::Home => "Home",
             Self::Invites => "Invites",
             Self::Bots => "Bots",
+            Self::Uploads => "Uploads",
             Self::Account => "Account",
         }
     }

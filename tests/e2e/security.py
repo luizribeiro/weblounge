@@ -322,11 +322,15 @@ with subtest("every site's pages, error pages too, load all they need under thei
         assert {directive for directive, _ in needs.fetches} == directives, (name, needs.fetches)
         for directive, url in needs.fetches:
             same_origin = not re.match(r"[a-z]+:|//", url)
-            assert same_origin and csp_sources(policy, directive) == ["'self'"], (name, directive, url, policy)
+            assert same_origin and csp_sources(policy, directive)[0] == "'self'", (name, directive, url, policy)
 
-with subtest("concierge's pages fetch from their own origin alone, for the checks they make as you type"):
+with subtest("concierge's pages fetch from their own origin alone, and show uploads from where they're served"):
     policy = headers_of(members, "/signin")["content-security-policy"]
     assert csp_sources(policy, "connect-src") == ["'self'"], policy
+    assert csp_sources(policy, "img-src") == ["'self'", "https://files.weblounge.org"], policy
+    for name in sites:
+        if name != members:
+            assert csp_sources(headers_of(name, "/")["content-security-policy"], "img-src") == ["'self'"], name
 
 
 def sign_in(account, password, *headers):

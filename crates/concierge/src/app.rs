@@ -149,6 +149,16 @@ pub fn router(app: App) -> Router {
                 .layer(map_response(routes::no_store)),
         )
         .route(
+            routes::uploads::PATH,
+            get(routes::uploads::show).layer(map_response(routes::no_store)),
+        )
+        .route(
+            "/uploads/{id}/delete",
+            get(routes::uploads::confirm_delete)
+                .post(routes::uploads::delete)
+                .layer(map_response(routes::no_store)),
+        )
+        .route(
             "/signin",
             get(routes::signin::show).post(routes::signin::submit),
         )

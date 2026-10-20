@@ -21,6 +21,7 @@ mod signup;
 mod tabs;
 mod tree;
 mod upload;
+mod uploads;
 mod verify;
 
 use std::path::Path;

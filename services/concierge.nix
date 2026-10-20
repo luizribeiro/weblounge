@@ -238,8 +238,12 @@ in
         enableACME = true;
         forceSSL = true;
         # Signup and password forms fetch the password rules and nick
-        # availability as members type.
-        extraConfig = config.weblounge.nginx.securityHeaders { connect-src = "'self'"; };
+        # availability as members type, and the Uploads tab shows each upload
+        # from where it's served.
+        extraConfig = config.weblounge.nginx.securityHeaders {
+          connect-src = "'self'";
+          img-src = "'self' ${filesEnvironment.CONCIERGE_FILES_URL}";
+        };
         locations."/" = {
           proxyPass = "http://${cfg.listen}";
           # Concierge trusts X-Real-IP for its sign-in limits, so nginx sets it

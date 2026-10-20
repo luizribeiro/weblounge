@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}Uploads{% endblock %}
+
+{% block content %}
+      <h1>Uploads</h1>
+      <section class="card tab-card" aria-labelledby="question-title">
+        <h2 class="eyebrow" id="question-title">Delete your upload of {{ upload.day }}</h2>
+        {%- call components::delete_upload(upload) %}<a class="button" href="{{ crate::routes::uploads::PATH }}">Keep it</a>{% endcall %}
+      </section>
+{%- endblock %}

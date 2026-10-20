@@ -149,3 +149,16 @@ IRC apps that are connected now stay connected
 {% macro send_link(unconfirmed, capitalized) -%}
 <button class="link-button inline-action" type="submit" form="send-link">{% if capitalized %}S{% else %}s{% endif %}end {% if unconfirmed.sent() %}a new{% else %}a{% endif %} link</button>
 {%- endmacro %}
+
+{% macro how_to_upload(webchat) %}
+        <p class="hint">To upload an image, paste or attach it in <a href="{{ webchat.redirect_uri() }}">the web client</a> or your IRC app, and it sends the link to the chat.</p>
+{%- endmacro %}
+
+{% macro delete_upload(upload) %}
+              <img class="upload-preview" src="{{ upload.url }}" alt="Your upload of {{ upload.day }}" loading="lazy" decoding="async">
+              <p id="delete-{{ upload.id }}-question">Delete this image? Its link stops working right away, though copies others saved stay theirs.</p>
+              <form class="dialog-actions" method="post" action="/uploads/{{ upload.id }}/delete">
+                <button class="button button-danger" type="submit">Delete it</button>
+                {{ caller() }}
+              </form>
+{%- endmacro %}

@@ -391,7 +391,33 @@ dialog.card {
   line-height: 1.35;
 }
 
+.usage-meter {
+  display: block;
+  width: 100%;
+  max-width: 15rem;
+  height: 6px;
+  margin: 0.875rem 0 0.625rem;
+  border: 0;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+  appearance: none;
+
+  &::-webkit-progress-bar {
+    background: var(--line);
+  }
+
+  &::-webkit-progress-value {
+    background: var(--fg);
+  }
+
+  &::-moz-progress-bar {
+    background: var(--fg);
+  }
+}
+
 .invite-meter + .hint,
+.usage-meter + .hint,
 .invite-reason + .hint {
   margin-bottom: 1.25rem;
   font-size: 0.9375rem;
@@ -432,7 +458,8 @@ dialog.card {
 }
 
 .invitees,
-.bots {
+.bots,
+.uploads {
   margin: 1rem 0 0;
   padding: 0;
   list-style: none;
@@ -455,6 +482,48 @@ dialog.card {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 1rem;
+}
+
+.uploads .upload {
+  display: grid;
+  grid-template-columns: 4rem 1fr auto;
+  align-items: center;
+  gap: 0 1rem;
+
+  & .danger-link {
+    margin-left: 0;
+  }
+}
+
+.upload-image {
+  display: block;
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius);
+  background: var(--soft);
+  overflow: hidden;
+
+  & img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.upload-about {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.9375rem;
+}
+
+.upload-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 12rem;
+  margin: 0 0 1rem;
+  border-radius: var(--radius);
 }
 
 .bot-name {

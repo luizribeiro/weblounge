@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}Uploads{% endblock %}
+
+{% block content %}
+      <h1>Uploads</h1>
+      <section class="card tab-card" aria-labelledby="about-uploads-title">
+        <h2 class="eyebrow" id="about-uploads-title">How uploads work</h2>
+        {%- if !uploads.is_empty() %}
+        {%- call components::how_to_upload(webchat) %}{% endcall %}
+        {%- endif %}
+        <p class="hint">Anyone with an image's link can see it, so share it where you'd share the image. Images can be {{ rules.types }}, up to {{ rules.max }} each and {{ rules.per_hour }} an hour. Where and when a photo was taken, the camera and anything else stored in the file are removed when you upload it. Each image is deleted after {{ rules.kept }}.</p>
+      </section>
+      <section class="card tab-card uploads-card" aria-labelledby="uploads-title">
+        <h2 class="eyebrow" id="uploads-title">Your uploads</h2>
+        <p class="invite-count"><span class="invite-count-number">{{ crate::upload_rules::in_megabytes(*used) }} of {{ rules.quota }}</span> used</p>
+        <progress class="usage-meter" max="{{ rules.quota_bytes }}" value="{{ used }}" aria-labelledby="uploads-title"></progress>
+        <p class="hint">Your bots' uploads count toward yours.</p>
+        {%- if uploads.is_empty() %}
+        <p class="bots-empty">No uploads yet.</p>
+        {%- call components::how_to_upload(webchat) %}{% endcall %}
+        {%- else %}
+        <ul class="uploads">
+          {%- for upload in uploads %}
+          <li class="upload">
+            <a class="upload-image" href="{{ upload.url }}">
+              <img src="{{ upload.url }}" alt="Your upload of {{ upload.day }}" loading="lazy" decoding="async">
+            </a>
+            <span class="upload-about">
+              <time datetime="{{ upload.date }}">{{ upload.day }}</time>
+              <span class="muted">{{ upload.days_left }} day{% if upload.days_left != 1 %}s{% endif %} left · {{ upload.size }}{% if let Some(bot) = upload.bot %} · from {{ bot }}{% endif %}</span>
+            </span>
+            <a class="danger-link" href="/uploads/{{ upload.id }}/delete" data-dialog="delete-{{ upload.id }}">Delete</a>
+            <dialog class="card" id="delete-{{ upload.id }}" aria-labelledby="delete-{{ upload.id }}-title" aria-describedby="delete-{{ upload.id }}-question">
+              <h2 class="eyebrow" id="delete-{{ upload.id }}-title">Delete your upload of {{ upload.day }}</h2>
+              {%- call components::delete_upload(upload) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep it</button>{% endcall %}
+            </dialog>
+          </li>
+          {%- endfor %}
+        </ul>
+        {%- endif %}
+      </section>
+{%- endblock %}
