@@ -1,6 +1,7 @@
 @import "./tokens.css";
 @import "./base.css";
 @import "./components/chair.css";
+@import "./components/lockup.css";
 
 html,
 body {
@@ -13,29 +14,8 @@ body {
   overflow: hidden;
 }
 
-/* Proportions follow the stacked lockup: the wordmark is 1.164× the chair's
-   box and sits 0.049× below it. */
+/* The chair keeps room above the drawing for pulled nodes; this evens out
+   the visible logo's position. */
 main {
-  --w: min(520px, 72vw, 62vh);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* The chair keeps room above the drawing for pulled nodes; this evens out
-     the visible logo's position. */
   margin-bottom: calc(var(--w) * 0.0528);
-}
-
-#chair {
-  width: var(--w);
-}
-
-h1 {
-  margin: calc(var(--w) * 0.049) 0 0;
-  line-height: 0;
-
-  & svg {
-    display: block;
-    width: calc(var(--w) * 1.164);
-    height: auto;
-  }
 }

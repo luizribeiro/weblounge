@@ -1,0 +1,25 @@
+/* The chair stacked over the wordmark, --w wide. Proportions follow the
+   stacked lockup: the wordmark is 1.164× the chair's box and sits 0.049×
+   below it. */
+
+.lockup {
+  --w: min(520px, 72vw, 62vh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  & #chair {
+    width: var(--w);
+  }
+}
+
+.lockup-wordmark {
+  margin: calc(var(--w) * 0.049) 0 0;
+  line-height: 0;
+
+  & svg {
+    display: block;
+    width: calc(var(--w) * 1.164);
+    height: auto;
+  }
+}
