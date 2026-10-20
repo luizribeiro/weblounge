@@ -3,9 +3,28 @@
 let
   cfg = config.weblounge.files;
   scrubber = lib.getExe pkgs.weblounge.scrubber;
+
+  # Uploads are images served as they are, which nothing should run,
+  # frame, index or follow links out of. The rest of the default policy is
+  # for pages, which this site has none of.
+  headers = config.weblounge.nginx.securityHeadersWith
+    {
+      script-src = null;
+      style-src = null;
+      img-src = null;
+      form-action = null;
+      base-uri = null;
+      sandbox = "";
+    }
+    {
+      Referrer-Policy = "no-referrer";
+      X-Robots-Tag = "noindex, nofollow, noimageindex, noai, noimageai";
+    };
+  # An upload's id and the extension of its type, as filehost names them.
+  uploadPath = "^/[A-Za-z0-9_-]{22}\\.(png|jpg|gif|webp)$";
 in
 {
-  imports = [ ./sandbox.nix ];
+  imports = [ ./nginx.nix ./sandbox.nix ];
 
   options.weblounge.files = {
     hostName = lib.mkOption {
@@ -39,6 +58,7 @@ in
 
   config = {
     users.groups.${cfg.group} = { };
+    users.users.nginx.extraGroups = [ cfg.group ];
     users.groups.${cfg.scrubber.group} = { };
 
     # Files in it take its group.
@@ -98,6 +118,42 @@ in
         # never finishes doesn't hold it forever.
         RuntimeMaxSec = "5min";
       };
+    };
+
+    services.nginx.virtualHosts.${cfg.hostName} = {
+      enableACME = true;
+      forceSSL = true;
+      # An upload's link is all that keeps it private, so none is logged.
+      extraConfig = ''
+        access_log off;
+      '' + headers;
+      locations."~ \"${uploadPath}\"" = {
+        root = cfg.directory;
+        # nginx serves each type by its extension; browsers show these
+        # inline, and are told so.
+        extraConfig = headers + ''
+          add_header Cross-Origin-Resource-Policy "cross-origin" always;
+          add_header Content-Disposition "inline" always;
+        '';
+      };
+      locations."= /robots.txt" = {
+        return = "200 \"User-agent: *\\nDisallow: /\\n\"";
+        extraConfig = "default_type text/plain;";
+      };
+      # Concierge takes uploads, in a stream, and holds them to their limit
+      # itself, answering 413 with Upload-Limit; nginx stops only what's far
+      # past it.
+      locations."= /upload" = {
+        proxyPass = "http://${config.weblounge.concierge.listen}";
+        recommendedProxySettings = false;
+        extraConfig = ''
+          client_max_body_size 16m;
+          proxy_request_buffering off;
+          proxy_http_version 1.1;
+          proxy_set_header X-Real-IP $remote_addr;
+        '';
+      };
+      locations."/".return = "404";
     };
   };
 }

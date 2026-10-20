@@ -62,6 +62,7 @@ pkgs.testers.runNixOSTest {
       imports = [ (test.client or { }) ];
       environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ]
         ++ lib.mapAttrsToList browserCommand browsers;
+      environment.etc.upload-fixtures.source = ../../../crates/scrubber/fixtures;
       virtualisation.memorySize = lib.mkIf (browsers != { }) 2048;
     };
   } // lib.optionalAttrs (mail ? node) { mail = mail.node; };

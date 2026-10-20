@@ -255,8 +255,10 @@ in
             proxy_set_header X-Real-IP $remote_addr;
           '';
         };
-        # Only Ergo introspects tokens, on loopback.
+        # Only Ergo introspects tokens, on loopback, and uploads come in on
+        # files.weblounge.org alone.
         locations."= /oauth/introspect".return = "404";
+        locations."= /upload".return = "404";
       }
     ];
 

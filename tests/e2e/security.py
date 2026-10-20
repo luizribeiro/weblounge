@@ -13,12 +13,14 @@ if TYPE_CHECKING:
         concierge_sql,
         confirm_email,
         ergo_api,
+        files_host,
         https,
         invite_code,
         irc,
         members,
         outcome,
         patterns,
+        webchat,
     )
 
 mallory: Account = {"account": "mallory", "password": "an-insider-gone-bad"}
@@ -136,6 +138,27 @@ with subtest("introspection isn't reachable from outside, and the token endpoint
         )
         assert response.startswith("HTTP/2 403"), (origin, response)
         assert "access-control-allow-origin" not in response.lower(), (origin, response)
+
+with subtest("uploads come in on files.weblounge.org alone, and other sites' pages get no grant to post them"):
+    assert https(members, "/upload", *outcome, "-d", "x") == "404 "
+    preflight = [
+        "-X",
+        "OPTIONS",
+        "-H",
+        "Access-Control-Request-Method: POST",
+        "-H",
+        "Access-Control-Request-Headers: authorization,content-type",
+    ]
+    for origin, granted in [("https://evil.example", False), (f"https://{members}", False), (webchat, True)]:
+        for request in [preflight, ["-d", "x"]]:
+            response = https(files_host, "/upload", "-D", "-", "-o", "/dev/null", "-H", f"Origin: {origin}", *request)
+            grants = "access-control-allow-origin" in response.lower()
+            assert grants == granted, (origin, response)
+
+with subtest("files.weblounge.org lists nothing, and serves nothing but uploads' names"):
+    for path in ["/", "/.tmpAbC123", "/q7Hx2mZp9vLcT4wRfBa-_w.svg", "/q7Hx2mZp9vLcT4wRfBa-_w.png/", "/upload/"]:
+        assert https(files_host, path, *outcome) == "404 ", path
+    assert credenza.succeed("stat -c '%a %G' /var/lib/concierge-files").split() == ["2770", "concierge-files"]
 
 with subtest("ergo's API refuses any token but the generated one"):
     for token in ["not-the-token", "example"]:

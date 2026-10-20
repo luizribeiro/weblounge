@@ -55,7 +55,10 @@ def https(name: str, path: str = "/", *flags: str) -> str:
 
 
 members = "members.weblounge.org"
+files_host = "files.weblounge.org"
 outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
+# The scrubber's test images, on the client.
+fixtures = "/etc/upload-fixtures"
 
 asset_types = {"css": "text/css", "svg": "image/svg+xml", "png": "image/png", "avif": "image/avif"}
 
@@ -207,6 +210,33 @@ def access_token(browser):
     status, answer = exchange(authorize(browser, challenge), verifier)
     assert status == "200", (status, answer)
     return answer["access_token"]
+
+
+class Answer(TypedDict):
+    status: int
+    headers: dict[str, str]
+    body: str
+
+
+def answer_of(response: str) -> Answer:
+    """A response curl printed with -D -, its headers' names lowercased."""
+    head, body = response.split("\r\n\r\n", 1)
+    status, *lines = head.splitlines()
+    headers = dict(line.split(": ", 1) for line in lines)
+    return {"status": int(status.split()[1]), "headers": {k.lower(): v for k, v in headers.items()}, "body": body}
+
+
+def upload(path: str, *credentials: str) -> Answer:
+    """Posts the file at path on the client to the upload endpoint, as an IRC
+    client does, with curl's credentials flags, such as -u nick:password."""
+    flags = ["-H", "Content-Type: application/octet-stream", "--data-binary", f"@{path}"]
+    return answer_of(https(files_host, "/upload", "-D", "-", *credentials, *flags))
+
+
+def get_file(link: str) -> Answer:
+    """What files.weblounge.org answers anyone who has link."""
+    path = link.removeprefix(f"https://{files_host}")
+    return answer_of(https(files_host, path, "-D", "-", "-o", "/tmp/fetched", "-w", "\n"))
 
 
 def add_member(account: str, password: str, admin: bool = False) -> None:

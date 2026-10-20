@@ -11,12 +11,15 @@ if TYPE_CHECKING:
         concierge_admin,
         concierge_sql,
         files_containing,
+        fixtures,
+        get_file,
         irc,
         irc_command,
         members,
         outcome,
         patterns,
         register,
+        upload,
         wait_for_empty_outbox,
         wait_for_mail,
     )
@@ -117,6 +120,24 @@ with subtest("email: news emails are off until a member turns them on, and they 
     assert concierge_sql("SELECT news_opt_in FROM members WHERE account = 'grace'") == "1\n"
     assert graces_browser.post("/settings", f"email={email}").startswith("303 ")
     assert concierge_sql("SELECT news_opt_in FROM members WHERE account = 'grace'") == "0\n"
+
+with subtest("uploads: an image is public to anyone with its link, without its metadata or its name"):
+    answer = upload(f"{fixtures}/photo.jpg", "-u", f"grace:{grace['password']}")
+    assert answer["status"] == 201, answer
+    link = answer["headers"]["location"]
+    assert "photo" not in link, link
+    assert get_file(link)["status"] == 200
+    for metadata in ["Pixelphone", "Zoe Example", "the-xmp-canary", "the-comment-canary"]:
+        client.fail(f"grep -qaF {metadata} /tmp/fetched")
+        assert files_containing(metadata) == [], metadata
+
+with subtest("uploads: an image is deleted after 30 days, and leaves the disk"):
+    stored = credenza.succeed("ls /var/lib/concierge-files").split()
+    assert len(stored) == 1, stored
+    concierge_sql("UPDATE uploads SET created_at = created_at - 30 * 86400", write=True)
+    credenza.succeed("systemctl start concierge-expire-uploads")
+    assert get_file(link)["status"] == 404
+    assert credenza.succeed("ls -A /var/lib/concierge-files") == ""
 
 with subtest("leaving: an admin deletes the account, its email leaves the disk, and IRC stops taking it"):
     assert " 903 " in irc(**grace)
