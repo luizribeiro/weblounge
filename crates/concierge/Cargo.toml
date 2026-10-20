@@ -31,6 +31,7 @@ common = { path = "../common", features = ["testing"] }
 ergo-api = { path = "../ergo-api", features = ["fake"] }
 filehost = { path = "../filehost", features = ["testing"] }
 futures-util = "0.3.34"
+tokio = { version = "1.53.3", features = ["test-util"] }
 outbox = { path = "../outbox", features = ["testing"] }
 regex = "1.13.1"
 rqrr = { version = "0.11.0", default-features = false }

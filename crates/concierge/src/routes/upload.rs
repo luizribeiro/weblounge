@@ -183,6 +183,9 @@ pub async fn upload(
         Err(HandOffError::Client(_)) => {
             return plain(StatusCode::BAD_REQUEST, "The upload was cut off.");
         }
+        Err(HandOffError::Stalled) => {
+            return plain(StatusCode::REQUEST_TIMEOUT, "The upload stopped coming.");
+        }
         Err(HandOffError::Scrubber(error)) => return unavailable("Handing an upload over", error),
     };
     let (kind, size) = match answer {

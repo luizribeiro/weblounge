@@ -29,6 +29,10 @@ use crate::{
 
 /// How long the scrubber has to answer once it has the whole upload.
 const ANSWER_WAIT: Duration = Duration::from_secs(30);
+/// How long a client may go without sending any of its upload: as long as
+/// nginx waits between reads of a body, so a client that trickles one
+/// doesn't hold a scrubber for its whole five minutes.
+const CLIENT_WAIT: Duration = Duration::from_secs(60);
 /// How old a file in the uploads directory with no row must be to be
 /// deleted: well past any upload still being handed over or recorded.
 const STRAY_AGE: Duration = Duration::from_secs(60 * 60);
@@ -60,6 +64,8 @@ pub enum HandOffError {
     TooLarge,
     /// Reading the upload from the client failed.
     Client(axum::Error),
+    /// The client sent nothing for [`CLIENT_WAIT`].
+    Stalled,
     /// The scrubber couldn't be reached, or didn't answer as it should.
     Scrubber(io::Error),
 }
@@ -86,7 +92,10 @@ impl Store {
         let mut scrubber = UnixStream::connect(&self.scrubber).await?;
         scrubber.write_all(handoff::head(id).as_bytes()).await?;
         let mut sent = 0;
-        while let Some(frame) = body.frame().await {
+        while let Some(frame) = tokio::time::timeout(CLIENT_WAIT, body.frame())
+            .await
+            .map_err(|_| HandOffError::Stalled)?
+        {
             let Ok(chunk) = frame.map_err(HandOffError::Client)?.into_data() else {
                 continue;
             };
@@ -166,6 +175,7 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use filehost::{ImageType, testing::FakeScrubber};
+    use futures_util::StreamExt;
 
     use super::*;
     use crate::{
@@ -229,6 +239,18 @@ mod tests {
         let answer = store(&scrubber).hand_off(&UploadId::generate(), body).await;
 
         assert!(matches!(answer, Err(HandOffError::TooLarge)), "{answer:?}");
+        assert!(scrubber.stored().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn gives_up_on_a_client_that_stops_sending_and_nothing_is_stored() {
+        let scrubber = FakeScrubber::start();
+        let first = futures_util::stream::iter([Ok::<_, io::Error>(PNG.to_vec())]);
+        let body = Body::from_stream(first.chain(futures_util::stream::pending()));
+
+        let answer = store(&scrubber).hand_off(&UploadId::generate(), body).await;
+
+        assert!(matches!(answer, Err(HandOffError::Stalled)), "{answer:?}");
         assert!(scrubber.stored().is_empty());
     }
 
