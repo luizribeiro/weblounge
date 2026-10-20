@@ -120,9 +120,12 @@ with subtest("the outbox is a database of its own, in a directory only concierge
         "outbox.db-shm 660 concierge-outbox",
         "outbox.db-wal 660 concierge-outbox",
     ], modes
-    for unit in ["concierge", "concierge-mailer"]:
-        groups = credenza.succeed(f"systemctl show -P SupplementaryGroups {unit}").split()
-        assert groups == ["concierge-outbox"], (unit, groups)
+    for unit, groups in {
+        "concierge": ["concierge-outbox", "concierge-files", "concierge-scrubber-socket"],
+        "concierge-mailer": ["concierge-outbox"],
+    }.items():
+        joined = credenza.succeed(f"systemctl show -P SupplementaryGroups {unit}").split()
+        assert joined == groups, (unit, joined)
     tables = concierge_sql("SELECT name FROM sqlite_schema WHERE type = 'table'").split()
     assert "outbox" not in tables and "members" in tables, tables
     credenza.succeed("systemctl start concierge-mailer-vacuum")
