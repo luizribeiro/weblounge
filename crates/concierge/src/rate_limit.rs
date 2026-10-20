@@ -16,7 +16,7 @@ use axum::{
 };
 use common::recent::{Quota, Recent};
 
-use crate::name::MemberName;
+use crate::{name::MemberName, upload_rules};
 
 /// How long a failed attempt counts against its account and address.
 pub const WINDOW: Duration = Duration::from_secs(15 * 60);
@@ -122,6 +122,33 @@ pub const RECOVERIES_PER_ADDRESS: usize = 20;
 /// deletion; this leaves room to set up a member's bots and fix a few
 /// names, and keeps one address from taking names by the hundred.
 pub const BOT_CHANGES_PER_ADDRESS: usize = 10;
+
+/// Uploads stored in the last hour, by the account that made them: a
+/// bot's apart from its owner's.
+pub struct UploadLimiter {
+    stored: Recent<String>,
+}
+
+impl Default for UploadLimiter {
+    fn default() -> Self {
+        Self {
+            stored: Recent::new(HOUR),
+        }
+    }
+}
+
+impl UploadLimiter {
+    /// Whether `account` may upload another now.
+    pub fn allows(&self, account: &str, now: Instant) -> bool {
+        self.stored
+            .under(&account.to_ascii_lowercase(), upload_rules::PER_HOUR, now)
+    }
+
+    /// Counts an upload `account` stored, so refused ones don't count.
+    pub fn record(&self, account: &str, now: Instant) {
+        self.stored.record(account.to_ascii_lowercase(), now);
+    }
+}
 
 /// Requests in the last [`WINDOW`], by client address, up to a limit.
 pub struct AddressLimiter {
@@ -353,6 +380,20 @@ mod tests {
             fail(&limiter, &format!("guess{n}"), None, 1, now);
         }
         assert!(limiter.allows("someone", None, now));
+    }
+
+    #[test]
+    fn an_account_stores_its_hourly_uploads_whatever_its_owner_does() {
+        let (uploads, start) = (UploadLimiter::default(), Instant::now());
+        for _ in 0..upload_rules::PER_HOUR {
+            assert!(uploads.allows("Marvin", start));
+            uploads.record("Marvin", start);
+        }
+        assert!(!uploads.allows("marvin", start));
+        assert!(uploads.allows("alice", start));
+        let almost = start + HOUR - Duration::from_secs(1);
+        assert!(!uploads.allows("MARVIN", almost));
+        assert!(uploads.allows("marvin", start + HOUR));
     }
 
     #[test]

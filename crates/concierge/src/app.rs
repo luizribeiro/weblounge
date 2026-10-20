@@ -20,7 +20,7 @@ use crate::{
     db::Db,
     oauth::Webchat,
     origin::{FilesOrigin, SiteOrigin},
-    rate_limit::{AddressLimiter, Limiter, MailLimiter},
+    rate_limit::{AddressLimiter, Limiter, MailLimiter, UploadLimiter},
     reset_mail, routes, session,
     uploads::Store,
 };
@@ -64,6 +64,8 @@ pub struct App {
     pub uploads: Store,
     /// Where uploads are served from.
     pub files_url: FilesOrigin,
+    /// Uploads stored lately, by account.
+    pub recent_uploads: UploadLimiter,
 }
 
 pub type AppState = Arc<App>;

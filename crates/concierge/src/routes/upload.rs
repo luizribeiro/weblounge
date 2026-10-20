@@ -8,7 +8,7 @@ use std::time::Instant;
 use axum::{
     body::Body,
     extract::State,
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -27,11 +27,31 @@ use crate::{
 use super::signin;
 
 pub const PATH: &str = "/upload";
+const UPLOAD_LIMIT: HeaderName = HeaderName::from_static("upload-limit");
 
 /// Whose an upload is: a member's own, or one of their bots'.
 pub struct Uploader {
     pub owner: MemberName,
     pub bot: Option<BotName>,
+}
+
+impl Uploader {
+    /// The account that uploads.
+    fn account(&self) -> &str {
+        self.bot
+            .as_ref()
+            .map_or(self.owner.as_str(), BotName::as_str)
+    }
+}
+
+/// The size a client says its upload is.
+fn content_length(headers: &HeaderMap) -> Option<i64> {
+    headers
+        .get(header::CONTENT_LENGTH)?
+        .to_str()
+        .ok()?
+        .parse()
+        .ok()
 }
 
 /// The credentials a client sent in `Authorization`.
@@ -84,6 +104,25 @@ pub async fn upload(
         }
         Err(error) => return unavailable("Checking an uploader's credentials", error),
     };
+    let account = uploader.account().to_owned();
+    let announced = content_length(&headers);
+    if announced.is_some_and(|length| length > upload_rules::MAX_BYTES) {
+        return too_large();
+    }
+    if !app.recent_uploads.allows(&account, Instant::now()) {
+        return plain(
+            StatusCode::TOO_MANY_REQUESTS,
+            &format!(
+                "That's {} uploads in the last hour. Try again later.",
+                upload_rules::PER_HOUR
+            ),
+        );
+    }
+    match app.db.upload_usage(&uploader.owner).await {
+        Ok(used) if !upload_rules::fits(used, announced.unwrap_or(0)) => return no_room(),
+        Ok(_) => {}
+        Err(error) => return unavailable("Adding up an owner's uploads", error),
+    }
     let id = UploadId::generate();
     let answer = match app.uploads.hand_off(&id, body).await {
         Ok(answer) => answer,
@@ -117,7 +156,10 @@ pub async fn upload(
         eprintln!("Deleting an upload left without a row failed: {error}");
     }
     match inserted {
-        Ok(true) => created(&app, &file_name),
+        Ok(true) => {
+            app.recent_uploads.record(&account, Instant::now());
+            created(&app, &file_name)
+        }
         Ok(false) => no_room(),
         Err(error) => unavailable("Recording an upload", error),
     }
@@ -213,14 +255,18 @@ fn unauthorized() -> Response {
     response
 }
 
+/// `413`, with the limit in `Upload-Limit`, where senpai reads it.
 fn too_large() -> Response {
-    plain(
-        StatusCode::PAYLOAD_TOO_LARGE,
-        &format!(
-            "Images can be {} at most.",
-            upload_rules::in_megabytes(upload_rules::MAX_BYTES)
-        ),
-    )
+    let limit = format!("maxsize={}", upload_rules::MAX_BYTES);
+    let message = format!(
+        "Images can be {} at most.",
+        upload_rules::in_megabytes(upload_rules::MAX_BYTES)
+    );
+    let mut response = plain(StatusCode::PAYLOAD_TOO_LARGE, &message);
+    if let Ok(limit) = HeaderValue::from_str(&limit) {
+        response.headers_mut().insert(UPLOAD_LIMIT, limit);
+    }
+    response
 }
 
 fn no_room() -> Response {

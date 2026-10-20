@@ -12,7 +12,8 @@ use concierge::{
     oauth::Webchat,
     rate_limit::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
-        OAUTH_REQUESTS_PER_ADDRESS, RECOVERIES_PER_ADDRESS, VERIFICATIONS_PER_ADDRESS,
+        OAUTH_REQUESTS_PER_ADDRESS, RECOVERIES_PER_ADDRESS, UploadLimiter,
+        VERIFICATIONS_PER_ADDRESS,
     },
     session, verification_mail,
 };
@@ -78,6 +79,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         background: background.clone(),
         recoveries: AddressLimiter::new(RECOVERIES_PER_ADDRESS),
         bot_changes: AddressLimiter::new(BOT_CHANGES_PER_ADDRESS),
+        recent_uploads: UploadLimiter::default(),
         mailed_links: MailLimiter::default(),
         reset_links: MailLimiter::default(),
         public_url: config.public_url.clone(),

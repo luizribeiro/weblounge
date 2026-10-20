@@ -4,7 +4,10 @@ use axum::{
     response::Response,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
-use concierge::rate_limit::{PER_ACCOUNT, TRY_LATER};
+use concierge::{
+    rate_limit::{PER_ACCOUNT, TRY_LATER},
+    upload_rules,
+};
 use regex::Regex;
 
 use crate::{PASSWORD, Site, body_text, location};
@@ -275,4 +278,81 @@ async fn a_password_may_hold_a_colon() {
     let response = site.upload(PNG, Some(&basic("alice", password))).await;
 
     assert_eq!(response.status(), 201);
+}
+
+/// Asserts `response` refuses an upload past the limit the way senpai
+/// reads it.
+async fn assert_too_large(response: Response) {
+    assert_eq!(response.status(), 413);
+    assert_eq!(response.headers()["upload-limit"], "maxsize=10000000");
+    assert_eq!(body_text(response).await, "Images can be 10 MB at most.\n");
+}
+
+#[tokio::test]
+async fn an_upload_past_the_limit_gets_413_with_the_limit() {
+    let site = Site::start().await;
+    let bearer = site.member_with_bearer("alice").await;
+    let too_big = [PNG, &vec![0; upload_rules::MAX_BYTES as usize]].concat();
+
+    assert_too_large(site.upload(&too_big, Some(&bearer)).await).await;
+
+    let chunks: Vec<_> = too_big
+        .chunks(1 << 20)
+        .map(|chunk| Ok::<_, std::io::Error>(chunk.to_vec()))
+        .collect();
+    let streamed = Request::post("/upload")
+        .header(header::AUTHORIZATION, &bearer)
+        .body(Body::from_stream(futures_util::stream::iter(chunks)))
+        .unwrap();
+    assert_too_large(site.send(streamed).await).await;
+
+    let just_fits = &too_big[..upload_rules::MAX_BYTES as usize];
+    assert_eq!(site.upload(just_fits, Some(&bearer)).await.status(), 201);
+    assert_eq!(site.scrubber.stored().len(), 1);
+}
+
+#[tokio::test]
+async fn an_account_uploads_so_many_an_hour_and_its_bot_as_many_again() {
+    let site = Site::start().await;
+    site.alice_and_marvin().await;
+    let (alice, marvin) = (basic("alice", PASSWORD), basic("Marvin", PASSWORD));
+    for _ in 0..upload_rules::PER_HOUR {
+        assert_eq!(site.upload(PNG, Some(&alice)).await.status(), 201);
+    }
+    assert_eq!(site.upload(SVG, Some(&marvin)).await.status(), 415);
+
+    let response = site.upload(PNG, Some(&alice)).await;
+
+    assert_eq!(response.status(), 429);
+    assert_eq!(
+        body_text(response).await,
+        "That's 30 uploads in the last hour. Try again later.\n"
+    );
+    assert_eq!(site.upload(PNG, Some(&marvin)).await.status(), 201);
+}
+
+#[tokio::test]
+async fn an_owner_whose_uploads_fill_their_room_gets_507_for_theirs_and_their_bots() {
+    let site = Site::start().await;
+    site.alice_and_marvin().await;
+    let nearly_full = upload_rules::QUOTA_BYTES - PNG.len() as i64 + 1;
+    site.execute(&format!(
+        "INSERT INTO uploads (id, account, owner, content_type, size, created_at)
+         VALUES ('AAAAAAAAAAAAAAAAAAAAAA', 'alice', 'alice', 'image/png', {nearly_full}, 0)"
+    ))
+    .await;
+
+    for uploader in ["alice", "Marvin"] {
+        let response = site.upload(PNG, Some(&basic(uploader, PASSWORD))).await;
+        assert_eq!(response.status(), 507, "{uploader}");
+        assert_eq!(
+            body_text(response).await,
+            "Your uploads take all of your 500 MB. Delete some on the members' site to make room.\n"
+        );
+    }
+    assert!(site.scrubber.stored().is_empty());
+    assert_eq!(site.upload_rows().await, 1);
+    site.execute("UPDATE uploads SET size = size - 1").await;
+    let marvin = basic("Marvin", PASSWORD);
+    assert_eq!(site.upload(PNG, Some(&marvin)).await.status(), 201);
 }
