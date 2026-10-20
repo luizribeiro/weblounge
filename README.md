@@ -132,6 +132,39 @@ marks it as a migration, and running it again changes nothing. Bots stay
 out of #lounge, which everyone auto-joins, through its one ban
 `+b *!*@weblounge/bot/*`, which luiz sets as the channel's founder.
 
+## Uploads
+
+Members paste or attach images in IRC clients, which upload them to the
+endpoint Ergo advertises in the `soju.im/FILEHOST` and `draft/FILEHOST`
+ISUPPORT tokens, `https://files.weblounge.org/upload`, and post the link
+they get back. The limits and the retention live in
+`crates/concierge/src/upload_rules.rs`: 10 MB an image, 500 MB a member,
+their bots' counted to them, 30 an hour an account, deleted after 30
+days.
+
+Two processes share the work, so the one that parses what members
+upload holds nothing else:
+
+1. Concierge authenticates the upload with the credentials the client
+   logs in to IRC with: gamja's access token as a Bearer, or a nick and
+   password as Basic, which Ergo checks behind the sign-in limits. It
+   checks the limits, and records each upload in its `uploads` table.
+2. `crates/scrubber`, a binary of its own, does everything with the
+   bytes. `concierge-scrubber.socket` starts one per connection, with
+   no network, a dynamic user, and nothing of the filesystem but the
+   store and the uploads directory. Concierge streams the body to it,
+   in the frames `crates/filehost` defines; it tells PNG, JPEG, GIF and
+   WebP from their bytes, refuses anything else, strips EXIF (but for
+   the orientation), XMP, comments and the like without decoding a
+   pixel, and stores what's left in `/var/lib/concierge-files` under a
+   random 22-character id and the extension of the type it found.
+
+nginx serves the files from `files.weblounge.org`, logging nothing, as
+images that nothing may run or index. Members see and delete their
+uploads, and their bots', on the Uploads tab. `concierge-expire-uploads`
+deletes them after 30 days, hourly, with any file no upload stands for;
+`member delete` and `bot delete` delete them with their owner.
+
 ## Running a server locally
 
 `just vm start` boots credenza's real configuration in a QEMU VM on your
@@ -198,14 +231,14 @@ machine. They print plain lines a script can read:
 | `status`                                        | Configuration, secrets, database and whether Ergo answers        |
 | `invite create --root [--admin]`                | Prints a root invite's link; `--admin` makes its redeemer admin  |
 | `member reset-password <account>`               | Sets a new generated password, ends sessions, prints it once     |
-| `member delete <account>`                       | Locks a member out, removes data and bots; their place stays     |
+| `member delete <account>`                       | Locks a member out, removes data, uploads and bots; place stays  |
 | `member reconcile`                              | Lists accounts Ergo and concierge disagree on, bots included     |
 | `member send-verification <account>`            | Mails a member a new link to confirm their email                 |
 | `member send-verification --unverified`         | Mails one to every unconfirmed member never sent one, 60 a run   |
 | `bot create <owner> <name> [--note …]`          | Registers a member's bot, prints its generated password once     |
 | `bot list [<owner>]`                            | Lists bots, of everyone or one member: name, owner, date, note   |
 | `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |
-| `bot delete <name>`                             | Erases a bot's account, disconnecting it, and frees its name     |
+| `bot delete <name>`                             | Erases a bot and its uploads, disconnecting it; frees its name   |
 | `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password; `-` is stdin |
 
 After `member delete`, an oper still runs `/NS ERASE <account>`. `bot
@@ -259,7 +292,7 @@ in `secrets/vm.yaml` with `secrets/vm-age.key`, committed on purpose.
 | `tests/`     | Flake checks of the Nix code; `tests/e2e/` holds the VM tests     |
 | `services/`  | Opt-in configuration, one file per service a host can run         |
 | `pkgs/`      | Our own packages, exposed to hosts as `pkgs.weblounge.*`          |
-| `crates/`    | Rust code: concierge, its mailer and outbox, and ergo-api         |
+| `crates/`    | Rust code: concierge, its mailer, outbox and scrubber, ergo-api   |
 | `web/`       | Sources of everything the browser loads                           |
 | `templates/` | `nix flake init` templates; `bot` is the template bots start from |
 | `dns/`       | The DNS zone, generated from the hosts, and its dnscontrol config |
