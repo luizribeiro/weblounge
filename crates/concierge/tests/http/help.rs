@@ -1,4 +1,4 @@
-use concierge::bot_rules::MAX_LIVE;
+use concierge::{bot_rules::MAX_LIVE, invite_rules, upload_rules};
 use regex::Regex;
 
 use crate::{Site, body_text, is_tab};
@@ -51,6 +51,7 @@ async fn the_help_index_lists_its_topics_and_where_to_ask_next() {
             topic("/help/several-devices", "Use weblounge on several devices"),
             topic("/help/start-a-channel", "Start a channel and keep it"),
             topic("/help/make-a-bot", "Make a bot"),
+            topic("/help/share-an-image", "Share an image"),
         ]
     );
     assert!(page.contains(STILL_STUCK), "{page}");
@@ -157,6 +158,37 @@ async fn make_a_bot_shows_the_members_own_bot_host_and_how_many_bots_they_may_ha
     ] {
         assert!(page.contains(line), "{line}\n{page}");
     }
+}
+
+#[tokio::test]
+async fn share_an_image_gives_the_upload_limits_from_the_rules() {
+    let page = Site::start().await.help_page("/help/share-an-image").await;
+    let mb = upload_rules::in_megabytes;
+
+    for line in [
+        r#"<li>Open a channel or a chat in <a href="https://irc.weblounge.org/">the web client</a>, or in your IRC app if it can upload.</li>"#.to_owned(),
+        format!(
+            "<li>Images can be {}, up to {} each and {} an hour.</li>",
+            upload_rules::types_in_words(),
+            mb(upload_rules::MAX_BYTES),
+            upload_rules::PER_HOUR
+        ),
+        format!(
+            "<li>You have {} in all, and your bots&#39; uploads count toward it.</li>",
+            mb(upload_rules::QUOTA_BYTES)
+        ),
+        format!(
+            r#"<li>Each image is deleted after {}. Your <a href="/uploads">Uploads</a> tab"#,
+            invite_rules::in_words(upload_rules::RETENTION)
+        ),
+        "Anyone with an image&#39;s link can see it.".to_owned(),
+    ] {
+        assert!(page.contains(&line), "{line}\n{page}");
+    }
+    assert!(
+        page.contains("Images can be PNG, JPEG, GIF or WebP, up to 10 MB each and 30 an hour."),
+        "{page}"
+    );
 }
 
 #[tokio::test]

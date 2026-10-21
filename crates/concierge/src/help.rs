@@ -4,7 +4,7 @@
 
 use std::iter;
 
-use crate::{app::App, bot_rules, invite_rules};
+use crate::{app::App, bot_rules, invite_rules, upload_rules};
 
 /// A page Help links to, by the task it helps with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +32,11 @@ const CHANNEL: Topic = Topic {
 const BOT: Topic = Topic {
     title: "Make a bot",
     href: "/help/make-a-bot",
+};
+
+const IMAGE: Topic = Topic {
+    title: "Share an image",
+    href: "/help/share-an-image",
 };
 
 /// The bot template's guide, which shows each way to run a bot.
@@ -80,6 +85,7 @@ pub struct Facts<'a> {
     pub history_kept: String,
     /// Where members open the web client.
     pub webchat: String,
+    pub uploads: upload_rules::InWords,
 }
 
 impl<'a> Facts<'a> {
@@ -88,6 +94,7 @@ impl<'a> Facts<'a> {
             nick,
             history_kept: invite_rules::in_words(app.history_expiry),
             webchat: app.webchat.redirect_uri(),
+            uploads: upload_rules::InWords::default(),
         }
     }
 }
@@ -99,7 +106,12 @@ impl Article {
 }
 
 pub fn articles(facts: &Facts) -> Vec<Article> {
-    vec![several_devices(facts), start_a_channel(), make_a_bot(facts)]
+    vec![
+        several_devices(facts),
+        start_a_channel(),
+        make_a_bot(facts),
+        share_an_image(facts),
+    ]
 }
 
 pub fn article(slug: &str, facts: &Facts) -> Option<Article> {
@@ -211,6 +223,37 @@ fn make_a_bot(facts: &Facts) -> Article {
             "A bot's name is its nick for good.".into(),
             "Bots aren't always-on: a bot you stop leaves its channels.".into(),
         ],
-        related: &[CHANNEL],
+        related: &[CHANNEL, IMAGE],
+    }
+}
+
+fn share_an_image(facts: &Facts) -> Article {
+    let rules = &facts.uploads;
+    Article {
+        topic: IMAGE,
+        lede: "Paste or attach an image in the chat, and everyone there gets a link to it.",
+        sections: vec![
+            Section::steps(
+                None,
+                [
+                    format!("Open a channel or a chat in [the web client]({}), or in your IRC app if it can upload.", facts.webchat),
+                    "Paste the image, or attach it. Its link goes to the chat.".into(),
+                ],
+            ),
+            Section::points(
+                Some("Limits"),
+                [
+                    format!("Images can be {}, up to {} each and {} an hour.", rules.types, rules.max, rules.per_hour),
+                    format!("You have {} in all, and your bots' uploads count toward it.", rules.quota),
+                    format!("Each image is deleted after {}. Your [Uploads](/uploads) tab lists yours with the days left, and you can delete one sooner.", rules.kept),
+                ],
+            ),
+        ],
+        keep_in_mind: vec![
+            "Anyone with an image's link can see it. The link can't be guessed, and we list it only on your Uploads tab.".into(),
+            "Where and when a photo was taken, the camera and anything else stored in the file are removed, and so is the file's name.".into(),
+            "People who saw an image may keep their own copy.".into(),
+        ],
+        related: &[BOT, OWN_APP],
     }
 }
