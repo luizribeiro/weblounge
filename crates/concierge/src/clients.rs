@@ -150,14 +150,16 @@ pub fn by_slug(slug: &str) -> Option<&'static Client> {
     CLIENTS.iter().find(|client| client.slug == slug)
 }
 
-/// The clients to lead with on `platform`, best first; every client when
-/// the platform is unknown.
+/// The apps to lead with on `platform`, best first; none when the
+/// platform is unknown, which leaves the web client to lead.
 pub fn recommended(platform: Option<Platform>) -> Vec<&'static Client> {
     let slugs: &[&str] = match platform {
-        Some(Platform::MacOs | Platform::Windows | Platform::Linux) => &["halloy"],
-        Some(Platform::Ios) => &["goguma", "mango"],
+        Some(Platform::MacOs) => &["halloy", "mango"],
+        Some(Platform::Windows | Platform::Linux) => &["halloy"],
+        // Mango leads because it sends push notifications.
+        Some(Platform::Ios) => &["mango", "goguma"],
         Some(Platform::Android) => &["goguma"],
-        None => return CLIENTS.iter().collect(),
+        None => &[],
     };
     slugs.iter().filter_map(|slug| by_slug(slug)).collect()
 }
@@ -270,19 +272,20 @@ mod tests {
     }
 
     #[test]
-    fn leads_with_a_client_for_the_platform_and_all_of_them_otherwise() {
+    fn leads_with_apps_for_the_platform_and_none_when_it_is_unknown() {
         let slugs = |platform| {
             recommended(platform)
                 .iter()
                 .map(|client| client.slug)
                 .collect::<Vec<_>>()
         };
-        for platform in [Platform::MacOs, Platform::Windows, Platform::Linux] {
+        assert_eq!(slugs(Some(Platform::MacOs)), ["halloy", "mango"]);
+        for platform in [Platform::Windows, Platform::Linux] {
             assert_eq!(slugs(Some(platform)), ["halloy"]);
         }
-        assert_eq!(slugs(Some(Platform::Ios)), ["goguma", "mango"]);
+        assert_eq!(slugs(Some(Platform::Ios)), ["mango", "goguma"]);
         assert_eq!(slugs(Some(Platform::Android)), ["goguma"]);
-        assert_eq!(slugs(None).len(), CLIENTS.len());
+        assert!(slugs(None).is_empty());
     }
 
     #[test]

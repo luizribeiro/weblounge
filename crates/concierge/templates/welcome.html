@@ -18,6 +18,7 @@
           <h2 class="eyebrow" id="connect-title">Use your own client</h2>
           {%- call components::connection(irc, Some(nick), "The one you just set.") %}{% endcall %}
         </section>
+        {%- if !recommended.is_empty() %}
         <section class="card" aria-labelledby="picks-title">
           <h2 class="eyebrow" id="picks-title">{% if recommended.len() == 1 %}Our pick for you{% else %}Our picks{% endif %}</h2>
           {%- for client in recommended %}
@@ -33,6 +34,7 @@
           </div>
           {%- endfor %}
         </section>
+        {%- endif %}
       </div>
       {%- call components::guides(clients) %}{% endcall %}
 {%- endblock %}

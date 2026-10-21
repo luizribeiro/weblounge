@@ -8,7 +8,7 @@ use ergo_api::fake::Failure;
 use serde_json::json;
 use tokio::net::TcpListener;
 
-use concierge::{email::Email, name::MemberName, verification_mail};
+use concierge::{clients::CLIENTS, email::Email, name::MemberName, verification_mail};
 
 use crate::{HISTORY_EXPIRY, Site, body_text, execute, session_cookie, verification_link};
 
@@ -454,27 +454,23 @@ async fn signing_up_from_another_origin_is_refused() {
 #[tokio::test]
 async fn the_welcome_page_leads_with_clients_for_the_visitors_platform() {
     let iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15";
-    for (user_agent, picks, not) in [
-        (Some(iphone), &["Goguma", "Mango"][..], Some("Halloy")),
-        (
-            None,
-            &["Halloy", "Goguma", "Mango", "senpai", "WeeChat"][..],
-            None,
-        ),
-    ] {
+    for (user_agent, picks) in [(Some(iphone), &["Mango", "Goguma"][..]), (None, &[][..])] {
         let site = with_invite_from_alice().await;
         let mut headers = vec![(header::ORIGIN.as_str(), crate::PUBLIC_URL)];
         headers.extend(user_agent.map(|agent| (header::USER_AGENT.as_str(), agent)));
         let page = body_text(site.post_with(INVITE, &bob(), None, &headers).await).await;
-        for pick in picks {
-            assert!(
-                page.contains(&format!(">{pick}</a></h3>")),
-                "{pick}: {page}"
-            );
-        }
-        if let Some(not) = not {
-            assert!(!page.contains(&format!(">{not}</a></h3>")), "{page}");
-        }
+        let mut shown: Vec<_> = CLIENTS
+            .iter()
+            .filter_map(|client| {
+                let at = page.find(&format!(">{}</a></h3>", client.name))?;
+                Some((at, client.name))
+            })
+            .collect();
+        shown.sort();
+        let shown: Vec<_> = shown.into_iter().map(|(_, name)| name).collect();
+        assert_eq!(shown, picks, "{page}");
+        assert_eq!(picks.is_empty(), !page.contains("Our pick"), "{page}");
+        assert!(crate::opens_the_chat(&page), "{page}");
     }
 }
 
