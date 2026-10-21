@@ -669,6 +669,10 @@ dialog.card {
       color: var(--muted);
     }
   }
+
+  & .links a {
+    text-decoration: underline;
+  }
 }
 
 .picks {

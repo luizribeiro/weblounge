@@ -20,7 +20,8 @@ pub struct Client {
     /// How to set it up, in a line or two, next to the connection details.
     pub setup: &'static str,
     config: Option<Format>,
-    /// Whether it opens `ircs://` links with the server filled in.
+    /// Whether it opens `ircs://` links with the server filled in. Guides
+    /// offer the link beside the config, so only an app with one sets it.
     opens_ircs_links: bool,
     /// Where the list of all apps files it.
     groups: &'static [Group],
@@ -97,7 +98,7 @@ pub const CLIENTS: [Client; 6] = [
             label: "Source",
             url: "https://codeberg.org/emersion/gamja",
         }],
-        setup: "Nothing to set up: it signs you in with your session here and opens #lounge.",
+        setup: "It signs you in with your session here and opens #lounge.",
         config: None,
         opens_ircs_links: false,
         groups: &[Group::Browser],

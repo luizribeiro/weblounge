@@ -4,37 +4,43 @@
 {% block title %}{{ client.name }}{% endblock %}
 
 {% block content %}
-      <p class="eyebrow">Setup guide</p>
-      <h1>{{ client.name }}</h1>
+      <h1>Set up {{ client.name }}</h1>
       <p class="lede">{{ client.runs_on }} · {{ client.price }}</p>
-      <p class="links">
-        {%- for link in client.links %}
-        <a href="{{ link.url }}">{{ link.label }}</a>
-        {%- endfor %}
-      </p>
       {%- if client.in_browser() %}
       <p class="prose">{{ client.setup }}</p>
       {%- call components::open_chat(webchat) %}{% endcall %}
       {%- else %}
-      <div class="account-grid">
-        <section class="card" aria-labelledby="setup-title">
-          <h2 class="eyebrow" id="setup-title">Set it up</h2>
+      <ol class="steps">
+        <li>
+          <h2>Get it</h2>
+          <p class="links">
+            {%- for link in client.links %}
+            <a href="{{ link.url }}">{{ link.label }}</a>
+            {%- endfor %}
+          </p>
+        </li>
+        <li>
+          <h2>Add weblounge</h2>
           <p>{{ client.setup }}</p>
           {%- if let Some(snippet) = snippet %}
           {%- call components::snippet(snippet) %}{% endcall %}
-          {%- endif %}
           {%- if let Some(link) = ircs_link %}
           <p class="hint">Or open <a href="{{ link }}">{{ link }}</a> in {{ client.name }} and add your nick and password.</p>
+          {%- endif %}
+          <details class="more">
+            <summary>Connection details</summary>
+            {%- call components::your_connection(irc, nick) %}{% endcall %}
+          </details>
+          {%- else %}
+          <div class="card connection-card">
+            {%- call components::your_connection(irc, nick) %}{% endcall %}
+          </div>
           {%- endif %}
           {%- if let Some(url) = client.certificate_url() %}
           <p class="hint">Rather not keep a password in the config? <a href="{{ url }}">Log in with a certificate</a></p>
           {%- endif %}
-        </section>
-        <section class="card" aria-labelledby="connect-title">
-          <h2 class="eyebrow" id="connect-title">Connection</h2>
-          {%- call components::your_connection(irc, nick) %}{% endcall %}
-        </section>
-      </div>
+        </li>
+      </ol>
       {%- endif %}
-      {%- call components::guides(clients) %}{% endcall %}
+      <p class="see-also"><a href="/clients/all">Back to all apps</a></p>
 {%- endblock %}

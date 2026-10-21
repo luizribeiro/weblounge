@@ -11,7 +11,7 @@ use super::{Layout, not_found, render};
 use crate::{
     app::AppState,
     auth::Visitor,
-    clients::{self, CLIENTS, Client, Snippet},
+    clients::{self, Client, Snippet},
     config::IrcServer,
     oauth::Webchat,
     platform::{Platform, VisitorPlatform},
@@ -26,7 +26,6 @@ struct Guide<'a> {
     client: &'a Client,
     snippet: Option<Snippet>,
     ircs_link: Option<String>,
-    clients: &'a [Client],
     webchat: &'a Webchat,
 }
 
@@ -84,7 +83,6 @@ pub async fn show(
         client,
         snippet: client.snippet(&app.irc_server, nick),
         ircs_link: client.ircs_link(&app.irc_server),
-        clients: &CLIENTS,
         webchat: &app.webchat,
     })
 }

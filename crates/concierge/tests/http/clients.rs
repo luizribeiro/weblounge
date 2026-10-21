@@ -103,7 +103,7 @@ async fn a_member_gets_a_config_with_their_nick_and_no_password() {
 
     assert_eq!(response.status(), 200);
     let page = body_text(response).await;
-    assert!(page.contains("<h1>Halloy</h1>"), "{page}");
+    assert!(page.contains("<h1>Set up Halloy</h1>"), "{page}");
     assert!(page.contains("nickname = &#34;Alice&#34;"), "{page}");
     assert!(
         page.contains("server = &#34;irc.weblounge.org&#34;"),
@@ -126,9 +126,15 @@ async fn guests_get_every_guide_with_a_placeholder_nick() {
         assert_eq!(response.status(), 200, "{}", client.slug);
         let page = body_text(response).await;
         assert!(
-            page.contains(&format!("<h1>{}</h1>", client.name)),
+            page.contains(&format!("<h1>Set up {}</h1>", client.name)),
             "{page}"
         );
+        let get = page.find("<h2>Get it</h2>").unwrap();
+        let add = page.find("<h2>Add weblounge</h2>").unwrap();
+        for link in client.links {
+            let at = page.find(&format!(r#"<a href="{}">"#, link.url)).unwrap();
+            assert!(get < at && at < add, "{page}");
+        }
         assert!(page.contains("<dd>Your nick.</dd>"), "{page}");
         assert!(page.contains("<code>6697</code>"), "{page}");
         let has_config = client.snippet(&crate::irc_server(), None).is_some();
@@ -140,8 +146,10 @@ async fn guests_get_every_guide_with_a_placeholder_nick() {
 #[tokio::test]
 async fn gamjas_guide_just_opens_the_chat() {
     let page = body_text(Site::start().await.get("/clients/gamja", None).await).await;
-    assert!(page.contains("<h1>gamja</h1>"), "{page}");
+    assert!(page.contains("<h1>Set up gamja</h1>"), "{page}");
     assert!(crate::opens_the_chat(&page), "{page}");
+    assert!(!page.contains("<ol"), "{page}");
+    assert!(!page.contains("codeberg.org/emersion/gamja"), "{page}");
     assert!(!page.contains("<code>PLAIN</code>"), "{page}");
     assert!(!page.contains("<pre>"), "{page}");
 }
@@ -155,17 +163,49 @@ async fn phone_clients_get_the_fields_and_no_config() {
     );
     assert!(!page.contains("<pre>"), "{page}");
     assert!(!page.contains("ircs://"), "{page}");
+    assert!(!page.contains("<details"), "{page}");
+    assert!(
+        page.contains(r#"<div class="card connection-card">"#),
+        "{page}"
+    );
 }
 
 #[tokio::test]
-async fn every_guide_links_all_the_guides() {
+async fn apps_with_a_config_fold_the_connection_details_away_under_it() {
     let site = Site::start().await;
-    site.add_member("alice").await;
-    let cookie = site.sign_in("alice").await;
-    let page = body_text(site.get("/clients/senpai", Some(&cookie)).await).await;
+    for slug in ["halloy", "senpai", "weechat"] {
+        let page = body_text(site.get(&format!("/clients/{slug}"), None).await).await;
+        let snippet = page.find("<pre>").unwrap();
+        let details = page.find("<details").unwrap();
+        assert!(snippet < details, "{page}");
+        assert!(
+            page[details..].starts_with(
+                "<details class=\"more\">\n            <summary>Connection details</summary>"
+            ),
+            "{page}"
+        );
+        assert!(page[details..].contains("<code>PLAIN</code>"), "{page}");
+    }
+}
+
+#[tokio::test]
+async fn every_guide_ends_with_the_way_back_to_all_apps_and_no_chips() {
+    let site = Site::start().await;
     for client in &CLIENTS {
-        let link = format!(r#"href="/clients/{}""#, client.slug);
-        assert!(page.contains(&link), "lacks {link}");
+        let page = body_text(site.get(&client.guide_url(), None).await).await;
+        let main = &page[page.find("<main").unwrap()..page.find("</main>").unwrap()];
+        assert!(
+            main.trim_end().ends_with(
+                r#"<p class="see-also"><a href="/clients/all">Back to all apps</a></p>"#
+            ),
+            "{main}"
+        );
+        assert!(!main.contains("chips"), "{main}");
+        let others = CLIENTS.iter().filter(|other| other.slug != client.slug);
+        for other in others {
+            let link = format!(r#"href="{}""#, other.guide_url());
+            assert!(!main.contains(&link), "{}: {main}", client.slug);
+        }
     }
 }
 
