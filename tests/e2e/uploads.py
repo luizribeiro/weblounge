@@ -109,6 +109,18 @@ with subtest("files.weblounge.org asks robots to stay away"):
     assert robots.endswith("\r\n\r\nUser-agent: *\nDisallow: /\n"), robots
     assert "x-robots-tag: noindex, nofollow, noimageindex, noai, noimageai" in robots.lower(), robots
 
+with subtest("a symlink in the uploads directory isn't followed, though a file under its name is served"):
+    secret = "/run/nginx-readable-secret"
+    planted = f"{uploads_dir}/SymLinkPlantedByAScrub.png"
+    credenza.succeed(f"echo not-for-you > {secret} && chgrp nginx {secret} && chmod 640 {secret}")
+    credenza.succeed(f"cp {secret} {planted} && chgrp concierge-files {planted}")
+    assert get_file(f"/{planted.rsplit('/', 1)[1]}")["status"] == 200
+    credenza.succeed(f"rm {planted} && ln -s {secret} {planted}")
+    followed = get_file(f"/{planted.rsplit('/', 1)[1]}")
+    assert followed["status"] == 403, followed
+    client.fail("grep -q not-for-you /tmp/fetched")
+    credenza.succeed(f"rm {planted} {secret}")
+
 with subtest("deleting a bot deletes its uploads, and deleting a member deletes theirs"):
     zoebots = concierge_sql("SELECT id FROM uploads WHERE account = 'zoebot'").split()
     assert len(zoebots) == 2, zoebots

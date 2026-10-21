@@ -135,8 +135,10 @@ in
       locations."~ \"${uploadPath}\"" = {
         root = cfg.directory;
         # nginx serves each type by its extension; browsers show these
-        # inline, and are told so.
+        # inline, and are told so. A symlink a compromised scrubber plants
+        # could point at anything nginx may read, its TLS keys included.
         extraConfig = headers + ''
+          disable_symlinks on;
           add_header Cross-Origin-Resource-Policy "cross-origin" always;
           add_header Content-Disposition "inline" always;
         '';
