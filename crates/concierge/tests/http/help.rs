@@ -48,6 +48,7 @@ async fn the_help_index_lists_its_topics_and_where_to_ask_next() {
         [
             topic("/clients", "Use your own app"),
             topic("/help/several-devices", "Use weblounge on several devices"),
+            topic("/help/start-a-channel", "Start a channel and keep it"),
         ]
     );
     assert!(page.contains(STILL_STUCK), "{page}");
@@ -115,8 +116,27 @@ async fn several_devices_says_where_to_turn_always_on_off_and_how_long_history_l
     );
     assert_eq!(
         links(&page, "help-related"),
-        [topic("/clients", "Use your own app")]
+        [
+            topic("/clients", "Use your own app"),
+            topic("/help/start-a-channel", "Start a channel and keep it"),
+        ]
     );
+}
+
+#[tokio::test]
+async fn start_a_channel_gives_the_commands_to_start_register_and_close_one() {
+    let page = Site::start().await.help_page("/help/start-a-channel").await;
+
+    for line in [
+        "<li>Run <code>/join #name</code>. If nobody&#39;s in it, you start it and become its op (@).</li>",
+        "<li>While you&#39;re its op, run <code>/msg ChanServ REGISTER #name</code>. \
+         That makes you its founder (~).</li>",
+        "<li>Run <code>/mode #name +i</code>, so people can join only when invited.</li>",
+        "<li>Invite someone with <code>/invite nick #name</code>.</li>",
+    ] {
+        assert!(page.contains(line), "{line}\n{page}");
+    }
+    assert!(page.contains("Only ops can change the topic."), "{page}");
 }
 
 #[tokio::test]

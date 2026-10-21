@@ -24,6 +24,11 @@ const DEVICES: Topic = Topic {
     href: "/help/several-devices",
 };
 
+const CHANNEL: Topic = Topic {
+    title: "Start a channel and keep it",
+    href: "/help/start-a-channel",
+};
+
 pub struct Article {
     pub topic: Topic,
     /// What the reader can do, in a sentence.
@@ -83,7 +88,7 @@ impl Article {
 }
 
 pub fn articles(facts: &Facts) -> Vec<Article> {
-    vec![several_devices(facts)]
+    vec![several_devices(facts), start_a_channel()]
 }
 
 pub fn article(slug: &str, facts: &Facts) -> Option<Article> {
@@ -128,6 +133,41 @@ fn several_devices(facts: &Facts) -> Article {
             ),
             "Other people's apps may keep their own copies.".into(),
         ],
-        related: &[OWN_APP],
+        related: &[OWN_APP, CHANNEL],
+    }
+}
+
+fn start_a_channel() -> Article {
+    Article {
+        topic: CHANNEL,
+        lede: "Any member can start a channel, and make it theirs for good.",
+        sections: vec![
+            Section::steps(
+                Some("Start one"),
+                [
+                    "Run `/join #name`. If nobody's in it, you start it and become its op (@).".into(),
+                    "Say what it's about with `/topic` and a line of text. Only ops can change the topic.".into(),
+                ],
+            ),
+            Section::points(
+                Some("Keep it yours"),
+                [
+                    "While you're its op, run `/msg ChanServ REGISTER #name`. That makes you its founder (~).".into(),
+                    "A registered channel keeps its topic and modes, and gives you ~ back whenever you rejoin.".into(),
+                ],
+            ),
+            Section::steps(
+                Some("Make it private"),
+                [
+                    "Run `/mode #name +i`, so people can join only when invited.".into(),
+                    "Invite someone with `/invite nick #name`.".into(),
+                ],
+            ),
+        ],
+        keep_in_mind: vec![
+            "To leave a channel out of `/list` too, run `/mode #name +s`.".into(),
+            "With always-on, you stay in your channels, and keep your @, while you're away.".into(),
+        ],
+        related: &[DEVICES],
     }
 }
