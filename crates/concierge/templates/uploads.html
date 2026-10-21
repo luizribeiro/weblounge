@@ -5,13 +5,7 @@
 
 {% block content %}
       <h1>Uploads</h1>
-      <section class="card tab-card" aria-labelledby="about-uploads-title">
-        <h2 class="eyebrow" id="about-uploads-title">How uploads work</h2>
-        {%- if !uploads.is_empty() %}
-        {%- call components::how_to_upload(webchat) %}{% endcall %}
-        {%- endif %}
-        <p class="hint">Anyone with an image's link can see it, so share it where you'd share the image. Images can be {{ rules.types }}, up to {{ rules.max }} each and {{ rules.per_hour }} an hour. Where and when a photo was taken, the camera and anything else stored in the file are removed when you upload it. Each image is deleted after {{ rules.kept }}.</p>
-      </section>
+      <p class="lede tab-blurb">The images you shared in the chat, kept for {{ rules.kept }}. <a href="{{ crate::help::IMAGE.href }}">Learn how sharing works</a></p>
       <section class="card tab-card uploads-card" aria-labelledby="uploads-title">
         <h2 class="eyebrow" id="uploads-title">Your uploads</h2>
         <p class="invite-count"><span class="invite-count-number">{{ crate::upload_rules::in_megabytes(*used) }} of {{ rules.quota }}</span> used</p>

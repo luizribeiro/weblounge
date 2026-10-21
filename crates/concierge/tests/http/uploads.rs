@@ -35,7 +35,7 @@ fn link(id: &str) -> String {
 }
 
 #[tokio::test]
-async fn a_member_without_uploads_learns_how_to_make_one_and_the_rules() {
+async fn a_member_without_uploads_learns_how_to_make_one_and_where_help_is() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
@@ -57,17 +57,12 @@ async fn a_member_without_uploads_learns_how_to_make_one_and_the_rules() {
         "{page}"
     );
     assert!(
-        page.contains("Images can be PNG, JPEG, GIF or WebP, up to 10 MB each and 30 an hour."),
+        page.contains(
+            r#"The images you shared in the chat, kept for 30 days. <a href="/help/share-an-image">Learn how sharing works</a>"#
+        ),
         "{page}"
     );
-    assert!(
-        page.contains("Each image is deleted after 30 days."),
-        "{page}"
-    );
-    assert!(
-        page.contains("Anyone with an image's link can see it"),
-        "{page}"
-    );
+    assert!(!page.contains("How uploads work"), "{page}");
     assert!(listed(&page).is_empty());
 }
 

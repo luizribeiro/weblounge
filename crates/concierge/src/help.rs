@@ -34,7 +34,7 @@ pub const BOT: Topic = Topic {
     href: "/help/make-a-bot",
 };
 
-const IMAGE: Topic = Topic {
+pub const IMAGE: Topic = Topic {
     title: "Share an image",
     href: "/help/share-an-image",
 };
