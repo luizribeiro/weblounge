@@ -32,7 +32,7 @@ struct ArticlePage<'a> {
 }
 
 pub async fn index(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
-    let facts = Facts::new(&app);
+    let facts = Facts::new(&app, me.member.account.as_str());
     render(&Index {
         layout: Layout::member(&app, &me.member).on(Tab::Help),
         topics: help::index(&facts),
@@ -45,7 +45,7 @@ pub async fn show(
     CurrentMember(me): CurrentMember,
     Path(slug): Path<String>,
 ) -> Response {
-    let facts = Facts::new(&app);
+    let facts = Facts::new(&app, me.member.account.as_str());
     let Some(article) = help::article(&slug, &facts) else {
         return not_found();
     };

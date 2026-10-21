@@ -4,7 +4,7 @@
 
 use std::iter;
 
-use crate::{app::App, invite_rules};
+use crate::{app::App, bot_rules, invite_rules};
 
 /// A page Help links to, by the task it helps with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +28,14 @@ const CHANNEL: Topic = Topic {
     title: "Start a channel and keep it",
     href: "/help/start-a-channel",
 };
+
+const BOT: Topic = Topic {
+    title: "Make a bot",
+    href: "/help/make-a-bot",
+};
+
+/// The bot template's guide, which shows each way to run a bot.
+const BOT_TEMPLATE: &str = "https://github.com/luizribeiro/weblounge/tree/main/templates/bot";
 
 pub struct Article {
     pub topic: Topic,
@@ -64,17 +72,20 @@ impl Section {
     }
 }
 
-/// What articles say that depends on the network's settings.
-pub struct Facts {
+/// What articles say that depends on the reader and on the network's
+/// settings.
+pub struct Facts<'a> {
+    pub nick: &'a str,
     /// How long the server keeps chat history, in words.
     pub history_kept: String,
     /// Where members open the web client.
     pub webchat: String,
 }
 
-impl Facts {
-    pub fn new(app: &App) -> Self {
+impl<'a> Facts<'a> {
+    pub fn new(app: &App, nick: &'a str) -> Self {
         Self {
+            nick,
             history_kept: invite_rules::in_words(app.history_expiry),
             webchat: app.webchat.redirect_uri(),
         }
@@ -88,7 +99,7 @@ impl Article {
 }
 
 pub fn articles(facts: &Facts) -> Vec<Article> {
-    vec![several_devices(facts), start_a_channel()]
+    vec![several_devices(facts), start_a_channel(), make_a_bot(facts)]
 }
 
 pub fn article(slug: &str, facts: &Facts) -> Option<Article> {
@@ -168,6 +179,38 @@ fn start_a_channel() -> Article {
             "To leave a channel out of `/list` too, run `/mode #name +s`.".into(),
             "With always-on, you stay in your channels, and keep your @, while you're away.".into(),
         ],
-        related: &[DEVICES],
+        related: &[DEVICES, BOT],
+    }
+}
+
+fn make_a_bot(facts: &Facts) -> Article {
+    Article {
+        topic: BOT,
+        lede: "A bot is a program that chats from an account of its own. You make the account here and run the program wherever you like.",
+        sections: vec![
+            Section::steps(
+                None,
+                [
+                    "Make its account on the [Bots](/bots) tab, and copy its password. It's shown only once.".into(),
+                    "Start from our template: `nix flake init -t github:luizribeiro/weblounge#bot`.".into(),
+                    "Set `IRC_NICK` to the bot's name, `IRC_CHANNELS` to the channels it joins and `IRC_PASSWORD_FILE` to a file holding its password.".into(),
+                    format!("Run it as a NixOS service, a systemd unit or a container. The [template's guide]({BOT_TEMPLATE}) shows each one."),
+                ],
+            ),
+            Section::points(
+                Some("What everyone sees"),
+                [
+                    format!("Your bot connects as `weblounge/bot/{}`, so everyone can tell it's yours.", facts.nick),
+                    "It marks itself as a bot (`+B`).".into(),
+                    "It can't join #lounge. Use #bots, or a channel of your own.".into(),
+                ],
+            ),
+        ],
+        keep_in_mind: vec![
+            format!("You can have up to {} bots once you've confirmed your email.", bot_rules::MAX_LIVE),
+            "A bot's name is its nick for good.".into(),
+            "Bots aren't always-on: a bot you stop leaves its channels.".into(),
+        ],
+        related: &[CHANNEL],
     }
 }

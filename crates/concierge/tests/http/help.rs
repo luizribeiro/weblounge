@@ -1,3 +1,4 @@
+use concierge::bot_rules::MAX_LIVE;
 use regex::Regex;
 
 use crate::{Site, body_text, is_tab};
@@ -49,6 +50,7 @@ async fn the_help_index_lists_its_topics_and_where_to_ask_next() {
             topic("/clients", "Use your own app"),
             topic("/help/several-devices", "Use weblounge on several devices"),
             topic("/help/start-a-channel", "Start a channel and keep it"),
+            topic("/help/make-a-bot", "Make a bot"),
         ]
     );
     assert!(page.contains(STILL_STUCK), "{page}");
@@ -137,6 +139,24 @@ async fn start_a_channel_gives_the_commands_to_start_register_and_close_one() {
         assert!(page.contains(line), "{line}\n{page}");
     }
     assert!(page.contains("Only ops can change the topic."), "{page}");
+}
+
+#[tokio::test]
+async fn make_a_bot_shows_the_members_own_bot_host_and_how_many_bots_they_may_have() {
+    let page = Site::start().await.help_page("/help/make-a-bot").await;
+
+    for line in [
+        r#"<li>Make its account on the <a href="/bots">Bots</a> tab, and copy its password."#,
+        "<li>Start from our template: <code>nix flake init -t github:luizribeiro/weblounge#bot</code>.</li>",
+        r#"The <a href="https://github.com/luizribeiro/weblounge/tree/main/templates/bot">template&#39;s guide</a>"#,
+        "<li>Your bot connects as <code>weblounge/bot/alice</code>, so everyone can tell it&#39;s yours.</li>",
+        "<li>It can&#39;t join #lounge. Use #bots, or a channel of your own.</li>",
+        &format!(
+            "<li>You can have up to {MAX_LIVE} bots once you&#39;ve confirmed your email.</li>"
+        ),
+    ] {
+        assert!(page.contains(line), "{line}\n{page}");
+    }
 }
 
 #[tokio::test]
