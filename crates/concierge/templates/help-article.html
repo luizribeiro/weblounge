@@ -1,0 +1,58 @@
+{% extends "help-page.html" %}
+
+{%- macro line(text) -%}
+{%- for span in crate::markup::spans(text) -%}
+{%- match span -%}
+{%- when crate::markup::Span::Text(text) -%}{{ text }}
+{%- when crate::markup::Span::Code(code) -%}<code>{{ code }}</code>
+{%- when crate::markup::Span::Strong(strong) -%}<strong>{{ strong }}</strong>
+{%- when crate::markup::Span::Link { label, href } -%}<a href="{{ href }}">{{ label }}</a>
+{%- endmatch -%}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro lines(lines) -%}
+          {%- for text in lines.iter() %}
+          <li>{% call line(text) %}{% endcall %}</li>
+          {%- endfor %}
+{%- endmacro -%}
+
+{% block title %}{{ article.topic.title }}{% endblock %}
+
+{% block help %}
+      <nav class="help-crumbs" aria-label="Breadcrumb"><a href="{{ crate::routes::help::PATH }}">Help</a></nav>
+      <article class="help-article">
+        <h1>{{ article.topic.title }}</h1>
+        <p class="lede">{{ article.lede }}</p>
+        {%- for section in article.sections %}
+        {%- if let Some(heading) = section.heading %}
+        <h2>{{ heading }}</h2>
+        {%- endif %}
+        {%- if section.numbered %}
+        <ol>
+          {%- call lines(section.lines) %}{% endcall %}
+        </ol>
+        {%- else %}
+        <ul>
+          {%- call lines(section.lines) %}{% endcall %}
+        </ul>
+        {%- endif %}
+        {%- endfor %}
+        {%- if !article.keep_in_mind.is_empty() %}
+        <section class="help-aside" aria-labelledby="keep-in-mind">
+          <h2 class="eyebrow" id="keep-in-mind">Keep in mind</h2>
+          <ul>
+            {%- call lines(article.keep_in_mind) %}{% endcall %}
+          </ul>
+        </section>
+        {%- endif %}
+        <section class="help-aside" aria-labelledby="related">
+          <h2 class="eyebrow" id="related">Related</h2>
+          <ul class="help-related">
+            {%- for topic in article.related %}
+            <li><a href="{{ topic.href }}">{{ topic.title }}</a></li>
+            {%- endfor %}
+          </ul>
+        </section>
+      </article>
+{%- endblock %}

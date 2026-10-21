@@ -170,6 +170,7 @@ pub fn router(app: App) -> Router {
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
         .route(routes::help::PATH, get(routes::help::index))
+        .route("/help/{slug}", get(routes::help::show))
         .route("/clients", get(routes::clients::index))
         .route("/clients/{slug}", get(routes::clients::show))
         .route(

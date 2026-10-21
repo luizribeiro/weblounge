@@ -1,13 +1,16 @@
-//! The Help tab: an index of topics.
+//! The Help tab: an index of topics, and an article on each.
 
 use askama::Template;
-use axum::{extract::State, response::Response};
+use axum::{
+    extract::{Path, State},
+    response::Response,
+};
 
-use super::{Layout, Tab, render};
+use super::{Layout, Tab, not_found, render};
 use crate::{
     app::AppState,
     auth::CurrentMember,
-    help::{self, Topic},
+    help::{self, Article, Facts, Topic},
 };
 
 pub const PATH: &str = "/help";
@@ -20,10 +23,35 @@ struct Index<'a> {
     lounge: String,
 }
 
+#[derive(Template)]
+#[template(path = "help-article.html")]
+struct ArticlePage<'a> {
+    layout: Layout<'a>,
+    article: Article,
+    lounge: String,
+}
+
 pub async fn index(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
+    let facts = Facts::new(&app);
     render(&Index {
         layout: Layout::member(&app, &me.member).on(Tab::Help),
-        topics: help::index(),
-        lounge: app.webchat.redirect_uri(),
+        topics: help::index(&facts),
+        lounge: facts.webchat,
+    })
+}
+
+pub async fn show(
+    State(app): State<AppState>,
+    CurrentMember(me): CurrentMember,
+    Path(slug): Path<String>,
+) -> Response {
+    let facts = Facts::new(&app);
+    let Some(article) = help::article(&slug, &facts) else {
+        return not_found();
+    };
+    render(&ArticlePage {
+        layout: Layout::member(&app, &me.member).on(Tab::Help),
+        article,
+        lounge: facts.webchat,
     })
 }
