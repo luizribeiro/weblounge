@@ -18,6 +18,27 @@ pub const PER_HOUR: usize = 30;
 /// How long an upload stays before it's deleted.
 pub const RETENTION: i64 = 30 * DAY;
 
+/// The limits as members read them.
+pub struct InWords {
+    pub quota: String,
+    pub max: String,
+    pub per_hour: usize,
+    pub kept: String,
+    pub types: String,
+}
+
+impl Default for InWords {
+    fn default() -> Self {
+        Self {
+            quota: in_megabytes(QUOTA_BYTES),
+            max: in_megabytes(MAX_BYTES),
+            per_hour: PER_HOUR,
+            kept: crate::invite_rules::in_words(RETENTION),
+            types: types_in_words(),
+        }
+    }
+}
+
 /// The types the network takes, as help text lists them.
 pub fn types_in_words() -> String {
     let labels = ImageType::ALL.map(ImageType::label);

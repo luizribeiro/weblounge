@@ -15,7 +15,7 @@
       <section class="card tab-card uploads-card" aria-labelledby="uploads-title">
         <h2 class="eyebrow" id="uploads-title">Your uploads</h2>
         <p class="invite-count"><span class="invite-count-number">{{ crate::upload_rules::in_megabytes(*used) }} of {{ rules.quota }}</span> used</p>
-        <progress class="usage-meter" max="{{ rules.quota_bytes }}" value="{{ used }}" aria-labelledby="uploads-title"></progress>
+        <progress class="usage-meter" max="{{ crate::upload_rules::QUOTA_BYTES }}" value="{{ used }}" aria-labelledby="uploads-title"></progress>
         <p class="hint">Your bots' uploads count toward yours.</p>
         {%- if uploads.is_empty() %}
         <p class="bots-empty">No uploads yet.</p>

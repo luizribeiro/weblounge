@@ -26,31 +26,8 @@ struct UploadsPage<'a> {
     layout: Layout<'a>,
     uploads: Vec<Listed>,
     used: i64,
-    rules: Rules,
+    rules: upload_rules::InWords,
     webchat: &'a Webchat,
-}
-
-/// What a member is told about the limits, from the rules themselves.
-struct Rules {
-    quota_bytes: i64,
-    quota: String,
-    max: String,
-    per_hour: usize,
-    kept: String,
-    types: String,
-}
-
-impl Rules {
-    fn new() -> Self {
-        Self {
-            quota_bytes: upload_rules::QUOTA_BYTES,
-            quota: upload_rules::in_megabytes(upload_rules::QUOTA_BYTES),
-            max: upload_rules::in_megabytes(upload_rules::MAX_BYTES),
-            per_hour: upload_rules::PER_HOUR,
-            kept: crate::invite_rules::in_words(upload_rules::RETENTION),
-            types: upload_rules::types_in_words(),
-        }
-    }
 }
 
 /// An upload as the tab lists it.
@@ -106,7 +83,7 @@ pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember)
             .map(|upload| Listed::new(&app, upload, now))
             .collect(),
         used,
-        rules: Rules::new(),
+        rules: upload_rules::InWords::default(),
         webchat: &app.webchat,
     })
 }
