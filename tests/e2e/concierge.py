@@ -181,6 +181,16 @@ with subtest("a member signs in to the website with their IRC password"):
     clients = browser.get("/clients", "-f")
     assert "<code>irc.weblounge.org</code>" in clients and "<code>6697</code>" in clients, clients
 
+with subtest("a member reads the Help tab and its articles, which guests are sent to sign in for"):
+    index = browser.get("/help", "-f")
+    assert "<h1>How can we help?</h1>" in index, index
+    assert '<li><a href="/help/make-a-bot">Make a bot</a></li>' in index, index
+    article = browser.get("/help/make-a-bot", "-f")
+    assert "<h1>Make a bot</h1>" in article, article
+    assert "<code>weblounge/bot/Dana</code>" in article, article
+    guest = https(members, "/help/make-a-bot", *outcome)
+    assert guest.startswith(f"303 https://{members}/signin"), guest
+
 with subtest("changing the email needs the member's password: a wrong one changes nothing"):
     fields = ["email=dana@example.org", "current=a-wrong-guess"]
     refused = browser.post("/settings", *fields, flags=["-w", "\n%{http_code}"])
