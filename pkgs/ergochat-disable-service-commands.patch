@@ -1,0 +1,188 @@
+diff --git a/default.yaml b/default.yaml
+index ea1e502..090a36a 100644
+--- a/default.yaml
++++ b/default.yaml
+@@ -605,6 +605,13 @@ accounts:
+         # (make sure any changes you make here are RFC-compliant)
+         valid-regexp: '^[0-9A-Za-z.\-_/]+$'
+ 
++    # service commands to disable, by service (nickserv, chanserv, hostserv, histserv);
++    # disabling a command also disables its aliases. this is useful when accounts
++    # are managed by some other means, e.g., a web application using the HTTP API
++    #disabled-service-commands:
++    #    nickserv: [unregister, passwd]
++    #    hostserv: ["on", "off"]
++
+     # modes that are set by default when a user connects
+     # if unset, no user modes will be set by default
+     # +i is invisible (a user's channels are hidden from whois replies)
+diff --git a/irc/config.go b/irc/config.go
+index ab53eb1..21f243b 100644
+--- a/irc/config.go
++++ b/irc/config.go
+@@ -378,6 +378,10 @@ type AccountConfig struct {
+ 	AuthScript  AuthScriptConfig          `yaml:"auth-script"`
+ 	OAuth2      oauth2.OAuth2BearerConfig `yaml:"oauth2"`
+ 	JWTAuth     jwt.JWTAuthConfig         `yaml:"jwt-auth"`
++
++	// service name -> command names to disable for it
++	DisabledServiceCommands map[string][]string `yaml:"disabled-service-commands"`
++	disabledServiceCommands map[*serviceCommand]bool
+ }
+ 
+ type ScriptConfig struct {
+@@ -1598,6 +1602,11 @@ func LoadConfig(filename string) (config *Config, err error) {
+ 		config.Accounts.VHosts.validRegexp = defaultValidVhostRegex
+ 	}
+ 
++	config.Accounts.disabledServiceCommands, err = resolveDisabledServiceCommands(config.Accounts.DisabledServiceCommands)
++	if err != nil {
++		return nil, err
++	}
++
+ 	if config.Accounts.AuthenticationEnabled {
+ 		saslCapValues := []string{"PLAIN", "EXTERNAL"}
+ 		if config.Accounts.AdvertiseSCRAM {
+diff --git a/irc/services.go b/irc/services.go
+index 8e243f4..90f8cc5 100644
+--- a/irc/services.go
++++ b/irc/services.go
+@@ -46,6 +46,36 @@ type serviceCommand struct {
+ 	unsplitFinalParam bool // split into at most maxParams, with last param containing unsplit text
+ }
+ 
++// is this command enabled, both by its own condition and by
++// accounts.disabled-service-commands?
++func (cmd *serviceCommand) isEnabled(config *Config) bool {
++	return (cmd.enabled == nil || cmd.enabled(config)) && !config.Accounts.disabledServiceCommands[cmd]
++}
++
++// resolves accounts.disabled-service-commands to the commands it names,
++// so that disabling a command also disables its aliases
++func resolveDisabledServiceCommands(disabled map[string][]string) (map[*serviceCommand]bool, error) {
++	result := make(map[*serviceCommand]bool)
++	for serviceName, commandNames := range disabled {
++		service, ok := ErgoServices[strings.ToLower(serviceName)]
++		if !ok {
++			return nil, fmt.Errorf("disabled-service-commands: unknown service %s", serviceName)
++		}
++		for _, commandName := range commandNames {
++			commandName = strings.ToLower(commandName)
++			if commandName == "help" {
++				return nil, fmt.Errorf("disabled-service-commands: %s HELP can't be disabled", service.Name)
++			}
++			cmd := lookupServiceCommand(service.Commands, commandName)
++			if cmd == nil {
++				return nil, fmt.Errorf("disabled-service-commands: unknown command %s %s", service.Name, commandName)
++			}
++			result[cmd] = true
++		}
++	}
++	return result, nil
++}
++
+ // looks up a command in the table of command definitions for a service, resolving aliases
+ func lookupServiceCommand(commands map[string]*serviceCommand, command string) *serviceCommand {
+ 	maxDepth := 1
+@@ -208,7 +238,7 @@ func serviceRunCommand(service *ircService, server *Server, client *Client, cmd
+ 		return
+ 	}
+ 
+-	if cmd.enabled != nil && !cmd.enabled(server.Config()) {
++	if !cmd.isEnabled(server.Config()) {
+ 		sendNotice(client.t("This command has been disabled by the server administrators"))
+ 		return
+ 	}
+@@ -260,7 +290,7 @@ func serviceHelpHandler(service *ircService, server *Server, client *Client, par
+ 			if commandInfo.aliasOf != "" || commandInfo.hidden {
+ 				continue // don't show help lines for aliases
+ 			}
+-			if commandInfo.enabled != nil && !commandInfo.enabled(config) {
++			if !commandInfo.isEnabled(config) {
+ 				disabledCommands = true
+ 				continue
+ 			}
+diff --git a/irc/services_test.go b/irc/services_test.go
+new file mode 100644
+index 0000000..37991f1
+--- /dev/null
++++ b/irc/services_test.go
+@@ -0,0 +1,60 @@
++// Copyright (c) 2026 Luiz Ribeiro
++// released under the MIT license
++
++package irc
++
++import (
++	"testing"
++)
++
++func TestDisabledServiceCommands(t *testing.T) {
++	disabled, err := resolveDisabledServiceCommands(map[string][]string{
++		"NickServ": {"UNREGISTER", "passwd"},
++		"hostserv": {"on", "off"},
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++	var config Config
++	config.Accounts.AuthenticationEnabled = true
++	config.Accounts.Registration.Enabled = true
++	config.Accounts.VHosts.Enabled = true
++	config.Channels.Registration.Enabled = true
++	withDisabled := config
++	withDisabled.Accounts.disabledServiceCommands = disabled
++
++	for _, tc := range []struct {
++		service *ircService
++		command string
++		enabled bool
++	}{
++		{nickservService, "unregister", false},
++		{nickservService, "passwd", false},
++		{nickservService, "password", false},
++		{nickservService, "cert", true},
++		{hostservService, "on", false},
++		{hostservService, "off", false},
++		{hostservService, "status", true},
++		{chanservService, "register", true},
++	} {
++		cmd := lookupServiceCommand(tc.service.Commands, tc.command)
++		if !cmd.isEnabled(&config) {
++			t.Errorf("%s %s: expected enabled without disabled-service-commands", tc.service.Name, tc.command)
++		}
++		if cmd.isEnabled(&withDisabled) != tc.enabled {
++			t.Errorf("%s %s: expected enabled=%t", tc.service.Name, tc.command, tc.enabled)
++		}
++	}
++}
++
++func TestDisabledServiceCommandsInvalid(t *testing.T) {
++	for _, disabled := range []map[string][]string{
++		{"memoserv": {"send"}},
++		{"nickserv": {"unregsiter"}},
++		{"hostserv": {"help"}},
++	} {
++		if _, err := resolveDisabledServiceCommands(disabled); err == nil {
++			t.Errorf("%v: expected an error", disabled)
++		}
++	}
++}
+diff --git a/traditional.yaml b/traditional.yaml
+index 8b9c396..dff0439 100644
+--- a/traditional.yaml
++++ b/traditional.yaml
+@@ -577,6 +577,13 @@ accounts:
+         # (make sure any changes you make here are RFC-compliant)
+         valid-regexp: '^[0-9A-Za-z.\-_/]+$'
+ 
++    # service commands to disable, by service (nickserv, chanserv, hostserv, histserv);
++    # disabling a command also disables its aliases. this is useful when accounts
++    # are managed by some other means, e.g., a web application using the HTTP API
++    #disabled-service-commands:
++    #    nickserv: [unregister, passwd]
++    #    hostserv: ["on", "off"]
++
+     # modes that are set by default when a user connects
+     # if unset, no user modes will be set by default
+     # +i is invisible (a user's channels are hidden from whois replies)

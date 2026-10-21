@@ -90,6 +90,13 @@ in
           always-on = "opt-out";
           auto-away = "opt-out";
         };
+        # Concierge keeps the records of accounts and bots' vhosts, so
+        # changes to them go through it. NS CERT stays: the certificate
+        # guide on /clients relies on CERT ADD.
+        disabled-service-commands = {
+          nickserv = [ "unregister" "passwd" ];
+          hostserv = [ "on" "off" ];
+        };
       };
       channels.auto-join = [ "#lounge" ];
       history = {

@@ -20,5 +20,8 @@ ergochat.overrideAttrs (finalAttrs: old: {
     # Deleting a bot from the members' site has to disconnect it, which
     # only an oper's NS ERASE does. Not offered upstream yet.
     ./ergochat-ns-erase-api.patch
+    # Members manage their accounts through concierge, which Ergo's own
+    # NickServ and HostServ commands would bypass. Not offered upstream yet.
+    ./ergochat-disable-service-commands.patch
   ];
 })

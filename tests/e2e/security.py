@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         Account,
         Browser,
         add_member,
+        concierge_admin,
         concierge_sql,
         confirm_email,
         ergo_api,
@@ -324,6 +325,20 @@ with subtest("NickServ won't register new accounts, even for a member"):
     add_member(**mallory)
     reply = irc("PRIVMSG NickServ :REGISTER battery-staple", **mallory)
     assert "NOTICE mallory :This command has been disabled" in reply, reply
+
+with subtest("members manage their accounts and bots through concierge, not NickServ or HostServ"):
+    old_and_new_passwords = f"{mallory['password']} battery-staple"
+    for command in ["UNREGISTER mallory", f"PASSWD {old_and_new_passwords}", f"PASSWORD {old_and_new_passwords}"]:
+        reply = irc(f"PRIVMSG NickServ :{command}", **mallory)
+        assert "NOTICE mallory :This command has been disabled" in reply, (command, reply)
+    bot_password = concierge_admin("bot", "create", "mallory", "mallorybot").strip()
+    reply = irc("PRIVMSG HostServ :OFF", account="mallorybot", password=bot_password)
+    assert "NOTICE mallorybot :This command has been disabled" in reply, reply
+    reply = irc("PRIVMSG NickServ :CERT LIST", **mallory)
+    assert "NOTICE mallory :There are 0 certificate fingerprint(s)" in reply, reply
+    listing = irc("PRIVMSG NickServ :HELP", **mallory)
+    assert "CERT" in listing and "commands which have been disabled" in listing, listing
+    assert "UNREGISTER" not in listing and "PASSWD" not in listing, listing
 
 with subtest("every site sends HSTS, nosniff, a referrer policy and a CSP that forbids framing"):
     for name in sites:
