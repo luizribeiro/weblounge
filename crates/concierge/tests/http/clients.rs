@@ -2,19 +2,6 @@ use concierge::clients::{CLIENTS, Group, NICK_PLACEHOLDER};
 
 use crate::{Site, body_text};
 
-/// The names of the apps `page` picks, in its order.
-fn picks(page: &str) -> Vec<&'static str> {
-    let mut picks: Vec<_> = CLIENTS
-        .iter()
-        .filter_map(|client| {
-            let card = format!(r#"<h2 id="pick-{}">{}</h2>"#, client.slug, client.name);
-            Some((page.find(&card)?, client.name))
-        })
-        .collect();
-    picks.sort();
-    picks.into_iter().map(|(_, name)| name).collect()
-}
-
 #[tokio::test]
 async fn the_clients_page_picks_apps_for_the_visitors_device() {
     let site = Site::start().await;
@@ -35,7 +22,7 @@ async fn the_clients_page_picks_apps_for_the_visitors_device() {
     ] {
         let page = body_text(site.get_on("/clients", user_agent).await).await;
         assert!(page.contains(&format!("<h1>{heading}</h1>")), "{page}");
-        assert_eq!(picks(&page), expected, "{page}");
+        assert_eq!(crate::picks(&page), expected, "{page}");
         let lede = match expected.len() {
             1 => "Our pick for this device. It takes",
             _ => "Our picks for this device. Each takes",
@@ -68,7 +55,7 @@ async fn an_unknown_device_gets_just_the_web_client() {
     for user_agent in [crate::CHROMEOS, "curl/8.16.0"] {
         let page = body_text(site.get_on("/clients", user_agent).await).await;
         assert!(page.contains("<h1>Chat on this device</h1>"), "{page}");
-        assert!(picks(&page).is_empty(), "{page}");
+        assert!(crate::picks(&page).is_empty(), "{page}");
         assert!(!page.contains("Set up "), "{page}");
         assert!(!page.contains("skip the setup"), "{page}");
         assert!(crate::opens_the_chat(&page), "{page}");

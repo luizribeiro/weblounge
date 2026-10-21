@@ -13,28 +13,9 @@
       <p class="alert" role="alert">We couldn't send a link to confirm your email just now. Send one from the <a href="/account#email-and-news">Account tab</a>.</p>
       {%- endif %}
       {%- call components::open_chat(webchat) %}{% endcall %}
-      <div class="account-grid">
-        <section class="card" aria-labelledby="connect-title">
-          <h2 class="eyebrow" id="connect-title">Use your own client</h2>
-          {%- call components::connection(irc, Some(nick), "The one you just set.") %}{% endcall %}
-        </section>
-        {%- if !recommended.is_empty() %}
-        <section class="card" aria-labelledby="picks-title">
-          <h2 class="eyebrow" id="picks-title">{% if recommended.len() == 1 %}Our pick for you{% else %}Our picks{% endif %}</h2>
-          {%- for client in recommended %}
-          <div class="pick">
-            <h3><a href="{{ client.guide_url() }}">{{ client.name }}</a></h3>
-            <p class="muted">{{ client.runs_on }} · {{ client.price }}</p>
-            <p class="links">
-              {%- for link in client.links %}
-              <a href="{{ link.url }}">{{ link.label }}</a>
-              {%- endfor %}
-              <a href="{{ client.guide_url() }}">Setup guide</a>
-            </p>
-          </div>
-          {%- endfor %}
-        </section>
-        {%- endif %}
-      </div>
-      {%- call components::guides(clients) %}{% endcall %}
+      {%- if !recommended.is_empty() %}
+      <p class="eyebrow">{% if recommended.len() == 1 %}Our pick for you{% else %}Our picks for you{% endif %}</p>
+      {%- call components::picks(recommended) %}{% endcall %}
+      {%- endif %}
+      {%- call components::all_apps() %}{% endcall %}
 {%- endblock %}

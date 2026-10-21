@@ -22,8 +22,7 @@ use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
     bots::{self, NameClaim},
-    clients::{self, CLIENTS, Client},
-    config::IrcServer,
+    clients::{self, Client},
     db::{self, Claim, Invite, NewMember, Redemption},
     email::{self, Email},
     invite_code, invite_rules,
@@ -68,9 +67,7 @@ struct Welcome<'a> {
     nick: &'a str,
     /// Where the verification link went, if one did.
     mailed_to: Option<&'a str>,
-    irc: &'a IrcServer,
     recommended: Vec<&'a Client>,
-    clients: &'a [Client],
     webchat: &'a Webchat,
 }
 
@@ -297,9 +294,7 @@ fn welcome(
         layout: Layout::new(app, cookie.as_ref().map(|_| nick)),
         nick,
         mailed_to,
-        irc: &app.irc_server,
         recommended: clients::recommended(platform),
-        clients: &CLIENTS,
         webchat: &app.webchat,
     };
     let mut response = render(&page);

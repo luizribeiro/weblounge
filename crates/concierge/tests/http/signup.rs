@@ -8,7 +8,7 @@ use ergo_api::fake::Failure;
 use serde_json::json;
 use tokio::net::TcpListener;
 
-use concierge::{clients::CLIENTS, email::Email, name::MemberName, verification_mail};
+use concierge::{email::Email, name::MemberName, verification_mail};
 
 use crate::{HISTORY_EXPIRY, Site, body_text, execute, session_cookie, verification_link};
 
@@ -55,8 +55,6 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     let page = body_text(response).await;
     assert!(page.contains("<h1>You're in, Bob.</h1>"), "{page}");
     assert!(crate::opens_the_chat(&page), "{page}");
-    assert!(page.contains("The one you just set."), "{page}");
-    assert!(page.contains(r#"data-copy="Bob""#), "{page}");
     assert!(!page.contains(NEW_PASSWORD), "{page}");
 
     let member = site.db.member("bob").await.unwrap().unwrap();
@@ -453,7 +451,7 @@ async fn signing_up_from_another_origin_is_refused() {
 
 #[tokio::test]
 async fn the_welcome_page_leads_with_clients_for_the_visitors_platform() {
-    for (user_agent, picks) in [
+    for (user_agent, expected) in [
         (Some(crate::IPHONE), &["Mango", "Goguma"][..]),
         (None, &[][..]),
     ] {
@@ -461,18 +459,19 @@ async fn the_welcome_page_leads_with_clients_for_the_visitors_platform() {
         let mut headers = vec![(header::ORIGIN.as_str(), crate::PUBLIC_URL)];
         headers.extend(user_agent.map(|agent| (header::USER_AGENT.as_str(), agent)));
         let page = body_text(site.post_with(INVITE, &bob(), None, &headers).await).await;
-        let mut shown: Vec<_> = CLIENTS
-            .iter()
-            .filter_map(|client| {
-                let at = page.find(&format!(">{}</a></h3>", client.name))?;
-                Some((at, client.name))
-            })
-            .collect();
-        shown.sort();
-        let shown: Vec<_> = shown.into_iter().map(|(_, name)| name).collect();
-        assert_eq!(shown, picks, "{page}");
-        assert_eq!(picks.is_empty(), !page.contains("Our pick"), "{page}");
+        assert_eq!(crate::picks(&page), expected, "{page}");
+        assert_eq!(expected.is_empty(), !page.contains("Our pick"), "{page}");
         assert!(crate::opens_the_chat(&page), "{page}");
+        let main = &page[page.find("<main").unwrap()..page.find("</main>").unwrap()];
+        assert!(
+            main.trim_end().ends_with(
+                r#"<p class="see-also">Using something else? <a href="/clients/all">See all apps</a></p>"#
+            ),
+            "{main}"
+        );
+        for crowd in ["<dl", "data-copy", "chips", "certificate"] {
+            assert!(!main.contains(crowd), "{crowd}: {main}");
+        }
     }
 }
 

@@ -359,6 +359,19 @@ fn opens_the_chat(page: &str) -> bool {
     ) && page.contains(r#"<code class="muted">irc.weblounge.org in your browser</code>"#)
 }
 
+/// The names of the apps `page` picks, in its order.
+fn picks(page: &str) -> Vec<&'static str> {
+    let mut picks: Vec<_> = concierge::clients::CLIENTS
+        .iter()
+        .filter_map(|client| {
+            let card = format!(r#"<h2 id="pick-{}">{}</h2>"#, client.slug, client.name);
+            Some((page.find(&card)?, client.name))
+        })
+        .collect();
+    picks.sort();
+    picks.into_iter().map(|(_, name)| name).collect()
+}
+
 /// Whether a page is the tab at `path`, marked open in the row of tabs.
 fn is_tab(page: &str, path: &str) -> bool {
     page.contains(&format!(r#"<a href="{path}" aria-current="page">"#))

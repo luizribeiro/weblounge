@@ -75,18 +75,6 @@
       <p class="see-also">Using something else? <a href="/clients/all">See all apps</a></p>
 {%- endmacro %}
 
-{% macro guides(clients) %}
-      <nav class="guides" aria-labelledby="guides-title">
-        <h2 class="eyebrow" id="guides-title">Setup guides</h2>
-        <ul class="chips">
-          {%- for client in clients %}
-          <li><a class="button button-small" href="{{ client.guide_url() }}">{{ client.name }} <span class="muted">{{ client.runs_on }}</span></a></li>
-          {%- endfor %}
-        </ul>
-        <p class="links"><a href="/clients">All clients</a></p>
-      </nav>
-{%- endmacro %}
-
 {% macro new_password(label, errors) %}
             <div class="field">
               <label for="password">{{ label }}</label>
