@@ -453,8 +453,10 @@ async fn signing_up_from_another_origin_is_refused() {
 
 #[tokio::test]
 async fn the_welcome_page_leads_with_clients_for_the_visitors_platform() {
-    let iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15";
-    for (user_agent, picks) in [(Some(iphone), &["Mango", "Goguma"][..]), (None, &[][..])] {
+    for (user_agent, picks) in [
+        (Some(crate::IPHONE), &["Mango", "Goguma"][..]),
+        (None, &[][..]),
+    ] {
         let site = with_invite_from_alice().await;
         let mut headers = vec![(header::ORIGIN.as_str(), crate::PUBLIC_URL)];
         headers.extend(user_agent.map(|agent| (header::USER_AGENT.as_str(), agent)));

@@ -1,25 +1,21 @@
 {% extends "base.html" %}
 {% import "components.html" as components %}
 
-{% block title %}Clients{% endblock %}
+{% block title %}Apps{% endblock %}
 
 {% block content %}
-      <p class="eyebrow">IRC clients</p>
-      <h1>Bring your own client</h1>
-      <p class="lede">Any IRC client with TLS and SASL works. These are the ones we'd pick.</p>
-      <section class="card tab-card" aria-labelledby="connect-title">
-        <h2 class="eyebrow" id="connect-title">Connection</h2>
-        {%- call components::your_connection(irc, nick) %}{% endcall %}
-      </section>
-      <section class="faq" aria-labelledby="guides-title">
-        <h2 id="guides-title">Setup guides</h2>
-        <ul class="client-list">
-          {%- for client in clients %}
-          <li>
-            <a href="{{ client.guide_url() }}">{{ client.name }}</a>
-            <span class="muted">{{ client.runs_on }} · {{ client.price }}</span>
-          </li>
-          {%- endfor %}
-        </ul>
-      </section>
+      {%- if let Some(platform) = platform %}
+      <h1>Chat on your {{ platform.device() }}</h1>
+      <p class="lede">{% if picks.len() == 1 %}Our pick for this device. It takes a couple of minutes to set up.{% else %}Our picks for this device. Each takes a couple of minutes to set up.{% endif %}</p>
+      {%- call components::picks(picks) %}{% endcall %}
+      <div class="skip-setup">
+        <p class="muted">Or skip the setup:</p>
+        {%- call components::open_chat(webchat) %}{% endcall %}
+      </div>
+      {%- else %}
+      <h1>Chat on this device</h1>
+      <p class="lede">Right here in your browser, with nothing to install.</p>
+      {%- call components::open_chat(webchat) %}{% endcall %}
+      {%- endif %}
+      {%- call components::all_apps() %}{% endcall %}
 {%- endblock %}

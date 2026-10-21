@@ -14,6 +14,8 @@ pub struct Client {
     pub name: &'static str,
     pub runs_on: &'static str,
     pub price: &'static str,
+    /// Why to pick it, in a line.
+    pub note: &'static str,
     pub links: &'static [Link],
     /// How to set it up, in a line or two, next to the connection details.
     pub setup: &'static str,
@@ -90,6 +92,7 @@ pub const CLIENTS: [Client; 6] = [
         name: "gamja",
         runs_on: "Any browser",
         price: "Nothing to install",
+        note: "Signs you in with this site, so it's the quickest way in.",
         links: &[Link {
             label: "Source",
             url: "https://codeberg.org/emersion/gamja",
@@ -105,6 +108,7 @@ pub const CLIENTS: [Client; 6] = [
         name: "Halloy",
         runs_on: "macOS, Windows, Linux",
         price: "Free, open source",
+        note: "One app for every computer.",
         links: &[Link {
             label: "halloy.chat",
             url: "https://halloy.chat",
@@ -120,6 +124,7 @@ pub const CLIENTS: [Client; 6] = [
         name: "Goguma",
         runs_on: "Android, iPhone, iPad",
         price: "Free on F-Droid, about $1 on the App Store",
+        note: "Open source, and made for phones.",
         links: &[
             Link {
                 label: "F-Droid",
@@ -145,6 +150,7 @@ pub const CLIENTS: [Client; 6] = [
         name: "Mango",
         runs_on: "iPhone, iPad, macOS",
         price: "Paid, on the App Store",
+        note: "Sends you a notification when someone mentions you.",
         links: &[
             Link {
                 label: "App Store",
@@ -166,6 +172,7 @@ pub const CLIENTS: [Client; 6] = [
         name: "senpai",
         runs_on: "Terminal",
         price: "Free, open source",
+        note: "Quick, simple and keyboard-driven.",
         links: &[Link {
             label: "sr.ht/~delthas/senpai",
             url: "https://sr.ht/~delthas/senpai/",
@@ -181,6 +188,7 @@ pub const CLIENTS: [Client; 6] = [
         name: "WeeChat",
         runs_on: "Terminal",
         price: "Free, open source",
+        note: "An old favourite, with a plugin for everything.",
         links: &[Link {
             label: "weechat.org",
             url: "https://weechat.org",

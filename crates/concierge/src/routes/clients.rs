@@ -1,5 +1,5 @@
-//! The clients page, connection details and every client at a glance,
-//! and a setup guide per recommended client, prefilled for the visitor.
+//! Setting up an app, a step at a time: our picks for the visitor's
+//! device, every app by name, and each app's guide, prefilled for them.
 
 use askama::Template;
 use axum::{
@@ -14,6 +14,7 @@ use crate::{
     clients::{self, CLIENTS, Client, Snippet},
     config::IrcServer,
     oauth::Webchat,
+    platform::{Platform, VisitorPlatform},
 };
 
 #[derive(Template)]
@@ -33,9 +34,9 @@ struct Guide<'a> {
 #[template(path = "clients.html")]
 struct Index<'a> {
     layout: Layout<'a>,
-    nick: Option<&'a str>,
-    irc: &'a IrcServer,
-    clients: &'a [Client],
+    platform: Option<Platform>,
+    picks: Vec<&'a Client>,
+    webchat: &'a Webchat,
 }
 
 #[derive(Template)]
@@ -54,13 +55,16 @@ pub async fn all(State(app): State<AppState>, visitor: Visitor) -> Response {
     })
 }
 
-pub async fn index(State(app): State<AppState>, visitor: Visitor) -> Response {
-    let nick = visitor.nick();
+pub async fn index(
+    State(app): State<AppState>,
+    visitor: Visitor,
+    VisitorPlatform(platform): VisitorPlatform,
+) -> Response {
     render(&Index {
         layout: Layout::visitor(&app, &visitor),
-        nick,
-        irc: &app.irc_server,
-        clients: &CLIENTS,
+        platform,
+        picks: clients::recommended(platform),
+        webchat: &app.webchat,
     })
 }
 

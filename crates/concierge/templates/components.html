@@ -58,6 +58,23 @@
           </figure>
 {%- endmacro %}
 
+{% macro picks(clients) %}
+      <div class="picks">
+        {%- for client in clients %}
+        <section class="card pick-card" aria-labelledby="pick-{{ client.slug }}">
+          <h2 id="pick-{{ client.slug }}">{{ client.name }}</h2>
+          <p class="muted">{{ client.runs_on }} · {{ client.price }}</p>
+          <p>{{ client.note }}</p>
+          <a class="button" href="{{ client.guide_url() }}">Set up {{ client.name }}</a>
+        </section>
+        {%- endfor %}
+      </div>
+{%- endmacro %}
+
+{% macro all_apps() %}
+      <p class="see-also">Using something else? <a href="/clients/all">See all apps</a></p>
+{%- endmacro %}
+
 {% macro guides(clients) %}
       <nav class="guides" aria-labelledby="guides-title">
         <h2 class="eyebrow" id="guides-title">Setup guides</h2>

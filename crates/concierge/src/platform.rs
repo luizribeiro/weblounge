@@ -1,5 +1,5 @@
 //! Which platform a visitor is on, guessed from their User-Agent, so the
-//! welcome page can lead with a client that runs there.
+//! welcome page and the clients page can lead with apps that run there.
 
 use axum::{
     extract::FromRequestParts,
@@ -35,6 +35,17 @@ impl Platform {
             Some(Self::Linux)
         } else {
             None
+        }
+    }
+
+    /// What to call the visitor's device: "Chat on your Mac".
+    pub fn device(self) -> &'static str {
+        match self {
+            Self::MacOs => "Mac",
+            Self::Windows => "PC",
+            Self::Linux => "computer",
+            Self::Ios => "iPhone or iPad",
+            Self::Android => "Android phone or tablet",
         }
     }
 }

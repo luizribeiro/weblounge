@@ -671,39 +671,42 @@ dialog.card {
   }
 }
 
-.faq {
-  margin-top: 3rem;
+.picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  max-width: 40rem;
 }
 
-.client-list {
+.pick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  & h2 {
+    margin: 0 0 0.25rem;
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+
+  & p {
+    margin: 0 0 0.5rem;
+  }
+
+  & .button {
+    margin-top: auto;
+  }
+}
+
+.skip-setup {
   max-width: 40rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
 
-  & li {
-    display: grid;
-    padding-bottom: 0.5rem;
-    border-top: 1px solid var(--line);
-
-    @media (min-width: 40rem) {
-      grid-template-columns: 6rem 1fr;
-      align-items: center;
-      padding-bottom: 0;
-    }
-  }
-
-  & a {
-    display: inline-flex;
-    align-items: center;
-    justify-self: start;
-    min-height: 44px;
-    font-weight: 500;
-    text-decoration: underline;
-  }
-
-  & .muted {
-    font-size: 0.875rem;
+  & .open-chat {
+    margin-bottom: 0;
   }
 }
 
@@ -769,6 +772,9 @@ details.more {
   margin-top: 1.5rem;
 
   & a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     text-decoration: underline;
   }
 }

@@ -69,6 +69,14 @@ const PASSWORD: &str = "correct-horse-battery";
 const INTROSPECTION_SECRET: &str = "a secret Ergo introspects tokens with";
 /// Ergo's `2w`, as production configures it.
 const HISTORY_EXPIRY: i64 = 14 * 24 * 60 * 60;
+
+/// Browsers on the devices the clients pages tell apart.
+const MAC: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15";
+const WINDOWS: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const LINUX: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0";
+const IPHONE: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1";
+const ANDROID: &str = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
+const CHROMEOS: &str = "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 /// The label of the checkbox for announcements, on signup and the Account tab.
 const NEWS_LABEL: &str = r#"<span>Email me about new features and planned downtime <span class="hint check-hint">A few times a year at most.</span></span>"#;
 
@@ -168,6 +176,12 @@ impl Site {
     /// A GET the way another site's script makes it, from `origin`.
     async fn get_from(&self, path: &str, origin: &str) -> Response {
         let request = Request::get(path).header(header::ORIGIN, origin);
+        self.send(request.body(Body::empty()).unwrap()).await
+    }
+
+    /// A GET from a guest's browser that says it's `user_agent`.
+    async fn get_on(&self, path: &str, user_agent: &str) -> Response {
+        let request = Request::get(path).header(header::USER_AGENT, user_agent);
         self.send(request.body(Body::empty()).unwrap()).await
     }
 

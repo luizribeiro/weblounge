@@ -178,7 +178,7 @@ with subtest("a member signs in to the website with their IRC password"):
     home = browser.get("/", "-f")
     assert "Pull up a chair, Dana." in home, home
     assert home.count("<circle ") == 53, home
-    clients = browser.get("/clients", "-f")
+    clients = browser.get("/clients/all", "-f")
     assert "<code>irc.weblounge.org</code>" in clients and "<code>6697</code>" in clients, clients
 
 with subtest("a member reads the Help tab and its articles, which guests are sent to sign in for"):
