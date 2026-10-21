@@ -20,8 +20,8 @@ let
       Referrer-Policy = "no-referrer";
       X-Robots-Tag = "noindex, nofollow, noimageindex, noai, noimageai";
     };
-  # An upload's id and the extension of its type, as filehost names them.
-  uploadPath = "^/[A-Za-z0-9_-]{22}\\.(png|jpg|gif|webp)$";
+  # The scrubber writes each upload under a dotted name until it's whole.
+  uploadPath = "^/[^/.][^/]*$";
 in
 {
   imports = [ ./nginx.nix ./sandbox.nix ];
@@ -137,6 +137,7 @@ in
         # nginx serves each type by its extension; browsers show these
         # inline, and are told so.
         extraConfig = headers + ''
+          default_type application/octet-stream;
           add_header Cross-Origin-Resource-Policy "cross-origin" always;
           add_header Content-Disposition "inline" always;
         '';

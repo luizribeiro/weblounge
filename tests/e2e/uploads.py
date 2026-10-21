@@ -109,6 +109,12 @@ with subtest("files.weblounge.org asks robots to stay away"):
     assert robots.endswith("\r\n\r\nUser-agent: *\nDisallow: /\n"), robots
     assert "x-robots-tag: noindex, nofollow, noimageindex, noai, noimageai" in robots.lower(), robots
 
+with subtest("an upload the scrubber is still writing, under a dotted name, isn't served"):
+    half_written = ".scrubbing-AbC123"
+    credenza.succeed(f"cp {uploads_dir}/{photo.rsplit('/', 1)[1]} {uploads_dir}/{half_written}")
+    assert get_file(f"/{half_written}")["status"] == 404
+    credenza.succeed(f"rm {uploads_dir}/{half_written}")
+
 with subtest("deleting a bot deletes its uploads, and deleting a member deletes theirs"):
     zoebots = concierge_sql("SELECT id FROM uploads WHERE account = 'zoebot'").split()
     assert len(zoebots) == 2, zoebots
