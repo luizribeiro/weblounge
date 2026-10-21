@@ -7,11 +7,11 @@ use axum::{
     response::Response,
 };
 
-use super::{Layout, certificates::Certificates, not_found, render};
+use super::{Layout, not_found, render};
 use crate::{
     app::AppState,
     auth::Visitor,
-    clients::{self, CLIENTS, Client, NICK_PLACEHOLDER, Snippet},
+    clients::{self, CLIENTS, Client, Snippet},
     config::IrcServer,
     oauth::Webchat,
 };
@@ -36,7 +36,6 @@ struct Index<'a> {
     nick: Option<&'a str>,
     irc: &'a IrcServer,
     clients: &'a [Client],
-    certificates: Certificates,
 }
 
 #[derive(Template)]
@@ -62,7 +61,6 @@ pub async fn index(State(app): State<AppState>, visitor: Visitor) -> Response {
         nick,
         irc: &app.irc_server,
         clients: &CLIENTS,
-        certificates: Certificates::for_nick(nick.unwrap_or(NICK_PLACEHOLDER)),
     })
 }
 

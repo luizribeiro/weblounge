@@ -175,6 +175,10 @@ pub fn router(app: App) -> Router {
         .route("/clients/all", get(routes::clients::all))
         .route("/clients/{slug}", get(routes::clients::show))
         .route(
+            "/clients/{slug}/certificate",
+            get(routes::certificates::show),
+        )
+        .route(
             routes::oauth::AUTHORIZE_PATH,
             get(routes::oauth::authorize).layer(map_response(routes::no_store)),
         )

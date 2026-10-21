@@ -26,6 +26,9 @@
           {%- if let Some(link) = ircs_link %}
           <p class="hint">Or open <a href="{{ link }}">{{ link }}</a> in {{ client.name }} and add your nick and password.</p>
           {%- endif %}
+          {%- if let Some(url) = client.certificate_url() %}
+          <p class="hint">Rather not keep a password in the config? <a href="{{ url }}">Log in with a certificate</a></p>
+          {%- endif %}
         </section>
         <section class="card" aria-labelledby="connect-title">
           <h2 class="eyebrow" id="connect-title">Connection</h2>

@@ -1,24 +1,38 @@
 //! How to log in to IRC with a client certificate, SASL EXTERNAL, instead
-//! of a password. Ergo's API can't attach certificates, so members do it
-//! themselves through NickServ.
+//! of a password, from the apps that can. Ergo's API can't attach
+//! certificates, so members do it themselves through NickServ.
 
-use crate::clients::Snippet;
+use askama::Template;
+use axum::{
+    extract::{Path, State},
+    response::Response,
+};
+
+use super::{Layout, not_found, render};
+use crate::{
+    app::AppState,
+    auth::Visitor,
+    clients::{self, Client, External, NICK_PLACEHOLDER, Snippet},
+    config::IrcServer,
+};
 
 const CERT: &str = "weblounge.crt";
 const KEY: &str = "weblounge.key";
 
-/// The commands and configs the guide walks through, for `nick`.
+/// The commands and configs the guide walks through, for `nick` and one app.
 pub struct Certificates {
     pub generate: Snippet,
     pub fingerprint: Snippet,
     pub register: Snippet,
-    pub halloy: Snippet,
-    pub weechat_pem: Snippet,
-    pub weechat: Snippet,
+    /// What switching the app to SASL EXTERNAL takes, in a line, and the
+    /// snippets that do it.
+    pub switch_intro: &'static str,
+    pub switch_snippets: Vec<Snippet>,
 }
 
 impl Certificates {
-    pub fn for_nick(nick: &str) -> Self {
+    pub fn for_app(nick: &str, external: External) -> Self {
+        let (switch_intro, switch_snippets) = switch_to_external(external);
         Self {
             generate: generate(nick),
             fingerprint: snippet(
@@ -28,7 +42,46 @@ impl Certificates {
                 ),
             ),
             register: snippet("IRC", "/msg NickServ CERT ADD <fingerprint>\n".into()),
-            halloy: snippet(
+            switch_intro,
+            switch_snippets,
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "certificate.html")]
+struct Guide<'a> {
+    layout: Layout<'a>,
+    irc: &'a IrcServer,
+    client: &'a Client,
+    certificates: Certificates,
+}
+
+pub async fn show(
+    State(app): State<AppState>,
+    visitor: Visitor,
+    Path(slug): Path<String>,
+) -> Response {
+    let Some(client) = clients::by_slug(&slug) else {
+        return not_found();
+    };
+    let Some(external) = client.external else {
+        return not_found();
+    };
+    let nick = visitor.nick().unwrap_or(NICK_PLACEHOLDER);
+    render(&Guide {
+        layout: Layout::visitor(&app, &visitor),
+        irc: &app.irc_server,
+        client,
+        certificates: Certificates::for_app(nick, external),
+    })
+}
+
+fn switch_to_external(external: External) -> (&'static str, Vec<Snippet>) {
+    match external {
+        External::HalloyFiles => (
+            "Swap the sasl.plain section in config.toml for this one, with the paths to your two files:",
+            vec![snippet(
                 "config.toml",
                 format!(
                     "# replaces [servers.weblounge.sasl.plain]\n\
@@ -36,22 +89,27 @@ impl Certificates {
                      cert = \"/path/to/{CERT}\"\n\
                      key = \"/path/to/{KEY}\"\n"
                 ),
-            ),
-            weechat_pem: snippet(
-                "shell",
-                format!(
-                    "mkdir -p ~/.config/weechat/tls\n\
-                     cat {KEY} {CERT} > ~/.config/weechat/tls/weblounge.pem\n"
+            )],
+        ),
+        External::WeechatPem => (
+            "WeeChat wants the key and the certificate in one file:",
+            vec![
+                snippet(
+                    "shell",
+                    format!(
+                        "mkdir -p ~/.config/weechat/tls\n\
+                         cat {KEY} {CERT} > ~/.config/weechat/tls/weblounge.pem\n"
+                    ),
                 ),
-            ),
-            weechat: snippet(
-                "WeeChat",
-                "/set irc.server.weblounge.tls_cert \"${weechat_config_dir}/tls/weblounge.pem\"\n\
-                 /set irc.server.weblounge.sasl_mechanism external\n\
-                 /reconnect weblounge\n"
-                    .into(),
-            ),
-        }
+                snippet(
+                    "WeeChat",
+                    "/set irc.server.weblounge.tls_cert \"${weechat_config_dir}/tls/weblounge.pem\"\n\
+                     /set irc.server.weblounge.sasl_mechanism external\n\
+                     /reconnect weblounge\n"
+                        .into(),
+                ),
+            ],
+        ),
     }
 }
 

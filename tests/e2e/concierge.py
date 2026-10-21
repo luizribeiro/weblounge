@@ -252,8 +252,8 @@ with subtest("in a browser, at a phone's width and a desktop's, Revoke all asks 
     assert "revoking fits and works at both widths" in result, result
     client.copy_from_vm("/tmp/screens")
 
-with subtest("the client certificate guide's commands attach a certificate that SASL EXTERNAL logs in with"):
-    guide = browser.get("/clients", "-f")
+with subtest("WeeChat's certificate guide's commands attach a certificate that SASL EXTERNAL logs in with"):
+    guide = browser.get("/clients/weechat/certificate", "-f")
     generate, fingerprint = [
         html.unescape(block) for block in re.findall(r"<pre><code>(.*?)</code></pre>", guide, re.S)[:2]
     ]

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}{{ client.name }} with a certificate{% endblock %}
+
+{% block content %}
+      <h1>Log in to {{ client.name }} with a certificate</h1>
+      <p class="lede">A key on disk instead of a password in {{ client.name }}'s config. Your password keeps working everywhere else.</p>
+      <ol class="steps">
+        <li>
+          <h2>Make a certificate</h2>
+          <p>Self-signed is fine. ECDSA P-256, ten years.</p>
+          {%- call components::snippet(certificates.generate) %}{% endcall %}
+        </li>
+        <li>
+          <h2>Get its fingerprint</h2>
+          <p>SHA-256, lowercase hex, no colons.</p>
+          {%- call components::snippet(certificates.fingerprint) %}{% endcall %}
+        </li>
+        <li>
+          <h2>Attach it to your account</h2>
+          <p>Connected to <code>{{ irc.host }}</code> and logged in as usual. <code>CERT LIST</code> shows what's attached, <code>CERT DEL</code> removes one.</p>
+          {%- call components::snippet(certificates.register) %}{% endcall %}
+        </li>
+        <li>
+          <h2>Switch {{ client.name }} to SASL EXTERNAL</h2>
+          <p>{{ certificates.switch_intro }}</p>
+          {%- for snippet in certificates.switch_snippets %}
+          {%- call components::snippet(snippet) %}{% endcall %}
+          {%- endfor %}
+        </li>
+      </ol>
+      <p class="links see-also"><a href="{{ client.guide_url() }}">Back to {{ client.name }}</a></p>
+{%- endblock %}

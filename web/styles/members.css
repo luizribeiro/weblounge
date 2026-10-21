@@ -656,7 +656,7 @@ dialog.card {
     counter-increment: step;
   }
 
-  & h3 {
+  & h2 {
     margin: 0 0 0.5rem;
     font-size: 1.125rem;
     font-weight: 500;
@@ -762,6 +762,14 @@ details.more {
     &::before {
       content: "−";
     }
+  }
+}
+
+.see-also {
+  margin-top: 1.5rem;
+
+  & a {
+    text-decoration: underline;
   }
 }
 

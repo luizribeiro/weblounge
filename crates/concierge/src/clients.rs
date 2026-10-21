@@ -22,6 +22,8 @@ pub struct Client {
     opens_ircs_links: bool,
     /// Where the list of all apps files it.
     groups: &'static [Group],
+    /// How it logs in with a client certificate, if it can.
+    pub external: Option<External>,
 }
 
 /// Where an app runs, as the list of all apps groups them.
@@ -65,6 +67,16 @@ enum Format {
     WeechatCommands,
 }
 
+/// How an app switches its login to SASL EXTERNAL. Goguma and Mango may
+/// well manage it too, but nobody's tried them here yet.
+#[derive(Clone, Copy)]
+pub enum External {
+    /// Halloy reads the certificate and the key from their own files.
+    HalloyFiles,
+    /// WeeChat wants both in one PEM file.
+    WeechatPem,
+}
+
 /// A prefilled configuration to copy, password left out.
 pub struct Snippet {
     /// Where it goes.
@@ -86,6 +98,7 @@ pub const CLIENTS: [Client; 6] = [
         config: None,
         opens_ircs_links: false,
         groups: &[Group::Browser],
+        external: None,
     },
     Client {
         slug: "halloy",
@@ -100,6 +113,7 @@ pub const CLIENTS: [Client; 6] = [
         config: Some(Format::HalloyToml),
         opens_ircs_links: true,
         groups: &[Group::Desktop],
+        external: Some(External::HalloyFiles),
     },
     Client {
         slug: "goguma",
@@ -124,6 +138,7 @@ pub const CLIENTS: [Client; 6] = [
         config: None,
         opens_ircs_links: false,
         groups: &[Group::Mobile],
+        external: None,
     },
     Client {
         slug: "mango",
@@ -144,6 +159,7 @@ pub const CLIENTS: [Client; 6] = [
         config: None,
         opens_ircs_links: false,
         groups: &[Group::Desktop, Group::Mobile],
+        external: None,
     },
     Client {
         slug: "senpai",
@@ -158,6 +174,7 @@ pub const CLIENTS: [Client; 6] = [
         config: Some(Format::SenpaiScfg),
         opens_ircs_links: false,
         groups: &[Group::Terminal],
+        external: None,
     },
     Client {
         slug: "weechat",
@@ -172,6 +189,7 @@ pub const CLIENTS: [Client; 6] = [
         config: Some(Format::WeechatCommands),
         opens_ircs_links: false,
         groups: &[Group::Terminal],
+        external: Some(External::WeechatPem),
     },
 ];
 
@@ -196,6 +214,12 @@ pub fn recommended(platform: Option<Platform>) -> Vec<&'static Client> {
 impl Client {
     pub fn guide_url(&self) -> String {
         format!("/clients/{}", self.slug)
+    }
+
+    /// Its guide to logging in with a client certificate, if it can.
+    pub fn certificate_url(&self) -> Option<String> {
+        self.external
+            .map(|_| format!("{}/certificate", self.guide_url()))
     }
 
     /// Whether it's our web client, which needs no setup at all.
@@ -337,6 +361,21 @@ mod tests {
         assert_eq!(slugs(Some(Platform::Ios)), ["mango", "goguma"]);
         assert_eq!(slugs(Some(Platform::Android)), ["goguma"]);
         assert!(slugs(None).is_empty());
+    }
+
+    #[test]
+    fn only_halloy_and_weechat_log_in_with_a_certificate() {
+        let with_one: Vec<_> = CLIENTS
+            .iter()
+            .filter_map(|client| client.certificate_url())
+            .collect();
+        assert_eq!(
+            with_one,
+            [
+                "/clients/halloy/certificate",
+                "/clients/weechat/certificate"
+            ]
+        );
     }
 
     #[test]
