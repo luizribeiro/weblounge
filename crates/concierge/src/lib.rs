@@ -10,6 +10,7 @@ pub mod config;
 mod csrf;
 pub mod db;
 pub mod email;
+pub mod help;
 pub mod history;
 pub mod invite_code;
 pub mod invite_rules;

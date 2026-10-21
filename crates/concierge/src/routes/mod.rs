@@ -3,6 +3,7 @@ pub mod bots;
 pub mod certificates;
 pub mod checks;
 pub mod clients;
+pub mod help;
 pub mod home;
 pub mod invite;
 pub mod invites;
@@ -103,15 +104,17 @@ pub enum Tab {
     Bots,
     Uploads,
     Account,
+    Help,
 }
 
 impl Tab {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Home,
         Self::Invites,
         Self::Bots,
         Self::Uploads,
         Self::Account,
+        Self::Help,
     ];
 
     pub fn path(self) -> &'static str {
@@ -121,6 +124,7 @@ impl Tab {
             Self::Bots => "/bots",
             Self::Uploads => uploads::PATH,
             Self::Account => "/account",
+            Self::Help => help::PATH,
         }
     }
 
@@ -131,6 +135,7 @@ impl Tab {
             Self::Bots => "Bots",
             Self::Uploads => "Uploads",
             Self::Account => "Account",
+            Self::Help => "Help",
         }
     }
 }

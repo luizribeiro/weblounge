@@ -169,6 +169,7 @@ pub fn router(app: App) -> Router {
         .route("/password-rules.json", get(routes::checks::password_rules))
         .route("/rules", get(routes::pages::rules))
         .route("/privacy", get(routes::pages::privacy))
+        .route(routes::help::PATH, get(routes::help::index))
         .route("/clients", get(routes::clients::index))
         .route("/clients/{slug}", get(routes::clients::show))
         .route(

@@ -719,3 +719,43 @@ dialog.card {
 .deadline {
   white-space: nowrap;
 }
+
+.help-topics {
+  max-width: 40rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+
+  & li {
+    border-bottom: 1px solid var(--line);
+  }
+
+  & a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 56px;
+    font-size: 1.0625rem;
+
+    &::after {
+      content: "→";
+      color: var(--muted);
+    }
+
+    &:hover {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  }
+}
+
+.help-stuck {
+  margin-top: 2.5rem;
+  color: var(--muted);
+
+  & a {
+    text-decoration: underline;
+  }
+}

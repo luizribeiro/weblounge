@@ -1,0 +1,14 @@
+{% extends "help-page.html" %}
+
+{% block title %}Help{% endblock %}
+
+{% block help %}
+      <p class="eyebrow">Help</p>
+      <h1>How can we help?</h1>
+      <p class="lede">Short answers for the things people ask about most.</p>
+      <ul class="help-topics">
+        {%- for topic in topics %}
+        <li><a href="{{ topic.href }}">{{ topic.title }}</a></li>
+        {%- endfor %}
+      </ul>
+{%- endblock %}
