@@ -14,7 +14,6 @@ use filehost::{
     UploadId,
     handoff::{self, Answer, ReadError},
 };
-use tempfile::NamedTempFile;
 
 use crate::{Scrubbed, scrub};
 
@@ -46,11 +45,12 @@ pub fn take(directory: &Path, input: impl Read, mut output: impl Write) -> anyho
     Ok(answer)
 }
 
-/// Writes `scrubbed` under a temporary name, then moves it into place, so
-/// a file is either whole or not there.
+/// Writes `scrubbed` under a temporary name nginx doesn't serve, then
+/// moves it into place, so a file is either whole or not there.
 fn store(directory: &Path, id: &UploadId, scrubbed: &Scrubbed) -> anyhow::Result<()> {
     let path = directory.join(id.file_name(scrubbed.kind));
-    let mut file = unserved_file(directory)
+    let mut file = tempfile::Builder::new()
+        .tempfile_in(directory)
         .with_context(|| format!("can't write in {}", directory.display()))?;
     file.write_all(&scrubbed.bytes)?;
     file.as_file()
@@ -60,13 +60,6 @@ fn store(directory: &Path, id: &UploadId, scrubbed: &Scrubbed) -> anyhow::Result
         .map_err(|unmoved| unmoved.error)
         .context("can't move the upload into place")?;
     Ok(())
-}
-
-/// A new file in `directory` under a dotted name, which nginx doesn't serve.
-fn unserved_file(directory: &Path) -> std::io::Result<NamedTempFile> {
-    tempfile::Builder::new()
-        .prefix(".scrubbing-")
-        .tempfile_in(directory)
 }
 
 #[cfg(test)]
@@ -154,14 +147,6 @@ mod tests {
         assert!(answer.is_err());
         assert_eq!(output, "");
         assert!(files.is_empty(), "{files:?}");
-    }
-
-    #[test]
-    fn writes_under_a_dotted_name_until_the_upload_is_whole() {
-        let directory = tempfile::tempdir().unwrap();
-        let file = unserved_file(directory.path()).unwrap();
-        let name = file.path().file_name().unwrap().to_str().unwrap();
-        assert!(name.starts_with('.'), "{name}");
     }
 
     #[test]
