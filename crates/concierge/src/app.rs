@@ -89,7 +89,9 @@ pub fn router(app: App) -> Router {
     let webchat_origin = app.webchat.origin.clone();
     let upload_origin = webchat_origin.clone();
     let state = Arc::new(app);
-    let pages = Router::new()
+    // Unknown paths are members' too, so signed-out visitors can't tell
+    // which pages exist.
+    let member_pages = Router::new()
         .route(
             "/",
             get(routes::home::show).layer(map_response(routes::no_store)),
@@ -158,17 +160,7 @@ pub fn router(app: App) -> Router {
                 .post(routes::uploads::delete)
                 .layer(map_response(routes::no_store)),
         )
-        .route(
-            "/signin",
-            get(routes::signin::show).post(routes::signin::submit),
-        )
-        .route("/signout", post(routes::signin::sign_out))
-        .route("/signup/nick", post(routes::checks::nick))
         .route("/bots/name", post(routes::checks::bot_name))
-        .route("/signup/invite", post(routes::checks::invite))
-        .route("/password-rules.json", get(routes::checks::password_rules))
-        .route("/rules", get(routes::pages::rules))
-        .route("/privacy", get(routes::pages::privacy))
         .route(routes::help::PATH, get(routes::help::index))
         .route("/help/{slug}", get(routes::help::show))
         .route("/clients", get(routes::clients::index))
@@ -178,6 +170,21 @@ pub fn router(app: App) -> Router {
             "/clients/{slug}/certificate",
             get(routes::certificates::show),
         )
+        .fallback(|| async { routes::not_found() })
+        .layer(middleware::from_fn(auth::members_only));
+    // Only what's needed to get in, or to read the terms of joining before
+    // signing up, is open to signed-out visitors.
+    let pages = Router::new()
+        .route(
+            "/signin",
+            get(routes::signin::show).post(routes::signin::submit),
+        )
+        .route("/signout", post(routes::signin::sign_out))
+        .route("/signup/nick", post(routes::checks::nick))
+        .route("/signup/invite", post(routes::checks::invite))
+        .route("/password-rules.json", get(routes::checks::password_rules))
+        .route("/rules", get(routes::pages::rules))
+        .route("/privacy", get(routes::pages::privacy))
         .route(
             routes::oauth::AUTHORIZE_PATH,
             get(routes::oauth::authorize).layer(map_response(routes::no_store)),
@@ -206,7 +213,7 @@ pub fn router(app: App) -> Router {
                 .post(routes::reset::ask)
                 .layer(map_response(routes::no_store)),
         )
-        .fallback(|| async { routes::not_found() })
+        .merge(member_pages)
         .layer(middleware::from_fn_with_state(state.clone(), auth::resolve))
         .layer(middleware::from_fn_with_state(
             state.clone(),

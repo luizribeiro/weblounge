@@ -41,7 +41,8 @@ async fn the_network_default_shows_as_on_under_opt_out() {
 
 #[tokio::test]
 async fn the_old_irc_tab_leads_to_the_settings_on_the_account_tab() {
-    let response = Site::start().await.get("/irc", None).await;
+    let (site, cookie) = signed_in_alice().await;
+    let response = site.get("/irc", Some(&cookie)).await;
     assert_eq!(response.status(), 308);
     assert_eq!(location(&response), "/account#irc-settings");
 }

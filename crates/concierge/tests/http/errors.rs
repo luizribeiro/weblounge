@@ -30,21 +30,13 @@ async fn error_page(response: Response, status: u16) -> String {
 }
 
 #[tokio::test]
-async fn visitors_get_a_card_for_unknown_paths() {
-    let site = Site::start().await;
-    let page = error_page(site.get("/no-such-page", None).await, 404).await;
-    assert!(page.contains(NOT_FOUND), "{page}");
-    assert!(page.contains("<title>There&#39;s nothing here. · weblounge.org</title>"));
-    assert!(page.contains(r#"<a href="/signin">Sign in</a>"#), "{page}");
-}
-
-#[tokio::test]
 async fn members_get_the_card_under_their_own_header() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
     let page = error_page(site.get("/no-such-page", Some(&cookie)).await, 404).await;
     assert!(page.contains(NOT_FOUND), "{page}");
+    assert!(page.contains("<title>There&#39;s nothing here. · weblounge.org</title>"));
     assert!(
         page.contains(r#"<span class="session-nick">alice</span>"#),
         "{page}"
@@ -70,12 +62,12 @@ async fn missing_client_guides_and_bots_get_the_same_card() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
-    for (path, cookie) in [
-        ("/clients/hexchat", None),
-        ("/bots/nobody/password", Some(cookie.as_str())),
-        ("/bots/nobody/delete", Some(cookie.as_str())),
+    for path in [
+        "/clients/hexchat",
+        "/bots/nobody/password",
+        "/bots/nobody/delete",
     ] {
-        let page = error_page(site.get(path, cookie).await, 404).await;
+        let page = error_page(site.get(path, Some(&cookie)).await, 404).await;
         assert!(page.contains(NOT_FOUND), "{path}: {page}");
     }
     let response = site.post("/bots/nobody/delete", &[], Some(&cookie)).await;
@@ -117,8 +109,10 @@ async fn an_error_whose_page_cannot_render_answers_bare() {
     .unwrap();
     let site =
         Site::start_with(|app| app.assets = Assets::load(built_nothing.path()).unwrap()).await;
-    for (path, status) in [("/rules", 500), ("/no-such-page", 404)] {
-        let response = site.get(path, None).await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    for (path, cookie, status) in [("/rules", None, 500), ("/no-such-page", Some(&cookie), 404)] {
+        let response = site.get(path, cookie.map(String::as_str)).await;
         assert_eq!(response.status(), status, "{path}");
         assert!(!response.headers().contains_key("content-type"), "{path}");
         assert_eq!(body_text(response).await, "", "{path}");

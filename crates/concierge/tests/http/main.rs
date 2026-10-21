@@ -1,6 +1,7 @@
 //! The site, driven through its router with a temporary database and a
 //! fake Ergo.
 
+mod access;
 mod account;
 mod bots;
 mod certificates;
@@ -179,9 +180,11 @@ impl Site {
         self.send(request.body(Body::empty()).unwrap()).await
     }
 
-    /// A GET from a guest's browser that says it's `user_agent`.
-    async fn get_on(&self, path: &str, user_agent: &str) -> Response {
-        let request = Request::get(path).header(header::USER_AGENT, user_agent);
+    /// A GET from a browser that says it's `user_agent`.
+    async fn get_on(&self, path: &str, cookie: &str, user_agent: &str) -> Response {
+        let request = Request::get(path)
+            .header(header::COOKIE, cookie)
+            .header(header::USER_AGENT, user_agent);
         self.send(request.body(Body::empty()).unwrap()).await
     }
 
@@ -345,6 +348,20 @@ fn irc_server() -> IrcServer {
     }
 }
 
+/// A site where Alice, a member, is signed in, and her session's cookie.
+async fn signed_in_alice() -> (Site, String) {
+    let site = Site::start().await;
+    site.add_member("Alice").await;
+    let cookie = site.sign_in("alice").await;
+    (site, cookie)
+}
+
+/// `path` as Alice, a member, gets it.
+async fn alices(path: &str) -> Response {
+    let (site, cookie) = signed_in_alice().await;
+    site.get(path, Some(&cookie)).await
+}
+
 /// The `name=value` part of the session cookie a response sets.
 fn session_cookie(response: &Response) -> Option<String> {
     let set_cookie = response.headers().get(header::SET_COOKIE)?.to_str().ok()?;
@@ -379,6 +396,12 @@ fn is_tab(page: &str, path: &str) -> bool {
 
 fn location(response: &Response) -> &str {
     response.headers()[header::LOCATION].to_str().unwrap()
+}
+
+/// The sign-in page, bringing whoever signs in back to `next`.
+fn sign_in_url(next: &str) -> String {
+    let next: String = form_urlencoded::byte_serialize(next.as_bytes()).collect();
+    format!("/signin?next={next}")
 }
 
 /// The verification link in `message`, and the code it carries.

@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use axum::{
     extract::{FromRequestParts, Request, State},
-    http::{HeaderValue, Method, header, request::Parts},
+    http::{HeaderValue, Method, Uri, header, request::Parts},
     middleware::Next,
-    response::{Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 
 use crate::{
@@ -95,16 +95,31 @@ impl<S: Send + Sync> FromRequestParts<S> for CurrentMember {
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let Ok(Visitor(signed_in)) = Visitor::from_request_parts(parts, state).await;
-        signed_in.map(Self).ok_or_else(|| {
-            let wanted = parts.uri.path_and_query().map_or("/", |path| path.as_str());
-            let comes_back = parts.method == Method::GET && wanted != "/";
-            Redirect::to(&if comes_back {
-                sign_in_url(wanted)
-            } else {
-                SIGN_IN_PATH.to_owned()
-            })
-        })
+        signed_in
+            .map(Self)
+            .ok_or_else(|| sign_in_first(&parts.method, &parts.uri))
     }
+}
+
+/// Lets only members through to the pages it wraps, sending anyone else to
+/// sign in as [`CurrentMember`] does.
+pub async fn members_only(Visitor(signed_in): Visitor, request: Request, next: Next) -> Response {
+    match signed_in {
+        Some(_) => next.run(request).await,
+        None => sign_in_first(request.method(), request.uri()).into_response(),
+    }
+}
+
+/// The sign-in page, coming back to `uri` afterwards if it's a page to
+/// look at other than home.
+fn sign_in_first(method: &Method, uri: &Uri) -> Redirect {
+    let wanted = uri.path_and_query().map_or("/", |path| path.as_str());
+    let comes_back = method == Method::GET && wanted != "/";
+    Redirect::to(&if comes_back {
+        sign_in_url(wanted)
+    } else {
+        SIGN_IN_PATH.to_owned()
+    })
 }
 
 /// Signs `account` in with a fresh token, ending the session the browser

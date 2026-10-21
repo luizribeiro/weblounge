@@ -174,9 +174,7 @@ async fn a_signed_out_visitor_signs_in_and_comes_back() {
     let response = site.get(&path, None).await;
 
     assert_eq!(response.status(), 303);
-    let sign_in = location(&response).to_owned();
-    let next: String = form_urlencoded::byte_serialize(path.as_bytes()).collect();
-    assert_eq!(sign_in, format!("/signin?next={next}"));
+    assert_eq!(location(&response), crate::sign_in_url(&path));
     let form = [
         ("nick", "alice"),
         ("password", crate::PASSWORD),

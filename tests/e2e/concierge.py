@@ -60,10 +60,10 @@ with subtest("join.weblounge.org sends invite links on to the invite page, and n
     assert https("join.weblounge.org", "/", *outcome) == f"302 https://{members}/invite"
     not_found_page("join.weblounge.org", "/invite")
 
-with subtest("concierge answers unknown paths with its own not-found page"):
-    lost = https(members, "/no-such-page", "-w", "\n%{http_code}")
-    assert lost.endswith("\n404") and "<h1>There&#39;s nothing here.</h1>" in lost, lost
-    assert re.search(r'href="/assets/members-[A-Z0-9]+\.css"', lost), lost
+with subtest("someone signed out is sent to sign in from /clients and unknown paths, to come back after"):
+    for path, back in [("/clients", "%2Fclients"), ("/no-such-page", "%2Fno-such-page")]:
+        sent = https(members, path, *outcome)
+        assert sent == f"303 https://{members}/signin?next={back}", sent
 
 with subtest("introspection stays nginx's bare 404 from outside, error pages or not"):
     for flags in [[], ["-d", "token=x"]]:
@@ -190,6 +190,11 @@ with subtest("a member reads the Help tab and its articles, which guests are sen
     assert "<code>weblounge/bot/Dana</code>" in article, article
     guest = https(members, "/help/make-a-bot", *outcome)
     assert guest.startswith(f"303 https://{members}/signin"), guest
+
+with subtest("concierge answers members' unknown paths with its own not-found page"):
+    lost = browser.get("/no-such-page", "-w", "\n%{http_code}")
+    assert lost.endswith("\n404") and "<h1>There&#39;s nothing here.</h1>" in lost, lost
+    assert re.search(r'href="/assets/members-[A-Z0-9]+\.css"', lost), lost
 
 with subtest("changing the email needs the member's password: a wrong one changes nothing"):
     fields = ["email=dana@example.org", "current=a-wrong-guess"]

@@ -1,9 +1,9 @@
-use crate::{Site, body_text};
+use crate::body_text;
 
 #[tokio::test]
-async fn guests_get_halloys_guide_with_a_placeholder_nick() {
-    let site = Site::start().await;
-    let response = site.get("/clients/halloy/certificate", None).await;
+async fn members_get_halloys_guide_with_their_nick() {
+    let (site, cookie) = crate::signed_in_alice().await;
+    let response = site.get("/clients/halloy/certificate", Some(&cookie)).await;
     assert_eq!(response.status(), 200);
     let page = body_text(response).await;
     assert!(
@@ -11,7 +11,7 @@ async fn guests_get_halloys_guide_with_a_placeholder_nick() {
         "{page}"
     );
     assert!(
-        page.contains("ec_paramgen_curve:prime256v1") && page.contains("-subj /CN=YOUR_NICK"),
+        page.contains("ec_paramgen_curve:prime256v1") && page.contains("-subj /CN=Alice"),
         "{page}"
     );
     assert!(
@@ -30,13 +30,7 @@ async fn guests_get_halloys_guide_with_a_placeholder_nick() {
 
 #[tokio::test]
 async fn weechat_gets_its_one_file_and_its_commands_only() {
-    let page = body_text(
-        Site::start()
-            .await
-            .get("/clients/weechat/certificate", None)
-            .await,
-    )
-    .await;
+    let page = body_text(crate::alices("/clients/weechat/certificate").await).await;
     assert!(
         page.contains("cat weblounge.key weblounge.crt &#62; ~/.config/weechat/tls/weblounge.pem"),
         "{page}"
@@ -46,24 +40,11 @@ async fn weechat_gets_its_one_file_and_its_commands_only() {
 }
 
 #[tokio::test]
-async fn members_get_their_nick_in_the_certificate() {
-    let site = Site::start().await;
-    site.add_member("Alice").await;
-    let cookie = site.sign_in("alice").await;
-    let page = body_text(
-        site.get("/clients/weechat/certificate", Some(&cookie))
-            .await,
-    )
-    .await;
-    assert!(page.contains("-subj /CN=Alice"), "{page}");
-}
-
-#[tokio::test]
 async fn apps_that_cant_present_one_have_no_certificate_guide() {
-    let site = Site::start().await;
+    let (site, cookie) = crate::signed_in_alice().await;
     for slug in ["gamja", "senpai", "goguma", "mango", "hexchat"] {
         let response = site
-            .get(&format!("/clients/{slug}/certificate"), None)
+            .get(&format!("/clients/{slug}/certificate"), Some(&cookie))
             .await;
         assert_eq!(response.status(), 404, "{slug}");
     }
@@ -71,9 +52,9 @@ async fn apps_that_cant_present_one_have_no_certificate_guide() {
 
 #[tokio::test]
 async fn only_the_guides_of_apps_that_can_link_to_it() {
-    let site = Site::start().await;
+    let (site, cookie) = crate::signed_in_alice().await;
     for slug in ["halloy", "weechat"] {
-        let page = body_text(site.get(&format!("/clients/{slug}"), None).await).await;
+        let page = body_text(site.get(&format!("/clients/{slug}"), Some(&cookie)).await).await;
         let link =
             format!(r#"<a href="/clients/{slug}/certificate">Log in with a certificate</a>"#);
         assert!(page.contains(&link), "{slug}: {page}");
@@ -83,13 +64,13 @@ async fn only_the_guides_of_apps_that_can_link_to_it() {
         );
     }
     for slug in ["gamja", "senpai", "goguma", "mango"] {
-        let page = body_text(site.get(&format!("/clients/{slug}"), None).await).await;
+        let page = body_text(site.get(&format!("/clients/{slug}"), Some(&cookie)).await).await;
         assert!(!page.contains("/certificate"), "{slug}: {page}");
     }
 }
 
 #[tokio::test]
 async fn the_clients_page_no_longer_walks_through_certificates() {
-    let page = body_text(Site::start().await.get("/clients", None).await).await;
+    let page = body_text(crate::alices("/clients").await).await;
     assert!(!page.contains("certificate"), "{page}");
 }
