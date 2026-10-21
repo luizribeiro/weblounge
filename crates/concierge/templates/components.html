@@ -29,6 +29,15 @@
           <p class="copy-status visually-hidden" aria-live="polite" data-copy-status></p>
 {%- endmacro %}
 
+{# The connection details for whoever's reading, signed in or not. #}
+{% macro your_connection(irc, nick) %}
+          {%- if nick.is_some() %}
+          {%- call connection(irc, nick, "The one you sign in with here.") %}{% endcall %}
+          {%- else %}
+          {%- call connection(irc, nick, "Yours.") %}{% endcall %}
+          {%- endif %}
+{%- endmacro %}
+
 {% macro copyable(label, value) %}
             <div class="settings-row">
               <dt>{{ label }}</dt>

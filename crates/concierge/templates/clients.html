@@ -9,11 +9,7 @@
       <p class="lede">Any IRC client with TLS and SASL works. These are the ones we'd pick.</p>
       <section class="card tab-card" aria-labelledby="connect-title">
         <h2 class="eyebrow" id="connect-title">Connection</h2>
-        {%- if nick.is_some() %}
-        {%- call components::connection(irc, nick, "The one you sign in with here.") %}{% endcall %}
-        {%- else %}
-        {%- call components::connection(irc, nick, "Yours.") %}{% endcall %}
-        {%- endif %}
+        {%- call components::your_connection(irc, nick) %}{% endcall %}
       </section>
       <section class="faq" aria-labelledby="guides-title">
         <h2 id="guides-title">Setup guides</h2>

@@ -29,11 +29,7 @@
         </section>
         <section class="card" aria-labelledby="connect-title">
           <h2 class="eyebrow" id="connect-title">Connection</h2>
-          {%- if nick.is_some() %}
-          {%- call components::connection(irc, nick, "The one you sign in with here.") %}{% endcall %}
-          {%- else %}
-          {%- call components::connection(irc, nick, "Yours.") %}{% endcall %}
-          {%- endif %}
+          {%- call components::your_connection(irc, nick) %}{% endcall %}
         </section>
       </div>
       {%- endif %}
