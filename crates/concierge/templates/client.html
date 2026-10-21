@@ -12,7 +12,7 @@
         <a href="{{ link.url }}">{{ link.label }}</a>
         {%- endfor %}
       </p>
-      {%- if client.in_browser %}
+      {%- if client.in_browser() %}
       <p class="prose">{{ client.setup }}</p>
       {%- call components::open_chat(webchat) %}{% endcall %}
       {%- else %}

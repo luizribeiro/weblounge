@@ -39,6 +39,22 @@ struct Index<'a> {
     certificates: Certificates,
 }
 
+#[derive(Template)]
+#[template(path = "clients-all.html")]
+struct AllApps<'a> {
+    layout: Layout<'a>,
+    nick: Option<&'a str>,
+    irc: &'a IrcServer,
+}
+
+pub async fn all(State(app): State<AppState>, visitor: Visitor) -> Response {
+    render(&AllApps {
+        layout: Layout::visitor(&app, &visitor),
+        nick: visitor.nick(),
+        irc: &app.irc_server,
+    })
+}
+
 pub async fn index(State(app): State<AppState>, visitor: Visitor) -> Response {
     let nick = visitor.nick();
     render(&Index {

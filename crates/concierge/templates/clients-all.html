@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "components.html" as components %}
+
+{% block title %}All apps{% endblock %}
+
+{% block content %}
+      <h1>All apps</h1>
+      <p class="lede">Pick one to see how to set it up.</p>
+      <div class="app-groups">
+        {%- for group in crate::clients::Group::ALL %}
+        <div>
+          <h2 class="eyebrow">{{ group.title() }}</h2>
+          <ul class="app-list">
+            {%- for client in group.clients() %}
+            <li><a href="{{ client.guide_url() }}">{{ client.name }}</a></li>
+            {%- endfor %}
+          </ul>
+        </div>
+        {%- endfor %}
+      </div>
+      <details class="more">
+        <summary>Using an app that isn't here?</summary>
+        <p class="hint">Any IRC app with TLS and SASL works. These are the details it needs.</p>
+        {%- call components::your_connection(irc, nick) %}{% endcall %}
+      </details>
+{%- endblock %}

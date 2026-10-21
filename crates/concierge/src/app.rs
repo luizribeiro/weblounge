@@ -172,6 +172,7 @@ pub fn router(app: App) -> Router {
         .route(routes::help::PATH, get(routes::help::index))
         .route("/help/{slug}", get(routes::help::show))
         .route("/clients", get(routes::clients::index))
+        .route("/clients/all", get(routes::clients::all))
         .route("/clients/{slug}", get(routes::clients::show))
         .route(
             routes::oauth::AUTHORIZE_PATH,

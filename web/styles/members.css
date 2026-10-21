@@ -707,6 +707,64 @@ dialog.card {
   }
 }
 
+.app-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 0 2rem;
+  max-width: 44rem;
+  margin-top: 2rem;
+}
+
+.app-list {
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+
+  & a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: 1.125rem;
+    font-weight: 500;
+    text-decoration: underline;
+  }
+}
+
+details.more {
+  max-width: 44rem;
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+
+  & summary {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    gap: 0.5rem;
+    color: var(--accent);
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &::before {
+      content: "+";
+      width: 1ch;
+      font-family: var(--mono);
+    }
+  }
+
+  &[open] summary {
+    margin-bottom: 0.5rem;
+
+    &::before {
+      content: "−";
+    }
+  }
+}
+
 .email-reminder {
   padding-block: 0.625rem;
   font-size: 0.9375rem;

@@ -1,4 +1,4 @@
-use concierge::clients::{CLIENTS, NICK_PLACEHOLDER};
+use concierge::clients::{CLIENTS, Group, NICK_PLACEHOLDER};
 
 use crate::{Site, body_text};
 
@@ -55,7 +55,7 @@ async fn a_member_gets_a_config_with_their_nick_and_no_password() {
 #[tokio::test]
 async fn guests_get_every_guide_with_a_placeholder_nick() {
     let site = Site::start().await;
-    for client in CLIENTS.iter().filter(|client| !client.in_browser) {
+    for client in CLIENTS.iter().filter(|client| !client.in_browser()) {
         let response = site.get(&client.guide_url(), None).await;
         assert_eq!(response.status(), 200, "{}", client.slug);
         let page = body_text(response).await;
@@ -102,6 +102,50 @@ async fn the_clients_page_and_every_guide_link_all_the_guides() {
             let link = format!(r#"href="/clients/{}""#, client.slug);
             assert!(page.contains(&link), "{path} lacks {link}");
         }
+    }
+}
+
+#[tokio::test]
+async fn all_apps_are_names_by_where_they_run_linking_their_guides() {
+    let page = body_text(Site::start().await.get("/clients/all", None).await).await;
+    assert!(page.contains("<h1>All apps</h1>"), "{page}");
+    let mut last = 0;
+    for group in Group::ALL {
+        let start = page.find(&format!(">{}</h2>", group.title())).unwrap();
+        assert!(start > last, "{} is out of order: {page}", group.title());
+        last = start;
+        let list = &page[start..start + page[start..].find("</ul>").unwrap()];
+        for client in group.clients() {
+            let link = format!(r#"<a href="{}">{}</a>"#, client.guide_url(), client.name);
+            assert!(list.contains(&link), "{link}: {list}");
+        }
+    }
+    for client in &CLIENTS {
+        assert!(!page.contains(client.price), "{}: {page}", client.slug);
+    }
+    assert!(!page.contains("<pre>"), "{page}");
+}
+
+#[tokio::test]
+async fn all_apps_keep_the_connection_details_folded_away() {
+    let site = Site::start().await;
+    site.add_member("Alice").await;
+    let cookie = site.sign_in("alice").await;
+    let page = body_text(site.get("/clients/all", Some(&cookie)).await).await;
+    let details = &page[page.find("<details").unwrap()..page.find("</details>").unwrap()];
+    assert!(
+        details.contains("<summary>Using an app that isn't here?</summary>"),
+        "{details}"
+    );
+    assert!(
+        details.contains("Any IRC app with TLS and SASL works."),
+        "{details}"
+    );
+    for value in ["irc.weblounge.org", "6697", "Alice"] {
+        assert!(
+            details.contains(&format!("<code>{value}</code>")),
+            "{details}"
+        );
     }
 }
 

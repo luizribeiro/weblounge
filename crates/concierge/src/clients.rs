@@ -20,8 +20,37 @@ pub struct Client {
     config: Option<Format>,
     /// Whether it opens `ircs://` links with the server filled in.
     opens_ircs_links: bool,
-    /// Whether it's our web client, which needs no setup at all.
-    pub in_browser: bool,
+    /// Where the list of all apps files it.
+    groups: &'static [Group],
+}
+
+/// Where an app runs, as the list of all apps groups them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    Browser,
+    Desktop,
+    Mobile,
+    Terminal,
+}
+
+impl Group {
+    pub const ALL: [Self; 4] = [Self::Browser, Self::Desktop, Self::Mobile, Self::Terminal];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Browser => "In your browser",
+            Self::Desktop => "Desktop",
+            Self::Mobile => "Phone and tablet",
+            Self::Terminal => "Terminal",
+        }
+    }
+
+    pub fn clients(self) -> Vec<&'static Client> {
+        CLIENTS
+            .iter()
+            .filter(|client| client.groups.contains(&self))
+            .collect()
+    }
 }
 
 pub struct Link {
@@ -56,7 +85,7 @@ pub const CLIENTS: [Client; 6] = [
         setup: "Nothing to set up: it signs you in with your session here and opens #lounge.",
         config: None,
         opens_ircs_links: false,
-        in_browser: true,
+        groups: &[Group::Browser],
     },
     Client {
         slug: "halloy",
@@ -70,7 +99,7 @@ pub const CLIENTS: [Client; 6] = [
         setup: "Add this to config.toml in Halloy's config directory, then reload the config.",
         config: Some(Format::HalloyToml),
         opens_ircs_links: true,
-        in_browser: false,
+        groups: &[Group::Desktop],
     },
     Client {
         slug: "goguma",
@@ -94,7 +123,7 @@ pub const CLIENTS: [Client; 6] = [
         setup: "Fill in the server, your nick and your password. TLS is on by default; give the server as host:port if the port isn't 6697.",
         config: None,
         opens_ircs_links: false,
-        in_browser: false,
+        groups: &[Group::Mobile],
     },
     Client {
         slug: "mango",
@@ -114,7 +143,7 @@ pub const CLIENTS: [Client; 6] = [
         setup: "Add a server with the details below: TLS on, SASL PLAIN with your nick and password.",
         config: None,
         opens_ircs_links: false,
-        in_browser: false,
+        groups: &[Group::Desktop, Group::Mobile],
     },
     Client {
         slug: "senpai",
@@ -128,7 +157,7 @@ pub const CLIENTS: [Client; 6] = [
         setup: "Save this as ~/.config/senpai/senpai.scfg. Add password-cmd (or password) for your password.",
         config: Some(Format::SenpaiScfg),
         opens_ircs_links: false,
-        in_browser: false,
+        groups: &[Group::Terminal],
     },
     Client {
         slug: "weechat",
@@ -142,7 +171,7 @@ pub const CLIENTS: [Client; 6] = [
         setup: "Run these in WeeChat, typing your password into the /secure line.",
         config: Some(Format::WeechatCommands),
         opens_ircs_links: false,
-        in_browser: false,
+        groups: &[Group::Terminal],
     },
 ];
 
@@ -167,6 +196,11 @@ pub fn recommended(platform: Option<Platform>) -> Vec<&'static Client> {
 impl Client {
     pub fn guide_url(&self) -> String {
         format!("/clients/{}", self.slug)
+    }
+
+    /// Whether it's our web client, which needs no setup at all.
+    pub fn in_browser(&self) -> bool {
+        self.groups.contains(&Group::Browser)
     }
 
     /// Its configuration for `nick`, or for a placeholder nick.
@@ -269,6 +303,23 @@ mod tests {
             );
         }
         assert!(by_slug("hexchat").is_none());
+        assert!(by_slug("all").is_none(), "/clients/all lists them all");
+    }
+
+    #[test]
+    fn every_app_is_in_a_group_and_mango_in_two() {
+        let names = |group: Group| {
+            group
+                .clients()
+                .iter()
+                .map(|client| client.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(Group::Browser), ["gamja"]);
+        assert_eq!(names(Group::Desktop), ["Halloy", "Mango"]);
+        assert_eq!(names(Group::Mobile), ["Goguma", "Mango"]);
+        assert_eq!(names(Group::Terminal), ["senpai", "WeeChat"]);
+        assert!(CLIENTS.iter().all(|client| !client.groups.is_empty()));
     }
 
     #[test]
@@ -338,7 +389,7 @@ username = "alice"
     fn gamja_is_the_one_client_that_runs_in_the_browser() {
         let in_browser: Vec<_> = CLIENTS
             .iter()
-            .filter(|client| client.in_browser)
+            .filter(|client| client.in_browser())
             .map(|client| client.slug)
             .collect();
         assert_eq!(in_browser, ["gamja"]);
