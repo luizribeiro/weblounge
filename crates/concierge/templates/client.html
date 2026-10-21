@@ -29,11 +29,11 @@
           {%- endif %}
           <details class="more">
             <summary>Connection details</summary>
-            {%- call components::your_connection(irc, nick) %}{% endcall %}
+            {%- call components::connection(irc, nick) %}{% endcall %}
           </details>
           {%- else %}
           <div class="card connection-card">
-            {%- call components::your_connection(irc, nick) %}{% endcall %}
+            {%- call components::connection(irc, nick) %}{% endcall %}
           </div>
           {%- endif %}
           {%- if let Some(url) = client.certificate_url() %}

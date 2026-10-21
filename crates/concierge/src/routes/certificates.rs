@@ -11,8 +11,8 @@ use axum::{
 use super::{Layout, not_found, render};
 use crate::{
     app::AppState,
-    auth::Visitor,
-    clients::{self, Client, External, NICK_PLACEHOLDER, Snippet},
+    auth::CurrentMember,
+    clients::{self, Client, External, Snippet},
     config::IrcServer,
 };
 
@@ -59,7 +59,7 @@ struct Guide<'a> {
 
 pub async fn show(
     State(app): State<AppState>,
-    visitor: Visitor,
+    CurrentMember(me): CurrentMember,
     Path(slug): Path<String>,
 ) -> Response {
     let Some(client) = clients::by_slug(&slug) else {
@@ -68,12 +68,11 @@ pub async fn show(
     let Some(external) = client.external else {
         return not_found();
     };
-    let nick = visitor.nick().unwrap_or(NICK_PLACEHOLDER);
     render(&Guide {
-        layout: Layout::visitor(&app, &visitor),
+        layout: Layout::member(&app, &me.member),
         irc: &app.irc_server,
         client,
-        certificates: Certificates::for_app(nick, external),
+        certificates: Certificates::for_app(me.member.account.as_str(), external),
     })
 }
 

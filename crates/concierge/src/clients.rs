@@ -3,8 +3,6 @@
 
 use crate::{config::IrcServer, platform::Platform};
 
-/// What guides put where the nick goes when nobody's signed in.
-pub const NICK_PLACEHOLDER: &str = "YOUR_NICK";
 const CHANNEL: &str = "#lounge";
 /// What clients assume when a server's address names no port.
 const DEFAULT_TLS_PORT: u16 = 6697;
@@ -237,8 +235,7 @@ impl Client {
     }
 
     /// Its configuration for `nick`, or for a placeholder nick.
-    pub fn snippet(&self, server: &IrcServer, nick: Option<&str>) -> Option<Snippet> {
-        let nick = nick.unwrap_or(NICK_PLACEHOLDER);
+    pub fn snippet(&self, server: &IrcServer, nick: &str) -> Option<Snippet> {
         let IrcServer { host, port } = server;
         let (target, text) = match self.config? {
             Format::HalloyToml => (
@@ -319,7 +316,7 @@ mod tests {
         by_slug(slug).unwrap()
     }
 
-    fn snippet(slug: &str, server: &IrcServer, nick: Option<&str>) -> String {
+    fn snippet(slug: &str, server: &IrcServer, nick: &str) -> String {
         client(slug).snippet(server, nick).unwrap().text
     }
 
@@ -390,7 +387,7 @@ mod tests {
     #[test]
     fn halloys_config_names_the_server_tls_and_sasl_but_no_password() {
         assert_eq!(
-            snippet("halloy", &production(), Some("alice")),
+            snippet("halloy", &production(), "alice"),
             r#"[servers.weblounge]
 nickname = "alice"
 server = "irc.weblounge.org"
@@ -407,7 +404,7 @@ username = "alice"
     #[test]
     fn senpais_config_uses_an_ircs_address() {
         assert_eq!(
-            snippet("senpai", &vm(), Some("alice")),
+            snippet("senpai", &vm(), "alice"),
             "address ircs://irc.weblounge.localhost:16697\n\
              nickname alice\n\
              username alice\n\
@@ -418,19 +415,11 @@ username = "alice"
 
     #[test]
     fn weechat_gets_commands_that_keep_the_password_in_secure_data() {
-        let commands = snippet("weechat", &production(), Some("alice"));
+        let commands = snippet("weechat", &production(), "alice");
         assert!(commands.starts_with("/server add weblounge irc.weblounge.org/6697 -tls\n"));
         assert!(commands.contains("/set irc.server.weblounge.sasl_username \"alice\"\n"));
         assert!(commands.contains("sasl_password \"${sec.data.weblounge}\"\n"));
         assert!(commands.ends_with("/connect weblounge\n"));
-    }
-
-    #[test]
-    fn guests_get_a_placeholder_nick() {
-        for slug in ["halloy", "senpai", "weechat"] {
-            let text = snippet(slug, &production(), None);
-            assert!(text.contains(NICK_PLACEHOLDER), "{slug}: {text}");
-        }
     }
 
     #[test]
@@ -441,18 +430,14 @@ username = "alice"
             .map(|client| client.slug)
             .collect();
         assert_eq!(in_browser, ["gamja"]);
-        assert!(
-            client("gamja")
-                .snippet(&production(), Some("alice"))
-                .is_none()
-        );
+        assert!(client("gamja").snippet(&production(), "alice").is_none());
         assert_eq!(client("gamja").ircs_link(&production()), None);
     }
 
     #[test]
     fn mobile_clients_are_set_up_by_hand() {
         for slug in ["goguma", "mango"] {
-            assert!(client(slug).snippet(&production(), Some("alice")).is_none());
+            assert!(client(slug).snippet(&production(), "alice").is_none());
         }
     }
 

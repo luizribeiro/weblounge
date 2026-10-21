@@ -5,7 +5,7 @@
       </p>
 {%- endmacro %}
 
-{% macro connection(irc, nick, password) %}
+{% macro connection(irc, nick) %}
           <dl class="settings-list">
             {%- call copyable("Server", irc.host) %}{% endcall %}
             {%- call copyable("Port", irc.port) %}<span class="muted">· TLS</span>{% endcall %}
@@ -13,29 +13,13 @@
               <dt>SASL</dt>
               <dd><code>PLAIN</code></dd>
             </div>
-            {%- if let Some(nick) = nick %}
             {%- call copyable("Username", nick) %}{% endcall %}
-            {%- else %}
-            <div class="settings-row">
-              <dt>Username</dt>
-              <dd>Your nick.</dd>
-            </div>
-            {%- endif %}
             <div class="settings-row">
               <dt>Password</dt>
-              <dd>{{ password }}</dd>
+              <dd>The one you sign in with here.</dd>
             </div>
           </dl>
           <p class="copy-status visually-hidden" aria-live="polite" data-copy-status></p>
-{%- endmacro %}
-
-{# The connection details for whoever's reading, signed in or not. #}
-{% macro your_connection(irc, nick) %}
-          {%- if nick.is_some() %}
-          {%- call connection(irc, nick, "The one you sign in with here.") %}{% endcall %}
-          {%- else %}
-          {%- call connection(irc, nick, "Yours.") %}{% endcall %}
-          {%- endif %}
 {%- endmacro %}
 
 {% macro copyable(label, value) %}

@@ -122,6 +122,10 @@ async fn every_guide_says_where_to_get_the_app_then_how_to_add_weblounge() {
         }
         assert!(page.contains(r#"data-copy="Alice""#), "{page}");
         assert!(page.contains("<code>6697</code>"), "{page}");
+        assert!(
+            page.contains("<dd>The one you sign in with here.</dd>"),
+            "{page}"
+        );
     }
 }
 
