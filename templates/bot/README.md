@@ -10,9 +10,11 @@ where the question was asked.
 
 ## An account
 
-Every bot needs an account of its own. Ask an admin to create one for you;
-they'll give you its name and password once. The bot's nick is its account
-name.
+Every bot needs an account of its own. Make one on the Bots tab at
+[members.weblounge.org/bots](https://members.weblounge.org/bots); its
+password is shown once. The bot's nick is its account name.
+
+Bots can't join #lounge. Use #bots, or a channel of your own.
 
 ## Configuration
 
@@ -21,7 +23,7 @@ The bot reads its environment:
 | Variable            | What it is                                                    |
 | ------------------- | ------------------------------------------------------------- |
 | `IRC_NICK`          | The bot's account name and nick (required)                    |
-| `IRC_CHANNELS`      | Channels to join, separated by commas, e.g. `#lounge,#bots`   |
+| `IRC_CHANNELS`      | Channels to join, separated by commas, e.g. `#bots,#robots`   |
 | `IRC_SERVER`        | `host:port`, over TLS; defaults to `irc.weblounge.org:6697`   |
 | `IRC_PASSWORD_FILE` | A file holding the password                                   |
 | `IRC_CA_FILE`       | A CA to trust besides the system's, for a test server         |
@@ -50,7 +52,7 @@ declare the bot:
 ```nix
 services.weblounge-bot.bender = {
   enable = true;
-  channels = [ "#lounge" ];
+  channels = [ "#bots" ];
   passwordFile = "/run/secrets/bender-password";
 };
 ```
@@ -67,7 +69,7 @@ With Go 1.24 or later:
 ```sh
 go test ./...
 CGO_ENABLED=0 go build -o bot .
-IRC_NICK=bender IRC_CHANNELS='#lounge' IRC_PASSWORD_FILE=~/.config/bender/password ./bot
+IRC_NICK=bender IRC_CHANNELS='#bots' IRC_PASSWORD_FILE=~/.config/bender/password ./bot
 ```
 
 To build a static binary for another machine, say a 64-bit ARM server:
@@ -91,7 +93,7 @@ After=network-online.target
 [Service]
 ExecStart=/usr/local/bin/bot
 Environment=IRC_NICK=bender
-Environment=IRC_CHANNELS=#lounge
+Environment=IRC_CHANNELS=#bots
 LoadCredential=password:/etc/bender/password
 DynamicUser=yes
 Restart=on-failure
@@ -141,7 +143,7 @@ install -o 65534 -m 400 /etc/bender/password /etc/bender/container-password
 nix build .#image
 docker load < result
 docker run -d --name bender \
-  -e IRC_NICK=bender -e IRC_CHANNELS='#lounge' \
+  -e IRC_NICK=bender -e IRC_CHANNELS='#bots' \
   -e IRC_PASSWORD_FILE=/run/secrets/password \
   -v /etc/bender/container-password:/run/secrets/password:ro \
   bot:latest

@@ -25,7 +25,7 @@ let
       channels = mkOption {
         type = types.listOf types.str;
         default = [ ];
-        example = [ "#lounge" ];
+        example = [ "#bots" ];
         description = "Channels the bot joins once connected.";
       };
 
