@@ -19,10 +19,11 @@ async fn welcomes_the_member_by_name_and_opens_the_chat() {
 }
 
 #[tokio::test]
-async fn leads_to_other_clients_just_under_the_chat_and_nothing_else() {
+async fn offers_an_app_just_under_the_chat_and_nothing_else() {
     let page = home_of_alice().await;
     let chat = page.find(">Open chat<").unwrap();
-    let clients = page.find(r#"<a href="/clients">Use another client</a>"#);
+    let clients = page
+        .find(r#"<a class="button" href="/clients">Prefer an app? Set it up on this device</a>"#);
     assert!(clients.is_some_and(|clients| clients > chat), "{page}");
     for crowd in ["<form", "<dl", "data-copy", "invite-link"] {
         let main = &page[page.find("<main").unwrap()..page.find("</main>").unwrap()];
