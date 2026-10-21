@@ -35,7 +35,6 @@ use crate::{
 #[template(path = "bots.html")]
 struct BotsPage<'a> {
     layout: Layout<'a>,
-    nick: &'a str,
     bots: Vec<Bot>,
     /// How many more the member may make now.
     remaining: i64,
@@ -335,7 +334,6 @@ async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) 
     let verified = member.email_verified_at.is_some();
     let page = BotsPage {
         layout: Layout::new(app, Some(member.account.as_str())).on(Tab::Bots),
-        nick: member.account.as_str(),
         remaining: bot_rules::remaining(verified, bots.len() as i64),
         bots,
         unconfirmed: Unconfirmed::of(member, db::now()),

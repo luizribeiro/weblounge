@@ -116,9 +116,11 @@ async fn a_member_without_bots_sees_none_and_their_room_for_more() {
     assert!(page.contains("No bots yet."), "{page}");
     assert!(page.contains(&count(0)), "{page}");
     assert!(page.contains("You can have up to 3 at a time."), "{page}");
-    assert!(page.contains("<code>weblounge/bot/alice</code>"), "{page}");
-    let how_bots_work = page.find("How bots work").unwrap();
-    assert!(how_bots_work < page.find("Your bots").unwrap(), "{page}");
+    let blurb = page
+        .find(r#"<a href="/help/make-a-bot">Learn how to make one</a>"#)
+        .expect(&page);
+    assert!(blurb < page.find("Your bots").unwrap(), "{page}");
+    assert!(!page.contains("How bots work"), "{page}");
     assert!(listed(&page).is_empty(), "{page}");
     assert!(
         !page.contains("bender") && !page.contains("dalek"),

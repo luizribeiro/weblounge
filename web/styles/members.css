@@ -720,6 +720,14 @@ dialog.card {
   white-space: nowrap;
 }
 
+.tab-blurb {
+  max-width: 40rem;
+
+  & a {
+    text-decoration: underline;
+  }
+}
+
 .help-topics {
   max-width: 40rem;
   margin: 0;

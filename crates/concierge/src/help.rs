@@ -29,7 +29,7 @@ const CHANNEL: Topic = Topic {
     href: "/help/start-a-channel",
 };
 
-const BOT: Topic = Topic {
+pub const BOT: Topic = Topic {
     title: "Make a bot",
     href: "/help/make-a-bot",
 };
