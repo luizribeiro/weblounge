@@ -193,11 +193,10 @@ async fn an_unconfirmed_member_is_told_to_confirm_first_and_still_sees_their_bot
         "{page}"
     );
     assert!(
-        page.contains(
-            "We haven't sent you a link to confirm it yet; send one from the Account tab."
-        ),
+        page.contains(r#"<p class="hint">We haven't sent you a link to confirm it yet.</p>"#),
         "{page}"
     );
+    assert!(!page.contains("Account tab"), "{page}");
     assert!(!page.contains(" bots</p>"), "{page}");
     assert_eq!(listed(&page), ["<strong>bender</strong>"]);
     assert!(!page.contains(r#"class="notice email-reminder""#), "{page}");

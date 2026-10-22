@@ -309,15 +309,15 @@ async fn the_tab_tells_an_unconfirmed_member_why_and_where_to_confirm_instead_of
         );
         assert!(!page.contains("invites available"), "{page}");
         assert!(!page.contains("Invite someone"), "{page}");
+        assert!(!page.contains("Account tab"), "{page}");
     }
     assert!(
-        never_mailed.contains(
-            "We haven't sent you a link to confirm it yet; send one from the Account tab."
-        ),
+        never_mailed
+            .contains(r#"<p class="hint">We haven't sent you a link to confirm it yet.</p>"#),
         "{never_mailed}"
     );
     assert!(
-        mailed.contains("Open the link we emailed you, or get a new one from the Account tab."),
+        mailed.contains(r#"<p class="hint">Open the link we emailed you.</p>"#),
         "{mailed}"
     );
 }
