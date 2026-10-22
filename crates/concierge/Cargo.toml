@@ -18,6 +18,7 @@ hmac = "0.12.1"
 http-body-util = "0.1.5"
 outbox = { path = "../outbox" }
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+secret = { path = "../secret" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.10.9"

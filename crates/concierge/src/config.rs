@@ -5,6 +5,7 @@ use std::{
 
 use common::config::{invalid, read_credential, required};
 use ergo_api::{Client, Url};
+use secret::SecretString;
 
 pub use crate::routes::presence::Presence;
 use crate::{
@@ -166,38 +167,38 @@ impl Config {
         database_in(&self.state_dir)
     }
 
-    pub fn read_session_key(&self) -> anyhow::Result<Vec<u8>> {
+    pub fn read_session_key(&self) -> anyhow::Result<SecretString> {
         let key = self.read_credential(SESSION_KEY_CREDENTIAL)?;
         anyhow::ensure!(
-            key.len() >= MIN_SESSION_KEY_BYTES,
+            key.expose().len() >= MIN_SESSION_KEY_BYTES,
             "the {SESSION_KEY_CREDENTIAL} credential holds {} bytes; a session key needs at least {MIN_SESSION_KEY_BYTES}",
-            key.len()
+            key.expose().len()
         );
-        Ok(key.into_bytes())
+        Ok(key)
     }
 
     /// A client for Ergo's API, with the token from the credentials.
     pub fn ergo_client(&self) -> anyhow::Result<Client> {
         let token = self.read_credential(ERGO_API_TOKEN_CREDENTIAL)?;
         anyhow::ensure!(
-            !token.is_empty(),
+            !token.expose().is_empty(),
             "the {ERGO_API_TOKEN_CREDENTIAL} credential is empty"
         );
         Ok(Client::new(self.ergo_api.clone(), token))
     }
 
     /// The secret Ergo authenticates with to introspect tokens.
-    pub fn read_introspection_secret(&self) -> anyhow::Result<String> {
+    pub fn read_introspection_secret(&self) -> anyhow::Result<SecretString> {
         let secret = self.read_credential(INTROSPECTION_SECRET_CREDENTIAL)?;
         anyhow::ensure!(
-            secret.len() >= MIN_SESSION_KEY_BYTES,
+            secret.expose().len() >= MIN_SESSION_KEY_BYTES,
             "the {INTROSPECTION_SECRET_CREDENTIAL} credential holds {} bytes; it needs at least {MIN_SESSION_KEY_BYTES}",
-            secret.len()
+            secret.expose().len()
         );
         Ok(secret)
     }
 
-    fn read_credential(&self, name: &str) -> anyhow::Result<String> {
+    fn read_credential(&self, name: &str) -> anyhow::Result<SecretString> {
         read_credential(&self.credentials_dir, name)
     }
 }
@@ -583,7 +584,7 @@ mod tests {
         let key = config_with_credentials(dir.path())
             .read_session_key()
             .unwrap();
-        assert_eq!(key, generated.trim().as_bytes());
+        assert_eq!(key.expose(), generated.trim());
     }
 
     #[test]
@@ -606,7 +607,10 @@ mod tests {
         assert!(config.read_introspection_secret().is_err());
         let generated = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
         std::fs::write(&path, format!("{generated}\n")).unwrap();
-        assert_eq!(config.read_introspection_secret().unwrap(), generated);
+        assert_eq!(
+            config.read_introspection_secret().unwrap().expose(),
+            generated
+        );
     }
 
     #[test]

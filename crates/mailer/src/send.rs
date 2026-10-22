@@ -94,7 +94,9 @@ impl Transport for AsyncSmtpTransport<Tokio1Executor> {
 /// The configured server over implicit TLS, its certificate checked
 /// against the system's trust store.
 pub fn smtp(config: &MailerConfig) -> anyhow::Result<AsyncSmtpTransport<Tokio1Executor>> {
-    let credentials = Credentials::new(config.smtp_username.clone(), config.read_smtp_password()?);
+    let password = config.read_smtp_password()?;
+    // lettre keeps credentials as plain Strings, which nothing wipes.
+    let credentials = Credentials::new(config.smtp_username.clone(), password.expose().clone());
     Ok(
         AsyncSmtpTransport::<Tokio1Executor>::relay(&config.smtp_host)?
             .port(config.smtp_port)

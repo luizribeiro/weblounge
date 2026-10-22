@@ -496,6 +496,7 @@ dependencies = [
  "libc",
  "rand 0.10.3",
  "regex",
+ "secret",
  "sqlx",
  "tempfile",
 ]
@@ -520,6 +521,7 @@ dependencies = [
  "qrcode",
  "regex",
  "rqrr",
+ "secret",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1684,6 +1686,7 @@ dependencies = [
  "libc",
  "outbox",
  "regex",
+ "secret",
  "tempfile",
  "tokio",
 ]

@@ -4,6 +4,7 @@
 use std::{fmt, path::Path};
 
 use anyhow::Context;
+use secret::SecretString;
 
 #[derive(Debug, PartialEq)]
 pub enum ConfigError {
@@ -47,11 +48,19 @@ pub fn invalid(name: &'static str, value: String, reason: &'static str) -> Confi
 
 /// The credential `name` in `credentials_dir`, without the newline a
 /// generated one ends in.
-pub fn read_credential(credentials_dir: &Path, name: &str) -> anyhow::Result<String> {
+pub fn read_credential(credentials_dir: &Path, name: &str) -> anyhow::Result<SecretString> {
     let path = credentials_dir.join(name);
-    let value =
+    let mut value =
         std::fs::read_to_string(&path).with_context(|| format!("can't read {}", path.display()))?;
-    Ok(value.trim().to_owned())
+    trim_in_place(&mut value);
+    Ok(SecretString::new(value))
+}
+
+/// Trims `value` without copying it, so no copy is left unwiped.
+fn trim_in_place(value: &mut String) {
+    value.truncate(value.trim_end().len());
+    let leading = value.len() - value.trim_start().len();
+    value.drain(..leading);
 }
 
 #[cfg(test)]
@@ -79,9 +88,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let error = read_credential(dir.path(), "smtp-password").unwrap_err();
         assert!(error.to_string().ends_with("/smtp-password"), "{error}");
-        std::fs::write(dir.path().join("smtp-password"), "hunter2\n").unwrap();
+        std::fs::write(dir.path().join("smtp-password"), " hunter2\n").unwrap();
         assert_eq!(
-            read_credential(dir.path(), "smtp-password").unwrap(),
+            read_credential(dir.path(), "smtp-password")
+                .unwrap()
+                .expose(),
             "hunter2"
         );
     }

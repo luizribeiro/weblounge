@@ -28,7 +28,7 @@ pub async fn report(config: &Config) -> anyhow::Result<String> {
          ergo: {} {}\n",
         config.public_url,
         config.state_dir.display(),
-        key.len(),
+        key.expose().len(),
         database.display(),
         config.ergo_api,
         ergo_health(&ergo).await,

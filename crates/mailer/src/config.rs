@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use common::config::{ConfigError, invalid, read_credential, required};
 use lettre::message::Mailbox;
+use secret::SecretString;
 
 pub const SMTP_PASSWORD_CREDENTIAL: &str = "smtp-password";
 /// SMTP submission over implicit TLS.
@@ -58,10 +59,10 @@ impl MailerConfig {
     }
 
     /// The password of the SMTP server's account.
-    pub fn read_smtp_password(&self) -> anyhow::Result<String> {
+    pub fn read_smtp_password(&self) -> anyhow::Result<SecretString> {
         let password = read_credential(&self.credentials_dir, SMTP_PASSWORD_CREDENTIAL)?;
         anyhow::ensure!(
-            !password.is_empty(),
+            !password.expose().is_empty(),
             "the {SMTP_PASSWORD_CREDENTIAL} credential is empty"
         );
         Ok(password)
@@ -169,7 +170,7 @@ mod tests {
         assert!(error.contains("is empty"), "{error}");
         std::fs::write(&path, "correct horse battery staple\n").unwrap();
         assert_eq!(
-            config.read_smtp_password().unwrap(),
+            config.read_smtp_password().unwrap().expose(),
             "correct horse battery staple"
         );
     }

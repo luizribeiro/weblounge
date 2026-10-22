@@ -10,6 +10,7 @@ use axum::{
 };
 use ergo_api::Client;
 use outbox::Outbox;
+use secret::SecretString;
 
 use crate::{
     assets::{self, Assets},
@@ -53,7 +54,7 @@ pub struct App {
     /// The web client, which signs members in through our OAuth server.
     pub webchat: Webchat,
     /// What Ergo authenticates with to introspect the web client's tokens.
-    pub introspection_secret: String,
+    pub introspection_secret: SecretString,
     /// Where members point their IRC clients.
     pub irc_server: IrcServer,
     /// What Ergo turns on for members who haven't chosen.

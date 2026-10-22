@@ -168,7 +168,7 @@ pub async fn introspect(
     let authorization = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok());
-    if !oauth::authenticates_introspection(authorization, &app.introspection_secret) {
+    if !oauth::authenticates_introspection(authorization, app.introspection_secret.expose()) {
         let challenge = [(header::WWW_AUTHENTICATE, "Basic realm=\"concierge\"")];
         let error = token_error(StatusCode::UNAUTHORIZED, "invalid_client");
         return (challenge, error).into_response();

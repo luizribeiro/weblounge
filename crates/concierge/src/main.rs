@@ -85,7 +85,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         db,
         outbox: Outbox::open(&config.outbox_path).await?,
         ergo: config.ergo_client()?,
-        sessions: session::Hasher::new(&config.read_session_key()?),
+        sessions: session::Hasher::new(config.read_session_key()?.expose().as_bytes()),
         limiter: Limiter::default(),
         lookups: AddressLimiter::new(LOOKUPS_PER_ADDRESS),
         oauth_requests: AddressLimiter::new(OAUTH_REQUESTS_PER_ADDRESS),

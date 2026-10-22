@@ -12,6 +12,7 @@ testing = ["dep:tempfile"]
 anyhow = "1.0.104"
 libc = "0.2.190"
 rand = "0.10.3"
+secret = { path = "../secret" }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "migrate"] }
 tempfile = { version = "3.27.0", optional = true }
 
