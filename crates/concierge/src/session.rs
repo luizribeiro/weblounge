@@ -7,6 +7,7 @@
 use axum::http::{HeaderMap, HeaderValue, header};
 use common::random;
 use hmac::{Hmac, Mac};
+use secret::{SecretString, Zeroizing};
 use sha2::Sha256;
 
 use crate::secret_hash::{Keyed, SecretHash};
@@ -33,12 +34,12 @@ pub fn needs_renewal(expires_at: i64, now: i64) -> bool {
     expires_at - now <= LIFETIME - RENEWAL_INTERVAL
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub struct Token(String);
+/// A session's token, or an OAuth code or token: wiped as it's dropped.
+pub struct Token(SecretString);
 
 impl Token {
     pub fn generate() -> Self {
-        Self(random::string(random::URL_SAFE, TOKEN_LENGTH))
+        Self(random::string(random::URL_SAFE, TOKEN_LENGTH).into())
     }
 
     /// The token in the request's session cookie, if it holds one that
@@ -57,16 +58,16 @@ impl Token {
     pub fn parse(value: &str) -> Option<Self> {
         let plausible =
             value.len() == TOKEN_LENGTH && value.bytes().all(|c| random::URL_SAFE.contains(&c));
-        plausible.then(|| Self(value.to_owned()))
+        plausible.then(|| Self(value.into()))
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn expose(&self) -> &str {
+        self.0.expose()
     }
 
     /// A `Set-Cookie` value that keeps the token for [`LIFETIME`].
     pub fn cookie(&self) -> HeaderValue {
-        cookie(&self.0, LIFETIME)
+        cookie(self.expose(), LIFETIME)
     }
 }
 
@@ -76,9 +77,10 @@ pub fn removal_cookie() -> HeaderValue {
 }
 
 fn cookie(value: &str, max_age: i64) -> HeaderValue {
-    format!("{COOKIE}={value}; Path=/; Max-Age={max_age}; HttpOnly; Secure; SameSite=Lax")
-        .parse()
-        .expect("tokens are base64url")
+    let cookie = Zeroizing::new(format!(
+        "{COOKIE}={value}; Path=/; Max-Age={max_age}; HttpOnly; Secure; SameSite=Lax"
+    ));
+    cookie.parse().expect("tokens are base64url")
 }
 
 /// Hashes tokens with the machine's session key.
@@ -94,7 +96,7 @@ impl Hasher {
     /// `K`.
     pub fn hash<K: Keyed>(&self, token: &Token) -> SecretHash<K> {
         let mut mac = self.0.clone();
-        mac.update(token.0.as_bytes());
+        mac.update(token.expose().as_bytes());
         SecretHash::from_bytes(mac.finalize().into_bytes().to_vec())
     }
 }
@@ -117,7 +119,7 @@ mod tests {
     #[test]
     fn tokens_carry_at_least_256_bits_and_differ() {
         assert!(random::entropy_bits(random::URL_SAFE, TOKEN_LENGTH) >= 256.0);
-        assert!(Token::generate() != Token::generate());
+        assert_ne!(Token::generate().expose(), Token::generate().expose());
     }
 
     #[test]
@@ -125,22 +127,22 @@ mod tests {
         let token = Token::generate();
         let found = Token::from_cookies(&headers(&[&format!(
             "theme=dark; {COOKIE}={}; lang=en",
-            token.0
+            token.expose()
         )]));
-        assert!(found == Some(token));
+        assert_eq!(found.as_ref().map(Token::expose), Some(token.expose()));
     }
 
     #[test]
     fn reads_the_token_from_any_cookie_header() {
         let token = Token::generate();
-        let found =
-            Token::from_cookies(&headers(&["theme=dark", &format!("{COOKIE}={}", token.0)]));
-        assert!(found == Some(token));
+        let cookie = format!("{COOKIE}={}", token.expose());
+        let found = Token::from_cookies(&headers(&["theme=dark", &cookie]));
+        assert_eq!(found.as_ref().map(Token::expose), Some(token.expose()));
     }
 
     #[test]
     fn ignores_values_no_token_could_have() {
-        let token = Token::generate().0;
+        let token = Token::generate().expose().to_owned();
         for cookie in [
             String::new(),
             format!("session={token}"),
@@ -159,8 +161,9 @@ mod tests {
     #[test]
     fn parses_only_what_could_be_a_token() {
         let token = Token::generate();
-        assert!(Token::parse(token.as_str()) == Some(token.clone()));
-        for value in ["", &token.0[1..], &format!("{}=", &token.0[1..])] {
+        let token = token.expose();
+        assert_eq!(Token::parse(token).as_ref().map(Token::expose), Some(token));
+        for value in ["", &token[1..], &format!("{}=", &token[1..])] {
             assert!(Token::parse(value).is_none(), "{value}");
         }
     }
@@ -172,7 +175,7 @@ mod tests {
             token.cookie().to_str().unwrap(),
             format!(
                 "__Host-session={}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax",
-                token.0
+                token.expose()
             )
         );
         assert_eq!(

@@ -91,7 +91,7 @@ pub async fn authorize(
     if let Err(error) = app.db.insert_authorization_code(&issued, now).await {
         return internal_error("Issuing an authorization code", error);
     }
-    Redirect::to(&oauth::code_redirect(&authorization, code.as_str())).into_response()
+    Redirect::to(&oauth::code_redirect(&authorization, code.expose())).into_response()
 }
 
 /// Trades a code, with its PKCE verifier, for an access token that lasts
@@ -144,7 +144,7 @@ pub async fn token(
         return internal_error("Issuing an access token", error);
     }
     let answer = json!({
-        "access_token": token.as_str(),
+        "access_token": token.expose(),
         "token_type": "Bearer",
         "expires_in": session.expires_at - now,
     });
