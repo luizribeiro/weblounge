@@ -6,6 +6,7 @@ use std::{
 use anyhow::Context;
 use clap::Subcommand;
 use ergo_api::Passphrase;
+use secret::Zeroizing;
 
 use super::{Admin, print_once};
 use crate::{
@@ -119,11 +120,11 @@ async fn ensure(
 /// The password in `path`, or on standard input for `-`, without the
 /// newline that may end it.
 fn read_password(path: &Path) -> anyhow::Result<Passphrase> {
-    let contents = if path == Path::new("-") {
+    let contents = Zeroizing::new(if path == Path::new("-") {
         io::read_to_string(io::stdin()).context("can't read standard input")?
     } else {
         fs::read_to_string(path).with_context(|| format!("can't read {}", path.display()))?
-    };
+    });
     let password = contents.strip_suffix('\n').unwrap_or(&contents);
     password_rules::check(password, password)
         .with_context(|| format!("{} doesn't hold a usable password", path.display()))
