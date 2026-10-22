@@ -251,7 +251,9 @@ impl<T: Transport> Mailer<T> {
     fn message(&self, queued: &QueuedMessage) -> Option<lettre::Message> {
         let body = match &queued.body {
             Body::Plain(text) => text.clone(),
-            Body::Sealed { ciphertext, .. } => self.key.open(ciphertext)?,
+            // lettre takes the body as a plain String, and keeps it,
+            // encoded, in the message it sends.
+            Body::Sealed { ciphertext, .. } => self.key.open(ciphertext)?.expose().clone(),
         };
         let to: Address = Email::parse(&queued.recipient)
             .ok()?

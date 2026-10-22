@@ -4,6 +4,7 @@
 
 use age::x25519::Identity;
 use outbox::PublicKey;
+use secret::{SecretString, Zeroizing};
 
 /// Zeroed as it's dropped.
 pub struct Key(Identity);
@@ -18,8 +19,9 @@ impl Key {
     }
 
     /// What `ciphertext` says, if it was sealed to this key.
-    pub fn open(&self, ciphertext: &[u8]) -> Option<String> {
-        String::from_utf8(age::decrypt(&self.0, ciphertext).ok()?).ok()
+    pub fn open(&self, ciphertext: &[u8]) -> Option<SecretString> {
+        let plaintext = Zeroizing::new(age::decrypt(&self.0, ciphertext).ok()?);
+        Some(std::str::from_utf8(&plaintext).ok()?.into())
     }
 }
 
@@ -39,8 +41,8 @@ mod tests {
         let (key, other) = (Key::generate(), Key::generate());
         let sealed = age::encrypt(&key.public(), "Hi Zoë".as_bytes()).unwrap();
 
-        assert_eq!(key.open(&sealed).as_deref(), Some("Hi Zoë"));
-        assert_eq!(other.open(&sealed), None);
-        assert_eq!(key.open(b"Hi Zoe"), None);
+        assert_eq!(key.open(&sealed).unwrap().expose(), "Hi Zoë");
+        assert!(other.open(&sealed).is_none());
+        assert!(key.open(b"Hi Zoe").is_none());
     }
 }
