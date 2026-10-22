@@ -26,7 +26,7 @@
               <dt>{{ label }}</dt>
               <dd>
                 <code>{{ value }}</code>{{ caller() }}
-                <button class="button button-small" type="button" data-copy="{{ value }}" hidden>Copy</button>
+                <button class="link-button copy-button" type="button" data-copy="{{ value }}" hidden>Copy</button>
               </dd>
             </div>
 {%- endmacro %}
@@ -35,7 +35,7 @@
           <figure class="snippet">
             <figcaption>
               <code>{{ snippet.target }}</code>
-              <button class="button button-small" type="button" data-copy="{{ snippet.text }}" data-copy-label="{{ snippet.target }}" hidden>Copy</button>
+              <button class="link-button copy-button" type="button" data-copy="{{ snippet.text }}" data-copy-label="{{ snippet.target }}" hidden>Copy</button>
             </figcaption>
             <pre><code>{{ snippet.text }}</code></pre>
           </figure>

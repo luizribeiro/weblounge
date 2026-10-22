@@ -60,6 +60,20 @@
   }
 }
 
+/* Copy, beside what it copies: a small text link, quieter than what it
+   copies, with a touch target of full size. */
+.copy-button {
+  min-width: 44px;
+  padding: 0 0.875rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-decoration: underline;
+
+  &:hover {
+    color: var(--fg);
+  }
+}
+
 /* A link-button inside running text: tall enough to tap, without
    spreading the lines around it. */
 .inline-action {

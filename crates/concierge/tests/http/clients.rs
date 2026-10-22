@@ -95,6 +95,13 @@ async fn a_member_gets_a_config_with_their_nick_and_no_password() {
         "{page}"
     );
     assert!(page.contains(r#"data-copy="[servers.weblounge]"#), "{page}");
+    assert!(!page.contains("button-small"), "{page}");
+    assert_eq!(
+        page.matches(r#"<button class="link-button copy-button" type="button" data-copy="#)
+            .count(),
+        page.matches(">Copy</button>").count(),
+        "{page}"
+    );
     assert!(
         page.contains(r#"<p class="ircs-link"><a href="ircs://irc.weblounge.org/#lounge"><code>ircs://irc.weblounge.org/#lounge</code></a></p>"#),
         "{page}"

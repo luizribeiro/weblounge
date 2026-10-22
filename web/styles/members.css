@@ -105,7 +105,8 @@
     margin: 0;
   }
 
-  & .button {
+  & .copy-button {
+    margin-right: -0.875rem;
     margin-left: auto;
   }
 
@@ -213,8 +214,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    min-height: 44px;
-    padding: 0.25rem 0.25rem 0.25rem 0.875rem;
+    padding-left: 0.875rem;
     border-bottom: 1px solid var(--line);
 
     & code {
