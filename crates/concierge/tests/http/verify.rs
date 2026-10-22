@@ -252,8 +252,8 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
         assert!(page.contains(REMINDER), "{page}");
         assert!(
             page.contains(&format!(
-                r#"Please confirm your email by <time class="deadline" datetime="{date}">{day}</time>. You won't be able to invite others until you do. {}.</p>"#,
-                send_link("Send a new link")
+                r#"Please confirm your email by <time class="deadline" datetime="{date}">{day}</time>. Check your inbox, or {}.</p>"#,
+                send_link("send a new link")
             )),
             "{page}"
         );
@@ -273,7 +273,7 @@ async fn a_member_never_mailed_a_link_is_asked_to_send_one() {
 
     assert!(
         page.contains(&format!(
-            "<p>Please confirm your email. You won't be able to invite others until you do. {}.</p>",
+            "<p>Please confirm your email. {} to your inbox.</p>",
             send_link("Send a link")
         )),
         "{page}"
@@ -291,8 +291,8 @@ async fn a_member_past_the_date_is_reminded_without_it() {
 
     assert!(
         page.contains(&format!(
-            "<p>Please confirm your email. You won't be able to invite others until you do. {}.</p>",
-            send_link("Send a new link")
+            "<p>Please confirm your email. Check your inbox, or {}.</p>",
+            send_link("send a new link")
         )),
         "{page}"
     );

@@ -47,7 +47,10 @@
       <div class="notice email-reminder">
         <p>Please confirm your email
           {%- if let Some(due) = unconfirmed.upcoming() %} {% call components::by_deadline(due) %}{% endcall %}{% endif -%}
-          . You won't be able to invite others until you do. {% call components::send_link(unconfirmed, true) %}{% endcall %}.</p>
+          .
+          {%- if unconfirmed.sent() %} Check your inbox, or {% call components::send_link(unconfirmed, false) %}{% endcall %}.
+          {%- else %} {% call components::send_link(unconfirmed, true) %}{% endcall %} to your inbox.
+          {%- endif %}</p>
         {%- call components::send_link_form() %}{% endcall %}
       </div>
       {%- endif %}
