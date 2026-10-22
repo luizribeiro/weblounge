@@ -623,7 +623,7 @@ dialog.card {
 }
 
 .steps {
-  max-width: 44rem;
+  max-width: var(--guide-width);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -697,7 +697,7 @@ dialog.card {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: 0 2rem;
-  max-width: 44rem;
+  max-width: var(--guide-width);
   margin-top: 2rem;
 }
 
@@ -717,7 +717,7 @@ dialog.card {
 }
 
 details.more {
-  max-width: 44rem;
+  max-width: var(--guide-width);
   margin-top: 1rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--line);

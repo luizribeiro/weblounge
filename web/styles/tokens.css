@@ -19,6 +19,7 @@
   --danger: #9a3b2e;
   --radius: 3px;
   --radius-card: 6px;
+  --guide-width: 44rem;
   color-scheme: light dark;
 
   @media (prefers-color-scheme: dark) {
