@@ -9,6 +9,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
+use secret::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -112,7 +113,7 @@ pub async fn token(
     if request.client_id != WEBCHAT_CLIENT {
         return token_error(StatusCode::UNAUTHORIZED, "invalid_client");
     }
-    let Some(code) = Token::parse(&request.code) else {
+    let Some(code) = Token::parse(request.code.expose()) else {
         return token_error(StatusCode::BAD_REQUEST, "invalid_grant");
     };
     let now = db::now();
@@ -154,7 +155,7 @@ pub async fn token(
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Introspection {
-    token: String,
+    token: SecretString,
 }
 
 /// RFC 7662 introspection, for Ergo alone: it authenticates with its
@@ -173,7 +174,7 @@ pub async fn introspect(
         let error = token_error(StatusCode::UNAUTHORIZED, "invalid_client");
         return (challenge, error).into_response();
     }
-    let live = match Token::parse(&token) {
+    let live = match Token::parse(token.expose()) {
         Some(token) => {
             app.db
                 .access_token(&app.sessions.hash(&token), db::now())

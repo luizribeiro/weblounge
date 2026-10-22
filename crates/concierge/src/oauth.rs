@@ -166,10 +166,10 @@ pub fn code_redirect(authorization: &Authorization, code: &str) -> String {
 #[serde(default)]
 pub struct TokenRequest {
     pub grant_type: String,
-    pub code: String,
+    pub code: SecretString,
     pub redirect_uri: String,
     pub client_id: String,
-    pub code_verifier: String,
+    pub code_verifier: SecretString,
 }
 
 impl TokenRequest {
@@ -179,7 +179,7 @@ impl TokenRequest {
         code.expires_at > now
             && code.client_id == self.client_id
             && code.redirect_uri == self.redirect_uri
-            && CodeVerifier::parse(&self.code_verifier)
+            && CodeVerifier::parse(self.code_verifier.expose())
                 .is_some_and(|verifier| verifies(&verifier, &code.code_challenge))
     }
 }
@@ -202,14 +202,14 @@ impl CodeChallenge {
 
 /// The secret a client proves it started an authorization with. No Debug,
 /// so it stays out of logs.
-pub struct CodeVerifier(String);
+pub struct CodeVerifier(SecretString);
 
 impl CodeVerifier {
     /// `value` as a verifier, if RFC 7636 allows it.
     pub fn parse(value: &str) -> Option<Self> {
         let well_formed =
             VERIFIER_LENGTHS.contains(&value.len()) && is_alphanumeric_or(value, b"-._~");
-        well_formed.then(|| Self(value.to_owned()))
+        well_formed.then(|| Self(value.into()))
     }
 }
 
@@ -221,7 +221,7 @@ fn is_alphanumeric_or(value: &str, punctuation: &[u8]) -> bool {
 
 /// Whether `verifier` is the one `challenge` was made from, by S256.
 pub fn verifies(verifier: &CodeVerifier, challenge: &CodeChallenge) -> bool {
-    let derived = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.0.as_bytes()));
+    let derived = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.0.expose().as_bytes()));
     derived.as_bytes().ct_eq(challenge.0.as_bytes()).into()
 }
 
@@ -512,7 +512,7 @@ mod tests {
             (
                 "no verifier",
                 TokenRequest {
-                    code_verifier: String::new(),
+                    code_verifier: SecretString::default(),
                     ..exchange()
                 },
             ),
@@ -551,7 +551,7 @@ mod tests {
         let unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
         for value in [VERIFIER, unreserved, &unreserved[..43], &"~".repeat(128)] {
             assert!(
-                CodeVerifier::parse(value).is_some_and(|v| v.0 == value),
+                CodeVerifier::parse(value).is_some_and(|v| v.0.expose() == value),
                 "{value}"
             );
         }
