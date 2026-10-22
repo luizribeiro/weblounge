@@ -15,7 +15,7 @@ use ergo_api::{Passphrase, Registration};
 use serde::Deserialize;
 
 use super::{
-    Layout, internal_error, render, render_with,
+    Layout, Tab, internal_error, render, render_with,
     verify::{self, Mailed},
 };
 use crate::{
@@ -291,7 +291,7 @@ fn welcome(
 ) -> Response {
     let nick = name.as_str();
     let page = Welcome {
-        layout: Layout::new(app, cookie.as_ref().map(|_| nick)),
+        layout: Layout::new(app, cookie.as_ref().map(|_| nick)).on(Tab::Home),
         nick,
         mailed_to,
         recommended: clients::recommended(platform),

@@ -55,6 +55,11 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     let page = body_text(response).await;
     assert!(page.contains("<h1>You're in, Bob.</h1>"), "{page}");
     assert!(crate::opens_the_chat(&page), "{page}");
+    assert!(
+        page.contains(r#"<li><a href="/" aria-current="page">Home</a></li>"#),
+        "{page}"
+    );
+    assert_eq!(page.matches("aria-current").count(), 1, "{page}");
     assert!(!page.contains(NEW_PASSWORD), "{page}");
 
     let member = site.db.member("bob").await.unwrap().unwrap();
