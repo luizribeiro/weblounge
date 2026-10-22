@@ -178,6 +178,18 @@
   }
 }
 
+.ircs-link {
+  margin-top: -0.75rem;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 44px;
+    text-decoration: underline;
+  }
+}
+
 .links {
   display: flex;
   flex-wrap: wrap;

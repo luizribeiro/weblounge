@@ -25,7 +25,8 @@
           {%- if let Some(snippet) = snippet %}
           {%- call components::snippet(snippet) %}{% endcall %}
           {%- if let Some(link) = ircs_link %}
-          <p class="hint">Or open <a href="{{ link }}">{{ link }}</a> in {{ client.name }} and add your nick and password.</p>
+          <p class="hint">Or open this link in {{ client.name }}, then add your nick and password:</p>
+          <p class="ircs-link"><a href="{{ link }}"><code>{{ link }}</code></a></p>
           {%- endif %}
           <details class="more">
             <summary>Connection details</summary>

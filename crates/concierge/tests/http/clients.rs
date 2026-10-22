@@ -96,7 +96,7 @@ async fn a_member_gets_a_config_with_their_nick_and_no_password() {
     );
     assert!(page.contains(r#"data-copy="[servers.weblounge]"#), "{page}");
     assert!(
-        page.contains(r#"href="ircs://irc.weblounge.org/#lounge""#),
+        page.contains(r#"<p class="ircs-link"><a href="ircs://irc.weblounge.org/#lounge"><code>ircs://irc.weblounge.org/#lounge</code></a></p>"#),
         "{page}"
     );
     assert!(page.contains(r#"data-copy="Alice""#), "{page}");
