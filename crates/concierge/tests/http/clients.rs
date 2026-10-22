@@ -248,7 +248,6 @@ async fn all_apps_keep_the_connection_details_folded_away() {
     }
     assert!(details.contains("· TLS"), "{details}");
     assert!(details.contains("<code>PLAIN</code>"), "{details}");
-    assert!(details.contains(r#"aria-live="polite""#), "{details}");
 }
 
 #[tokio::test]

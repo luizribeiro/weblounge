@@ -76,3 +76,15 @@ async fn the_apps_page_no_longer_walks_through_certificates() {
     let page = body_text(crate::alices("/help/apps").await).await;
     assert!(!page.contains("certificate"), "{page}");
 }
+
+#[tokio::test]
+async fn copying_a_command_is_announced_on_the_page() {
+    let page = body_text(crate::alices("/help/apps/halloy/certificate").await).await;
+    assert!(page.contains(r#"data-copy-label="shell""#), "{page}");
+    assert_eq!(
+        page.matches(r#"aria-live="polite" data-copy-status"#)
+            .count(),
+        1,
+        "{page}"
+    );
+}
