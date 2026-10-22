@@ -11,6 +11,10 @@
   padding-block: 1.5rem;
 }
 
+.page:has(> .email-reminder:first-child) {
+  padding-top: 1rem;
+}
+
 .home {
   display: grid;
   grid-template-areas: "title" "chair" "actions";
