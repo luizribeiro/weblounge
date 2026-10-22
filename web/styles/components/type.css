@@ -35,6 +35,12 @@ code {
   overflow-wrap: anywhere;
 }
 
+:not(pre) > code {
+  padding: 0.0625em 0.3em;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+}
+
 .muted,
 .hint {
   color: var(--muted);

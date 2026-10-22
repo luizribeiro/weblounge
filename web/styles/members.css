@@ -185,6 +185,11 @@
     min-height: 44px;
     padding: 0.25rem 0.25rem 0.25rem 0.875rem;
     border-bottom: 1px solid var(--line);
+
+    & code {
+      padding: 0;
+      background: none;
+    }
   }
 
   & pre {
