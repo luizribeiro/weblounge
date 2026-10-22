@@ -75,7 +75,7 @@ struct Welcome<'a> {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Signup {
-    code: String,
+    code: SecretString,
     nick: String,
     email: String,
     password: SecretString,
@@ -109,7 +109,7 @@ pub async fn redeem(
     if visitor.0.is_some() {
         return already_a_member(&app, &visitor);
     }
-    let code = invite_code::from_input(&signup.code);
+    let code = invite_code::from_input(signup.code.expose());
     let invite = match open_invite(&app, code).await {
         Ok(invite) => invite,
         Err(error) => return internal_error("Looking up an invite", error),
@@ -267,7 +267,7 @@ fn validate(signup: &Signup, invite_open: bool) -> Result<NewAccount, Box<Signup
 /// The form as typed, passwords left out.
 fn form_for(signup: &Signup) -> SignupForm<'_> {
     SignupForm {
-        code: &signup.code,
+        code: signup.code.expose(),
         nick: &signup.nick,
         email: &signup.email,
         news: signup.news.is_some(),

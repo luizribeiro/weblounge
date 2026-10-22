@@ -186,7 +186,7 @@ struct ResetPage<'a> {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct NewPassword {
-    code: String,
+    code: SecretString,
     password: SecretString,
     confirmation: SecretString,
 }
@@ -222,7 +222,7 @@ pub async fn reset(
             None,
         );
     }
-    let Some(code) = link_code::parse(&form.code, link_code::MAILED_LENGTH) else {
+    let Some(code) = link_code::parse(form.code.expose(), link_code::MAILED_LENGTH) else {
         return lapsed(&app);
     };
     let refuse = |status, password, alert| {

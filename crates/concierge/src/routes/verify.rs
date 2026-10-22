@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use askama::Template;
 use axum::{Form, extract::State, http::StatusCode, response::Response};
+use secret::SecretString;
 use serde::Deserialize;
 
 use super::{Layout, Link, Tab, internal_error, render};
@@ -29,7 +30,7 @@ struct VerifyPage<'a> {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Confirmation {
-    code: String,
+    code: SecretString,
 }
 
 /// Where a member sees how confirming their email stands, and asks for a link.
@@ -53,7 +54,7 @@ pub async fn confirm(
     if !app.verifications.allows(address.0, Instant::now()) {
         return too_many(&app, &visitor);
     }
-    let outcome = match link_code::parse(&confirmation.code, link_code::MAILED_LENGTH) {
+    let outcome = match link_code::parse(confirmation.code.expose(), link_code::MAILED_LENGTH) {
         Some(code) => match app.db.verify_email(code, db::now()).await {
             Ok(outcome) => outcome,
             Err(error) => return internal_error("Verifying an email", error),

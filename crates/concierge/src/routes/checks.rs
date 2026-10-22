@@ -12,6 +12,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use secret::SecretString;
 use serde::{Deserialize, Serialize};
 
 use super::invite;
@@ -48,7 +49,7 @@ struct Answer {
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct InviteLookup {
-    code: String,
+    code: SecretString,
 }
 
 /// Who sent an open invite, or the field error an unusable one gets.
@@ -115,7 +116,7 @@ pub async fn invite(
     if !app.lookups.allows(address.0, Instant::now()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    let code = invite_code::from_input(&lookup.code);
+    let code = invite_code::from_input(lookup.code.expose());
     let answer = match invite::open_invite(&app, code).await {
         Ok(Some(invite)) => InviteAnswer::Open {
             inviter: invite.created_by.map(|inviter| inviter.to_string()),
