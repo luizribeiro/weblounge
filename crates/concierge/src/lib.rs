@@ -2,6 +2,7 @@ pub mod admin;
 pub mod app;
 pub mod assets;
 mod auth;
+mod authorization;
 pub mod background;
 pub mod bot_rules;
 pub mod bots;

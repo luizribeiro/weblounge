@@ -9,7 +9,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
-use crate::{db::AuthorizationCode, origin::WebchatOrigin};
+use crate::{authorization::Credentials, db::AuthorizationCode, origin::WebchatOrigin};
 
 /// The web client, gamja: public, so it has no secret, and PKCE stands in.
 pub const WEBCHAT_CLIENT: &str = "gamja";
@@ -235,21 +235,15 @@ pub fn authenticates_introspection(authorization: Option<&str>, secret: &str) ->
 }
 
 fn basic_credentials(authorization: &str) -> Option<(String, String)> {
-    let (scheme, encoded) = authorization.split_once(' ')?;
-    if !scheme.eq_ignore_ascii_case("basic") {
+    let Credentials::Basic { user, password } = Credentials::parse(authorization)? else {
         return None;
-    }
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(encoded.trim())
-        .ok()?;
-    let decoded = String::from_utf8(decoded).ok()?;
-    let (id, secret) = decoded.split_once(':')?;
+    };
     let unescape = |part: &str| {
         form_urlencoded::parse(format!("x={part}").as_bytes())
             .next()
             .map(|(_, value)| value.into_owned())
     };
-    Some((unescape(id)?, unescape(secret)?))
+    Some((unescape(&user)?, unescape(&password)?))
 }
 
 #[cfg(test)]

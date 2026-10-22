@@ -12,11 +12,11 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use base64::{Engine, engine::general_purpose::STANDARD};
 use filehost::{UploadId, handoff::Answer};
 
 use crate::{
     app::{App, AppState},
+    authorization::Credentials,
     db::{self, NewUpload},
     name::{BotName, MemberName},
     origin::WebchatOrigin,
@@ -107,32 +107,11 @@ fn content_length(headers: &HeaderMap) -> Option<i64> {
         .ok()
 }
 
-/// The credentials a client sent in `Authorization`.
-enum Credentials {
-    /// The web client's OAuth access token.
-    Bearer(Token),
-    /// A nick and password, as every other client logs in to IRC with:
-    /// a member's, or a bot's.
-    Basic { nick: String, password: String },
-}
-
-impl Credentials {
-    fn of(headers: &HeaderMap) -> Option<Self> {
-        let authorization = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-        let (scheme, value) = authorization.split_once(' ')?;
-        if scheme.eq_ignore_ascii_case("bearer") {
-            Token::parse(value.trim()).map(Self::Bearer)
-        } else if scheme.eq_ignore_ascii_case("basic") {
-            let decoded = String::from_utf8(STANDARD.decode(value.trim()).ok()?).ok()?;
-            let (nick, password) = decoded.split_once(':')?;
-            Some(Self::Basic {
-                nick: nick.to_owned(),
-                password: password.to_owned(),
-            })
-        } else {
-            None
-        }
-    }
+/// The credentials a client sent in `Authorization`: the web client's
+/// OAuth access token, or the nick and password every other client logs
+/// in to IRC with, a member's or a bot's.
+fn credentials(headers: &HeaderMap) -> Option<Credentials<'_>> {
+    Credentials::parse(headers.get(header::AUTHORIZATION)?.to_str().ok()?)
 }
 
 /// What came of checking an uploader's credentials.
@@ -228,9 +207,12 @@ async fn authenticate(
     headers: &HeaderMap,
     address: &ClientAddress,
 ) -> anyhow::Result<Authentication> {
-    let uploader = match Credentials::of(headers) {
+    let uploader = match credentials(headers) {
         None => None,
         Some(Credentials::Bearer(token)) => {
+            let Some(token) = Token::parse(token) else {
+                return Ok(Authentication::Refused);
+            };
             let hash = app.sessions.hash(&token);
             let token = app.db.access_token(&hash, db::now()).await?;
             token.map(|token| Uploader {
@@ -238,7 +220,10 @@ async fn authenticate(
                 bot: None,
             })
         }
-        Some(Credentials::Basic { nick, password }) => {
+        Some(Credentials::Basic {
+            user: nick,
+            password,
+        }) => {
             if !signin::plausible(&nick, &password) {
                 return Ok(Authentication::Refused);
             }
