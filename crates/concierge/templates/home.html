@@ -11,7 +11,7 @@
         </div>
         <div class="home-actions">
           {%- call components::open_chat(webchat) %}{% endcall %}
-          <a class="button" href="{{ crate::routes::clients::PATH }}">Prefer an app? Set it up on this device</a>
+          <a class="quiet-link" href="{{ crate::routes::clients::PATH }}">Or set up an app{% if let Some(platform) = platform %} on your {{ platform.device() }}{% endif %}</a>
         </div>
       </section>
 {%- endblock %}

@@ -37,10 +37,10 @@
   grid-area: chair;
 
   /* On phones the chair gets the height the header, tabs, welcome, Open
-     chat, the app button and footer leave (about 28rem), so the whole tab
-     fits a phone's screen. The drawing is 675 wide by 653 tall. */
+     web chat, the app link and footer leave (about 26.5rem), so the whole
+     tab fits a phone's screen. The drawing is 675 wide by 653 tall. */
   & #chair {
-    width: min(100%, 22rem, max(8rem, (100svh - 28rem) * 675 / 653));
+    width: min(100%, 22rem, max(8rem, (100svh - 26.5rem) * 675 / 653));
     margin: 0 auto;
 
     @media (min-width: 52rem) {
@@ -53,7 +53,19 @@
   grid-area: actions;
 
   & .open-chat {
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
+  }
+}
+
+.quiet-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 44px;
+
+  &::after {
+    content: "→";
+    color: var(--muted);
   }
 }
 
