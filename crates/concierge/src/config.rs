@@ -20,7 +20,7 @@ pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
 pub const INTROSPECTION_SECRET_CREDENTIAL: &str = "oauth-introspection-secret";
 const DEFAULT_ERGO_API: &str = "http://127.0.0.1:8089";
 const DATABASE: &str = "concierge.db";
-const MIN_SESSION_KEY_BYTES: usize = 32;
+const MIN_SECRET_BYTES: usize = 32;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
@@ -168,13 +168,7 @@ impl Config {
     }
 
     pub fn read_session_key(&self) -> anyhow::Result<SecretString> {
-        let key = self.read_credential(SESSION_KEY_CREDENTIAL)?;
-        anyhow::ensure!(
-            key.expose().len() >= MIN_SESSION_KEY_BYTES,
-            "the {SESSION_KEY_CREDENTIAL} credential holds {} bytes; a session key needs at least {MIN_SESSION_KEY_BYTES}",
-            key.expose().len()
-        );
-        Ok(key)
+        self.read_long_credential(SESSION_KEY_CREDENTIAL)
     }
 
     /// A client for Ergo's API, with the token from the credentials.
@@ -189,11 +183,17 @@ impl Config {
 
     /// The secret Ergo authenticates with to introspect tokens.
     pub fn read_introspection_secret(&self) -> anyhow::Result<SecretString> {
-        let secret = self.read_credential(INTROSPECTION_SECRET_CREDENTIAL)?;
+        self.read_long_credential(INTROSPECTION_SECRET_CREDENTIAL)
+    }
+
+    /// The credential `name`, refused unless it's long enough that nobody
+    /// guesses it.
+    fn read_long_credential(&self, name: &str) -> anyhow::Result<SecretString> {
+        let secret = self.read_credential(name)?;
+        let bytes = secret.expose().len();
         anyhow::ensure!(
-            secret.expose().len() >= MIN_SESSION_KEY_BYTES,
-            "the {INTROSPECTION_SECRET_CREDENTIAL} credential holds {} bytes; it needs at least {MIN_SESSION_KEY_BYTES}",
-            secret.expose().len()
+            bytes >= MIN_SECRET_BYTES,
+            "the {name} credential holds {bytes} bytes; it needs at least {MIN_SECRET_BYTES}"
         );
         Ok(secret)
     }
