@@ -47,7 +47,7 @@ impl LocalErgo {
     }
 
     pub fn client(&self) -> Client {
-        Client::new(self.url(), &self.token)
+        Client::new(self.url(), self.token.as_str())
     }
 
     /// Creates the datastore, unless `dir` already holds one.

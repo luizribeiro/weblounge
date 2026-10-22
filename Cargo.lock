@@ -759,6 +759,7 @@ dependencies = [
  "axum",
  "ergo-api",
  "reqwest",
+ "secret",
  "serde",
  "serde_json",
  "tempfile",

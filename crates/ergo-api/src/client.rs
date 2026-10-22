@@ -1,6 +1,7 @@
-use std::{fmt, time::Duration};
+use std::{fmt, sync::Arc, time::Duration};
 
 use reqwest::{StatusCode, Url};
+use secret::SecretString;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{Error, ErrorCode, Result};
@@ -22,7 +23,7 @@ pub trait Endpoint: Serialize {
 pub struct Client {
     http: reqwest::Client,
     base_url: Url,
-    token: String,
+    token: Arc<SecretString>,
 }
 
 impl Client {
@@ -30,7 +31,7 @@ impl Client {
     /// `http://127.0.0.1:8089`, authenticating with the bearer `token`.
     ///
     /// Only plain HTTP is supported: the API belongs on loopback.
-    pub fn new(base_url: Url, token: impl Into<String>) -> Self {
+    pub fn new(base_url: Url, token: impl Into<SecretString>) -> Self {
         let http = reqwest::Client::builder()
             .no_proxy()
             .timeout(TIMEOUT)
@@ -39,7 +40,7 @@ impl Client {
         Self {
             http,
             base_url,
-            token: token.into(),
+            token: Arc::new(token.into()),
         }
     }
 
@@ -52,7 +53,7 @@ impl Client {
         let response = self
             .http
             .post(url)
-            .bearer_auth(&self.token)
+            .bearer_auth(self.token.expose())
             .json(request)
             .send()
             .await?;
