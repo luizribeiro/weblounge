@@ -52,7 +52,7 @@ with subtest("signing up answers with the welcome page, uncached, and signs the 
     assert "cache-control: no-store" in headers.lower(), headers
     assert "<h1>You're in, erin.</h1>" in page, page
     assert '<a class="button button-primary" href="https://irc.weblounge.org/">Open chat</a>' in page, page
-    assert '<a href="/clients/all">See all apps</a>' in page and "<code>6697</code>" not in page, page
+    assert '<a href="/help/apps/all">See all apps</a>' in page and "<code>6697</code>" not in page, page
     assert erin["password"] not in page
     assert f"We sent a link to <strong>{erins_email}</strong> to confirm your email." in page, page
     home = erins_browser.get("/", "-f")

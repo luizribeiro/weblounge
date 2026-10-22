@@ -220,7 +220,7 @@ pub fn recommended(platform: Option<Platform>) -> Vec<&'static Client> {
 
 impl Client {
     pub fn guide_url(&self) -> String {
-        format!("/clients/{}", self.slug)
+        format!("{}/{}", crate::routes::clients::PATH, self.slug)
     }
 
     /// Its guide to logging in with a client certificate, if it can.
@@ -333,7 +333,7 @@ mod tests {
             );
         }
         assert!(by_slug("hexchat").is_none());
-        assert!(by_slug("all").is_none(), "/clients/all lists them all");
+        assert!(by_slug("all").is_none(), "/help/apps/all lists them all");
     }
 
     #[test]
@@ -378,8 +378,8 @@ mod tests {
         assert_eq!(
             with_one,
             [
-                "/clients/halloy/certificate",
-                "/clients/weechat/certificate"
+                "/help/apps/halloy/certificate",
+                "/help/apps/weechat/certificate"
             ]
         );
     }

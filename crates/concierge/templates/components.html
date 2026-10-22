@@ -56,7 +56,7 @@
 {%- endmacro %}
 
 {% macro all_apps() %}
-      <p class="see-also">Using something else? <a href="/clients/all">See all apps</a></p>
+      <p class="see-also">Using something else? <a href="{{ crate::routes::clients::ALL_PATH }}">See all apps</a></p>
 {%- endmacro %}
 
 {% macro new_password(label, errors) %}

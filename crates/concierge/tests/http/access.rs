@@ -23,9 +23,9 @@ const MACHINE_PATHS: [&str; 3] = [
     "/assets/members-N4AQSMXV.css",
 ];
 
-/// Every page to look at that needs a member, with an unknown path and a
-/// query, which the sign-in page must keep.
-const MEMBER_PAGES: [&str; 18] = [
+/// Every page to look at that needs a member, with an unknown path, a
+/// query, which the sign-in page must keep, and the guides' old addresses.
+const MEMBER_PAGES: [&str; 20] = [
     "/?saved",
     "/account",
     "/irc",
@@ -36,12 +36,14 @@ const MEMBER_PAGES: [&str; 18] = [
     "/bots/somebot/delete",
     "/uploads",
     "/uploads/abc/delete",
-    "/clients",
+    "/help/apps",
     "/help",
     "/help/make-a-bot",
-    "/clients/all",
-    "/clients/halloy",
-    "/clients/halloy/certificate",
+    "/help/apps/all",
+    "/help/apps/halloy",
+    "/help/apps/halloy/certificate",
+    "/help/apps/halloy?from=welcome",
+    "/clients",
     "/clients/halloy?from=welcome",
     "/no-such-page",
 ];
@@ -88,7 +90,7 @@ async fn posting_to_a_members_page_signed_out_leads_to_plain_sign_in() {
 async fn signing_in_from_a_members_page_lands_back_on_it() {
     let site = Site::start().await;
     site.add_member("alice").await;
-    let wanted = "/clients/halloy?from=welcome";
+    let wanted = "/help/apps/halloy?from=welcome";
     let sign_in = site.get(wanted, None).await;
     let page = body_text(site.get(location(&sign_in), None).await).await;
     assert!(

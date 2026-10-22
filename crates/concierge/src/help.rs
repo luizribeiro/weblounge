@@ -16,7 +16,7 @@ pub struct Topic {
 /// The client guides, which have pages of their own.
 pub const OWN_APP: Topic = Topic {
     title: "Use your own app",
-    href: "/clients",
+    href: crate::routes::clients::PATH,
 };
 
 const DEVICES: Topic = Topic {

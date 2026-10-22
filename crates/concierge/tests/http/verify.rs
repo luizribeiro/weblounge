@@ -246,7 +246,7 @@ async fn an_unconfirmed_member_is_reminded_by_when_on_every_page_but_two() {
         concierge::tree::day_in_words(deadline),
     );
 
-    let pages = pages_of_alice(&site, &["/", "/clients", "/privacy"]).await;
+    let pages = pages_of_alice(&site, &["/", "/help/apps", "/privacy"]).await;
 
     for page in &pages {
         assert!(page.contains(REMINDER), "{page}");
@@ -303,7 +303,7 @@ async fn confirmed_members_and_guests_get_no_reminder() {
     let site = Site::start().await;
     site.add_verified_member("alice").await;
 
-    let pages = pages_of_alice(&site, &["/", "/clients", "/privacy"]).await;
+    let pages = pages_of_alice(&site, &["/", "/help/apps", "/privacy"]).await;
     let guest = body_text(site.get("/privacy", None).await).await;
 
     for page in pages.iter().chain([&guest]) {

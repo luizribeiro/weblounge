@@ -47,7 +47,7 @@ async fn the_help_index_lists_its_topics_and_where_to_ask_next() {
     assert_eq!(
         topics(&page),
         [
-            topic("/clients", "Use your own app"),
+            topic("/help/apps", "Use your own app"),
             topic("/help/several-devices", "Use weblounge on several devices"),
             topic("/help/start-a-channel", "Start a channel and keep it"),
             topic("/help/make-a-bot", "Make a bot"),
@@ -65,7 +65,7 @@ async fn every_help_topic_and_related_link_leads_to_a_page() {
     for (href, title) in topics(&index) {
         let response = site.get(&href, Some(&cookie)).await;
         assert_eq!(response.status(), 200, "{href}");
-        if href.starts_with("/help/") {
+        if href != concierge::help::OWN_APP.href {
             let article = body_text(response).await;
             assert!(article.contains(&format!("<h1>{title}</h1>")), "{article}");
             for (related, _) in links(&article, "help-related") {
@@ -120,7 +120,7 @@ async fn several_devices_says_where_to_turn_always_on_off_and_how_long_history_l
     assert_eq!(
         links(&page, "help-related"),
         [
-            topic("/clients", "Use your own app"),
+            topic("/help/apps", "Use your own app"),
             topic("/help/start-a-channel", "Start a channel and keep it"),
         ]
     );

@@ -163,12 +163,20 @@ pub fn router(app: App) -> Router {
         .route("/bots/name", post(routes::checks::bot_name))
         .route(routes::help::PATH, get(routes::help::index))
         .route("/help/{slug}", get(routes::help::show))
-        .route("/clients", get(routes::clients::index))
-        .route("/clients/all", get(routes::clients::all))
-        .route("/clients/{slug}", get(routes::clients::show))
+        .route(routes::clients::PATH, get(routes::clients::index))
+        .route(routes::clients::ALL_PATH, get(routes::clients::all))
         .route(
-            "/clients/{slug}/certificate",
+            &format!("{}/{{slug}}", routes::clients::PATH),
+            get(routes::clients::show),
+        )
+        .route(
+            &format!("{}/{{slug}}/certificate", routes::clients::PATH),
             get(routes::certificates::show),
+        )
+        .route(routes::clients::OLD_PATH, get(routes::clients::moved))
+        .route(
+            &format!("{}/{{*rest}}", routes::clients::OLD_PATH),
+            get(routes::clients::moved),
         )
         .fallback(|| async { routes::not_found() })
         .layer(middleware::from_fn(auth::members_only));

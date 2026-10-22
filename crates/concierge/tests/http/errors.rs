@@ -63,7 +63,7 @@ async fn missing_client_guides_and_bots_get_the_same_card() {
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
     for path in [
-        "/clients/hexchat",
+        "/help/apps/hexchat",
         "/bots/nobody/password",
         "/bots/nobody/delete",
     ] {

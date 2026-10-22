@@ -3,7 +3,7 @@ use concierge::clients::{CLIENTS, Group};
 use crate::body_text;
 
 #[tokio::test]
-async fn the_clients_page_picks_apps_for_the_visitors_device() {
+async fn the_apps_page_picks_apps_for_the_visitors_device() {
     let (site, cookie) = crate::signed_in_alice().await;
     for (user_agent, heading, expected) in [
         (crate::MAC, "Chat on your Mac", &["Halloy", "Mango"][..]),
@@ -20,7 +20,7 @@ async fn the_clients_page_picks_apps_for_the_visitors_device() {
             &["Goguma"][..],
         ),
     ] {
-        let page = body_text(site.get_on("/clients", &cookie, user_agent).await).await;
+        let page = body_text(site.get_on("/help/apps", &cookie, user_agent).await).await;
         assert!(page.contains(&format!("<h1>{heading}</h1>")), "{page}");
         assert_eq!(crate::picks(&page), expected, "{page}");
         let lede = match expected.len() {
@@ -53,7 +53,7 @@ async fn the_clients_page_picks_apps_for_the_visitors_device() {
 async fn an_unknown_device_gets_just_the_web_client() {
     let (site, cookie) = crate::signed_in_alice().await;
     for user_agent in [crate::CHROMEOS, "curl/8.16.0"] {
-        let page = body_text(site.get_on("/clients", &cookie, user_agent).await).await;
+        let page = body_text(site.get_on("/help/apps", &cookie, user_agent).await).await;
         assert!(page.contains("<h1>Chat on this device</h1>"), "{page}");
         assert!(crate::picks(&page).is_empty(), "{page}");
         assert!(!page.contains("Set up "), "{page}");
@@ -63,14 +63,14 @@ async fn an_unknown_device_gets_just_the_web_client() {
 }
 
 #[tokio::test]
-async fn the_clients_page_ends_with_all_apps_and_nothing_more() {
+async fn the_apps_page_ends_with_all_apps_and_nothing_more() {
     let (site, cookie) = crate::signed_in_alice().await;
     for user_agent in [crate::MAC, crate::CHROMEOS] {
-        let page = body_text(site.get_on("/clients", &cookie, user_agent).await).await;
+        let page = body_text(site.get_on("/help/apps", &cookie, user_agent).await).await;
         let main = &page[page.find("<main").unwrap()..page.find("</main>").unwrap()];
         assert!(
             main.trim_end().ends_with(
-                r#"<p class="see-also">Using something else? <a href="/clients/all">See all apps</a></p>"#
+                r#"<p class="see-also">Using something else? <a href="/help/apps/all">See all apps</a></p>"#
             ),
             "{main}"
         );
@@ -84,7 +84,7 @@ async fn the_clients_page_ends_with_all_apps_and_nothing_more() {
 async fn a_member_gets_a_config_with_their_nick_and_no_password() {
     let (site, cookie) = crate::signed_in_alice().await;
 
-    let response = site.get("/clients/halloy", Some(&cookie)).await;
+    let response = site.get("/help/apps/halloy", Some(&cookie)).await;
 
     assert_eq!(response.status(), 200);
     let page = body_text(response).await;
@@ -131,7 +131,7 @@ async fn every_guide_says_where_to_get_the_app_then_how_to_add_weblounge() {
 
 #[tokio::test]
 async fn gamjas_guide_just_opens_the_chat() {
-    let page = body_text(crate::alices("/clients/gamja").await).await;
+    let page = body_text(crate::alices("/help/apps/gamja").await).await;
     assert!(page.contains("<h1>Set up gamja</h1>"), "{page}");
     assert!(crate::opens_the_chat(&page), "{page}");
     assert!(!page.contains("<ol"), "{page}");
@@ -142,7 +142,7 @@ async fn gamjas_guide_just_opens_the_chat() {
 
 #[tokio::test]
 async fn phone_clients_get_the_fields_and_no_config() {
-    let page = body_text(crate::alices("/clients/goguma").await).await;
+    let page = body_text(crate::alices("/help/apps/goguma").await).await;
     assert!(
         page.contains("f-droid.org/packages/fr.emersion.goguma"),
         "{page}"
@@ -160,7 +160,7 @@ async fn phone_clients_get_the_fields_and_no_config() {
 async fn apps_with_a_config_fold_the_connection_details_away_under_it() {
     let (site, cookie) = crate::signed_in_alice().await;
     for slug in ["halloy", "senpai", "weechat"] {
-        let page = body_text(site.get(&format!("/clients/{slug}"), Some(&cookie)).await).await;
+        let page = body_text(site.get(&format!("/help/apps/{slug}"), Some(&cookie)).await).await;
         let snippet = page.find("<pre>").unwrap();
         let details = page.find("<details").unwrap();
         assert!(snippet < details, "{page}");
@@ -182,7 +182,7 @@ async fn every_guide_ends_with_the_way_back_to_all_apps_and_no_chips() {
         let main = &page[page.find("<main").unwrap()..page.find("</main>").unwrap()];
         assert!(
             main.trim_end().ends_with(
-                r#"<p class="see-also"><a href="/clients/all">Back to all apps</a></p>"#
+                r#"<p class="see-also"><a href="/help/apps/all">Back to all apps</a></p>"#
             ),
             "{main}"
         );
@@ -197,7 +197,7 @@ async fn every_guide_ends_with_the_way_back_to_all_apps_and_no_chips() {
 
 #[tokio::test]
 async fn all_apps_are_names_by_where_they_run_linking_their_guides() {
-    let page = body_text(crate::alices("/clients/all").await).await;
+    let page = body_text(crate::alices("/help/apps/all").await).await;
     assert!(page.contains("<h1>All apps</h1>"), "{page}");
     let mut last = 0;
     for group in Group::ALL {
@@ -219,7 +219,7 @@ async fn all_apps_are_names_by_where_they_run_linking_their_guides() {
 #[tokio::test]
 async fn all_apps_keep_the_connection_details_folded_away() {
     let (site, cookie) = crate::signed_in_alice().await;
-    let page = body_text(site.get("/clients/all", Some(&cookie)).await).await;
+    let page = body_text(site.get("/help/apps/all", Some(&cookie)).await).await;
     let details = &page[page.find("<details").unwrap()..page.find("</details>").unwrap()];
     assert!(
         details.contains("<summary>Using an app that isn't here?</summary>"),
@@ -246,6 +246,29 @@ async fn all_apps_keep_the_connection_details_folded_away() {
 
 #[tokio::test]
 async fn unknown_clients_are_not_found() {
-    let response = crate::alices("/clients/hexchat").await;
+    let response = crate::alices("/help/apps/hexchat").await;
     assert_eq!(response.status(), 404);
+}
+
+#[tokio::test]
+async fn every_old_address_of_a_guide_moves_for_good_to_its_new_one() {
+    let (site, cookie) = crate::signed_in_alice().await;
+    for (old, new) in [
+        ("/clients", "/help/apps"),
+        ("/clients/all", "/help/apps/all"),
+        ("/clients/halloy", "/help/apps/halloy"),
+        (
+            "/clients/halloy/certificate",
+            "/help/apps/halloy/certificate",
+        ),
+        (
+            "/clients/halloy?from=welcome",
+            "/help/apps/halloy?from=welcome",
+        ),
+    ] {
+        let response = site.get(old, Some(&cookie)).await;
+        assert_eq!(response.status(), 308, "{old}");
+        assert_eq!(crate::location(&response), new, "{old}");
+        assert_eq!(site.get(new, Some(&cookie)).await.status(), 200, "{new}");
+    }
 }

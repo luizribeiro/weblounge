@@ -60,7 +60,7 @@ with subtest("join.weblounge.org sends invite links on to the invite page, and n
     assert https("join.weblounge.org", "/", *outcome) == f"302 https://{members}/invite"
     not_found_page("join.weblounge.org", "/invite")
 
-with subtest("someone signed out is sent to sign in from /clients and unknown paths, to come back after"):
+with subtest("someone signed out is sent to sign in from an old guide address and unknown paths, to come back after"):
     for path, back in [("/clients", "%2Fclients"), ("/no-such-page", "%2Fno-such-page")]:
         sent = https(members, path, *outcome)
         assert sent == f"303 https://{members}/signin?next={back}", sent
@@ -178,8 +178,10 @@ with subtest("a member signs in to the website with their IRC password"):
     home = browser.get("/", "-f")
     assert "Pull up a chair, Dana." in home, home
     assert home.count("<circle ") == 53, home
-    clients = browser.get("/clients/all", "-f")
+    clients = browser.get("/help/apps/all", "-f")
     assert "<code>irc.weblounge.org</code>" in clients and "<code>6697</code>" in clients, clients
+    moved = browser.get("/clients/all", *outcome)
+    assert moved == f"308 https://{members}/help/apps/all", moved
 
 with subtest("a member reads the Help tab and its articles, which guests are sent to sign in for"):
     index = browser.get("/help", "-f")
@@ -258,7 +260,7 @@ with subtest("in a browser, at a phone's width and a desktop's, Revoke all asks 
     client.copy_from_vm("/tmp/screens")
 
 with subtest("WeeChat's certificate guide's commands attach a certificate that SASL EXTERNAL logs in with"):
-    guide = browser.get("/clients/weechat/certificate", "-f")
+    guide = browser.get("/help/apps/weechat/certificate", "-f")
     generate, fingerprint = [
         html.unescape(block) for block in re.findall(r"<pre><code>(.*?)</code></pre>", guide, re.S)[:2]
     ]

@@ -92,7 +92,7 @@ in
         };
         # Concierge keeps the records of accounts and bots' vhosts, so
         # changes to them go through it. NS CERT stays: the certificate
-        # guide on /clients relies on CERT ADD.
+        # guide on /help/apps relies on CERT ADD.
         disabled-service-commands = {
           nickserv = [ "unregister" "passwd" ];
           hostserv = [ "on" "off" ];

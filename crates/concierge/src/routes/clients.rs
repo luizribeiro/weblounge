@@ -5,7 +5,8 @@
 use askama::Template;
 use axum::{
     extract::{Path, State},
-    response::Response,
+    http::Uri,
+    response::{Redirect, Response},
 };
 
 use super::{Layout, not_found, render};
@@ -17,6 +18,12 @@ use crate::{
     oauth::Webchat,
     platform::{Platform, VisitorPlatform},
 };
+
+/// Where the guides live, under the Help tab.
+pub const PATH: &str = "/help/apps";
+pub const ALL_PATH: &str = "/help/apps/all";
+/// Where they lived before, which links out there still point to.
+pub const OLD_PATH: &str = "/clients";
 
 #[derive(Template)]
 #[template(path = "client.html")]
@@ -86,4 +93,11 @@ pub async fn show(
         ircs_link: client.ircs_link(&app.irc_server),
         webchat: &app.webchat,
     })
+}
+
+/// Sends a link to an old guide's address on to its new one, query and all.
+pub async fn moved(uri: Uri) -> Redirect {
+    let old = uri.path_and_query().map_or(OLD_PATH, |path| path.as_str());
+    let rest = old.strip_prefix(OLD_PATH).unwrap_or_default();
+    Redirect::permanent(&format!("{PATH}{rest}"))
 }

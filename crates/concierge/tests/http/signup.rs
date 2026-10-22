@@ -465,7 +465,7 @@ async fn the_welcome_page_leads_with_clients_for_the_visitors_platform() {
         let main = &page[page.find("<main").unwrap()..page.find("</main>").unwrap()];
         assert!(
             main.trim_end().ends_with(
-                r#"<p class="see-also">Using something else? <a href="/clients/all">See all apps</a></p>"#
+                r#"<p class="see-also">Using something else? <a href="/help/apps/all">See all apps</a></p>"#
             ),
             "{main}"
         );
