@@ -12,6 +12,7 @@ use axum::{
     response::Response,
 };
 use ergo_api::{Passphrase, Registration};
+use secret::SecretString;
 use serde::Deserialize;
 
 use super::{
@@ -77,8 +78,8 @@ pub struct Signup {
     code: String,
     nick: String,
     email: String,
-    password: String,
-    confirmation: String,
+    password: SecretString,
+    confirmation: SecretString,
     news: Option<String>,
 }
 
@@ -245,7 +246,7 @@ fn validate(signup: &Signup, invite_open: bool) -> Result<NewAccount, Box<Signup
     let code_error = (!invite_open).then(unusable_code);
     let nick = Nick::parse(&signup.nick);
     let email = Email::parse(&signup.email);
-    let password = password_rules::check(&signup.password, &signup.confirmation);
+    let password = password_rules::check(signup.password.expose(), signup.confirmation.expose());
     match (code_error, nick, email, password) {
         (None, Ok(nick), Ok(email), Ok(password)) => Ok(NewAccount {
             name: nick.into(),

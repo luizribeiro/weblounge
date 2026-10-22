@@ -12,6 +12,7 @@ use axum::{
     http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
+use secret::SecretString;
 use serde::Deserialize;
 
 use super::{ERGO_UNAVAILABLE, Layout, Link, UNSENT, internal_error, render, render_with};
@@ -186,8 +187,8 @@ struct ResetPage<'a> {
 #[serde(default)]
 pub struct NewPassword {
     code: String,
-    password: String,
-    confirmation: String,
+    password: SecretString,
+    confirmation: SecretString,
 }
 
 /// The page a reset link opens. Links carry the code in their fragment,
@@ -227,7 +228,7 @@ pub async fn reset(
     let refuse = |status, password, alert| {
         render_with(status, &reset_page(&app, &visitor, code, password, alert))
     };
-    let new = match password_rules::check(&form.password, &form.confirmation) {
+    let new = match password_rules::check(form.password.expose(), form.confirmation.expose()) {
         Ok(new) => new,
         Err(refusal) => return refuse(StatusCode::UNPROCESSABLE_ENTITY, refusal.into(), None),
     };

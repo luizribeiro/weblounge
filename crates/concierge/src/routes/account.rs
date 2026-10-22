@@ -8,6 +8,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
+use secret::SecretString;
 use serde::Deserialize;
 
 use super::{
@@ -62,7 +63,7 @@ pub struct Settings {
     /// The member's password, which changing the email needs: otherwise
     /// a stolen session could move the account's recovery to another
     /// address.
-    current: String,
+    current: SecretString,
 }
 
 /// The email and news form, as stored or as typed.
@@ -157,7 +158,7 @@ pub async fn update(
     let changed = me.member.email.as_ref() != Some(&email);
     if changed
         && let Err(Refused { status, error }) =
-            check_password(&app, account, &address, &settings.current).await
+            check_password(&app, account, &address, settings.current.expose()).await
     {
         return refuse(status, None, Some(error)).await;
     }

@@ -5,6 +5,7 @@
 use std::{collections::HashSet, fmt, sync::LazyLock};
 
 use ergo_api::Passphrase;
+use secret::Zeroizing;
 use serde::Serialize;
 
 pub const MIN_LENGTH: usize = 12;
@@ -153,7 +154,7 @@ pub fn check(password: &str, confirmation: &str) -> Result<Passphrase, Refusal> 
     if password.starts_with(':') {
         return Err(Refusal::LeadingColon);
     }
-    if COMMON.contains(&password.to_lowercase()) {
+    if COMMON.contains(Zeroizing::new(password.to_lowercase()).as_str()) {
         return Err(Refusal::Common);
     }
     if password != confirmation {

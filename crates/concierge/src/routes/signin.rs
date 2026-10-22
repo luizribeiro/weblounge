@@ -9,6 +9,7 @@ use axum::{
     http::{StatusCode, header},
     response::{IntoResponse, Redirect, Response},
 };
+use secret::SecretString;
 use serde::Deserialize;
 
 use super::{Layout, internal_error, render, render_with};
@@ -43,7 +44,7 @@ pub struct Next {
 #[serde(default)]
 pub struct Credentials {
     nick: String,
-    password: String,
+    password: SecretString,
     next: String,
 }
 
@@ -72,14 +73,14 @@ pub async fn submit(
     } = &credentials;
     let next = auth::local_path(next);
     let refuse = |status, error| render_with(status, &page(&app, nick, next, Some(error)));
-    if !plausible(nick, password) {
+    if !plausible(nick, password.expose()) {
         return refuse(StatusCode::UNAUTHORIZED, WRONG);
     }
     let now = Instant::now();
     if !app.limiter.allows(nick, address.0, now) {
         return refuse(StatusCode::TOO_MANY_REQUESTS, rate_limit::TRY_LATER);
     }
-    match authenticate(&app, nick, password).await {
+    match authenticate(&app, nick, password.expose()).await {
         Ok(Some(member)) => {
             app.limiter.record_success(nick);
             start_session(&app, &visitor, &member, next.unwrap_or("/")).await

@@ -9,6 +9,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
+use secret::SecretString;
 use serde::Deserialize;
 
 use super::{
@@ -31,9 +32,9 @@ const WRONG: &str = "Wrong password.";
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub struct Change {
-    current: String,
-    password: String,
-    confirmation: String,
+    current: SecretString,
+    password: SecretString,
+    confirmation: SecretString,
 }
 
 /// Why the current password a form gave was refused, and what the form
@@ -88,7 +89,7 @@ pub async fn change(
         current_error: Some(error),
         ..PasswordForm::default()
     };
-    let new = match password_rules::check(&change.password, &change.confirmation) {
+    let new = match password_rules::check(change.password.expose(), change.confirmation.expose()) {
         Ok(new) => new,
         Err(refusal) => {
             let form = PasswordForm {
@@ -98,7 +99,7 @@ pub async fn change(
             return refuse(StatusCode::UNPROCESSABLE_ENTITY, form).await;
         }
     };
-    if let Err(refused) = check_current(&app, account, &address, &change.current).await {
+    if let Err(refused) = check_current(&app, account, &address, change.current.expose()).await {
         return refuse(refused.status, current_error(refused.error)).await;
     }
     if let Err(error) = app.ergo.set_password(account, &new).await {
