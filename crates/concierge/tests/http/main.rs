@@ -372,8 +372,8 @@ fn session_cookie(response: &Response) -> Option<String> {
 /// Whether a page leads with the button that opens the web client.
 fn opens_the_chat(page: &str) -> bool {
     page.contains(
-        r#"<a class="button button-primary" href="https://irc.weblounge.org/">Open chat</a>"#,
-    ) && page.contains(r#"<code class="muted">irc.weblounge.org in your browser</code>"#)
+        r#"<a class="button button-primary" href="https://irc.weblounge.org/"><strong>Open web chat</strong><span>In your browser · irc.weblounge.org</span></a>"#,
+    )
 }
 
 /// The names of the apps `page` picks, in its order.

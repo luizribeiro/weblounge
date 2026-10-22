@@ -142,20 +142,27 @@
 }
 
 .open-chat {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
   margin: 0 0 2rem;
 
   & .button {
-    min-height: 56px;
-    padding: 0 2rem;
-    font-size: 1.125rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    max-width: 100%;
+    min-height: 64px;
+    padding: 0.5rem 1.75rem;
   }
 
-  & code {
-    font-size: 0.875rem;
+  & strong {
+    font-size: 1.125rem;
+    font-weight: 500;
+  }
+
+  & span {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    opacity: 0.8;
+    overflow-wrap: anywhere;
   }
 }
 

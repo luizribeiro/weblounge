@@ -21,7 +21,7 @@ async fn welcomes_the_member_by_name_and_opens_the_chat() {
 #[tokio::test]
 async fn offers_an_app_just_under_the_chat_and_nothing_else() {
     let page = home_of_alice().await;
-    let chat = page.find(">Open chat<").unwrap();
+    let chat = page.find(">Open web chat<").unwrap();
     let clients = page
         .find(r#"<a class="button" href="/help/apps">Prefer an app? Set it up on this device</a>"#);
     assert!(clients.is_some_and(|clients| clients > chat), "{page}");
@@ -36,7 +36,7 @@ async fn draws_the_landing_pages_chair_inline_for_the_script_to_animate() {
     let page = home_of_alice().await;
     let chair = page.find(r#"<svg xmlns="http://www.w3.org/2000/svg" id="chair""#);
     assert!(
-        chair.is_some_and(|chair| chair < page.find(">Open chat<").unwrap()),
+        chair.is_some_and(|chair| chair < page.find(">Open web chat<").unwrap()),
         "{page}"
     );
 }

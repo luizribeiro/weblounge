@@ -1,7 +1,6 @@
 {% macro open_chat(webchat) %}
       <p class="open-chat">
-        <a class="button button-primary" href="{{ webchat.redirect_uri() }}">Open chat</a>
-        <code class="muted">{{ webchat.address() }} in your browser</code>
+        <a class="button button-primary" href="{{ webchat.redirect_uri() }}"><strong>Open web chat</strong><span>In your browser · {{ webchat.address() }}</span></a>
       </p>
 {%- endmacro %}
 
