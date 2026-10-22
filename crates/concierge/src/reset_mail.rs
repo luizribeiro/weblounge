@@ -75,7 +75,7 @@ fn message(
         account: Some(account.to_string()),
         to: email.clone(),
         subject: Subject::parse(subject)?,
-        body,
+        body: body.into(),
     })
 }
 
@@ -152,9 +152,9 @@ mod tests {
         assert_eq!(message.subject.as_str(), LINK_SUBJECT);
         assert_eq!(message.to.as_str(), "bob@example.org");
         assert_eq!(message.account.as_deref(), Some("Bob"));
-        let body = message.body;
+        let body = message.body.expose();
         assert!(body.starts_with("Hi Bob,\n"), "{body}");
-        assert_eq!(links(&body), [link()], "{body}");
+        assert_eq!(links(body), [link()], "{body}");
         for part in [
             "press\n\"Set my password\"",
             "The link works once, within 1 hour.",
@@ -171,7 +171,7 @@ mod tests {
         let message = changed_message(&bob, &to, PUBLIC_URL).unwrap();
         assert_eq!(message.subject.as_str(), CHANGED_SUBJECT);
         assert_eq!(message.to.as_str(), "bob@example.org");
-        let body = message.body;
+        let body = message.body.expose();
         assert!(body.starts_with("Hi Bob,\n"), "{body}");
         assert!(body.contains("was just changed"), "{body}");
         assert!(body.contains("other sessions"), "{body}");
@@ -196,7 +196,7 @@ mod tests {
             )
             .unwrap(),
         ] {
-            let body = message.body;
+            let body = message.body.expose();
             assert!(body.is_ascii(), "{body}");
             assert!(body.ends_with(".\n"), "{body:?}");
             for line in body.lines().filter(|line| *line != link()) {

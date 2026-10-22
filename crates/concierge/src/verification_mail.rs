@@ -82,7 +82,7 @@ pub fn message(
         account: Some(issued.account.to_string()),
         to: issued.email.clone(),
         subject: Subject::parse(kind.subject())?,
-        body: body.render()?,
+        body: body.render()?.into(),
     })
 }
 
@@ -191,14 +191,20 @@ mod tests {
         assert_eq!(message.subject.as_str(), SUBJECT);
         assert_eq!(message.to.as_str(), "bob@example.org");
         assert_eq!(message.account.as_deref(), Some("Bob"));
-        assert!(message.body.starts_with("Hi Bob,\n"), "{}", message.body);
+        assert!(
+            message.body.expose().starts_with("Hi Bob,\n"),
+            "{}",
+            message.body.expose()
+        );
     }
 
     #[test]
     fn carries_the_link_on_a_line_of_its_own_and_says_how_long_it_has() {
         let body = message(&issued("Bob"), PUBLIC_URL, Kind::Link, SENT)
             .unwrap()
-            .body;
+            .body
+            .expose()
+            .clone();
         let links: Vec<_> = body.lines().filter(|line| line.contains("://")).collect();
         assert_eq!(links, [link()], "{body}");
         for part in [
@@ -220,6 +226,8 @@ mod tests {
             message(&issued("Bob"), PUBLIC_URL, Kind::Link, now)
                 .unwrap()
                 .body
+                .expose()
+                .clone()
         };
         assert!(body(deadline - 1).contains("yours ends on 16 October."));
         assert!(body(deadline).contains("yours ended on 16 October."));
@@ -230,7 +238,7 @@ mod tests {
         let late = verification_rules::deadline(SENT);
         let reminder = message(&issued("Bob"), PUBLIC_URL, Kind::Reminder, late).unwrap();
         assert_eq!(reminder.subject.as_str(), REMINDER_SUBJECT);
-        let body = reminder.body;
+        let body = reminder.body.expose();
         assert!(body.starts_with("Hi Bob,\n"), "{body}");
         let links: Vec<_> = body.lines().filter(|line| line.contains("://")).collect();
         assert_eq!(links, [link()], "{body}");
@@ -258,7 +266,9 @@ mod tests {
         {
             let body = message(&issued(&longest), PUBLIC_URL, kind, now)
                 .unwrap()
-                .body;
+                .body
+                .expose()
+                .clone();
             assert!(body.is_ascii(), "{body}");
             assert!(body.ends_with("your address.\n"), "{body:?}");
             for line in body.lines().filter(|line| *line != link()) {

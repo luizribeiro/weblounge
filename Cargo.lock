@@ -1872,6 +1872,7 @@ dependencies = [
  "age",
  "anyhow",
  "common",
+ "secret",
  "sqlx",
  "tempfile",
  "tokio",

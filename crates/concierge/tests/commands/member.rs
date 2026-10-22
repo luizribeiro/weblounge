@@ -132,7 +132,7 @@ mod delete {
                 account: Some(account.into()),
                 to: Email::parse("someone@example.org").unwrap(),
                 subject: Subject::parse("Verify your email for weblounge").unwrap(),
-                body: format!("Hi {account}, open the link to verify.\n"),
+                body: format!("Hi {account}, open the link to verify.\n").into(),
             };
             outbox.queue(&message, db::now()).await.unwrap();
         }

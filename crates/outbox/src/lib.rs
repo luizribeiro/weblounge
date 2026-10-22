@@ -11,6 +11,7 @@ use std::{fmt, path::Path};
 
 use anyhow::Context;
 use common::{email::Email, sqlite};
+use secret::SecretString;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 /// The public half of the mailer's key, which mail is sealed to.
@@ -76,26 +77,15 @@ impl Subject {
 // again before sending.
 common::sqlite_newtype!(Subject, 0: String);
 
-/// A plain-text message to queue, as it is or sealed. Its `Debug` output
-/// leaves the body out: a sealed message's carries a secret link.
-#[derive(Clone, PartialEq, Eq)]
+/// A plain-text message to queue, as it is or sealed. Its body is a
+/// secret: a sealed message's carries a secret link.
+#[derive(Debug)]
 pub struct Message {
     /// The member it's for, if any, whose removal deletes it.
     pub account: Option<String>,
     pub to: Email,
     pub subject: Subject,
-    pub body: String,
-}
-
-impl fmt::Debug for Message {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Message")
-            .field("account", &self.account)
-            .field("to", &self.to)
-            .field("subject", &self.subject)
-            .field("body", &format_args!("<redacted>"))
-            .finish()
-    }
+    pub body: SecretString,
 }
 
 /// What a queued message says.
@@ -266,7 +256,7 @@ impl Outbox {
     /// Leaves `message` for the mailer to send as soon as it can, and
     /// answers its id, which the mailer logs it by.
     pub async fn queue(&self, message: &Message, now: i64) -> sqlx::Result<i64> {
-        let body = Body::Plain(message.body.clone());
+        let body = Body::Plain(message.body.expose().clone());
         insert(&self.pool, message, &body, now, None).await
     }
 
@@ -285,7 +275,7 @@ impl Outbox {
         let key = published_key(&mut *transaction).await?.ok_or(NoKey)?;
         let body = Body::Sealed {
             to: key.to_string(),
-            ciphertext: age::encrypt(&key, message.body.as_bytes())?,
+            ciphertext: age::encrypt(&key, message.body.expose().as_bytes())?,
         };
         let id = insert(&mut *transaction, message, &body, now, Some(give_up_at)).await?;
         transaction.commit().await?;
@@ -481,7 +471,8 @@ pub mod testing {
                  Open https://members.weblounge.org/verify#q7Hx2mZp9vLcT4wRfBa to verify\n\
                  the address you gave weblounge.org. Zoë says hello.\n",
                 account.unwrap_or("there"),
-            ),
+            )
+            .into(),
         }
     }
 
@@ -646,7 +637,7 @@ mod tests {
         };
         assert_eq!(*to, key.public().to_string());
         assert_eq!(due[0].recipient, "alice@example.org");
-        assert_eq!(key.open(due)[0].text(), alices.body);
+        assert_eq!(key.open(due)[0].text(), alices.body.expose());
         sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
             .execute(&outbox.pool)
             .await
@@ -859,7 +850,12 @@ mod tests {
                 id: due[0].id,
                 recipient: "alice@example.org".into(),
                 subject: "Verify your email for weblounge".into(),
-                body: Body::Plain(message(Some("alice"), "alice@example.org", "-").body),
+                body: Body::Plain(
+                    message(Some("alice"), "alice@example.org", "-")
+                        .body
+                        .expose()
+                        .clone()
+                ),
                 created_at: QUEUED,
                 attempts: 0,
             }
