@@ -8,7 +8,7 @@ use axum::{
     response::Response,
 };
 
-use super::{Layout, not_found, render};
+use super::{Layout, Tab, not_found, render};
 use crate::{
     app::AppState,
     auth::CurrentMember,
@@ -69,7 +69,7 @@ pub async fn show(
         return not_found();
     };
     render(&Guide {
-        layout: Layout::member(&app, &me.member),
+        layout: Layout::member(&app, &me.member).on(Tab::Help),
         irc: &app.irc_server,
         client,
         certificates: Certificates::for_app(me.member.account.as_str(), external),

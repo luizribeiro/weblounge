@@ -9,7 +9,7 @@ use axum::{
     response::{Redirect, Response},
 };
 
-use super::{Layout, not_found, render};
+use super::{Layout, Tab, not_found, render};
 use crate::{
     app::AppState,
     auth::CurrentMember,
@@ -56,7 +56,7 @@ struct AllApps<'a> {
 
 pub async fn all(State(app): State<AppState>, CurrentMember(me): CurrentMember) -> Response {
     render(&AllApps {
-        layout: Layout::member(&app, &me.member),
+        layout: Layout::member(&app, &me.member).on(Tab::Help),
         nick: me.member.account.as_str(),
         irc: &app.irc_server,
     })
@@ -68,7 +68,7 @@ pub async fn index(
     VisitorPlatform(platform): VisitorPlatform,
 ) -> Response {
     render(&Index {
-        layout: Layout::member(&app, &me.member),
+        layout: Layout::member(&app, &me.member).on(Tab::Help),
         platform,
         picks: clients::recommended(platform),
         webchat: &app.webchat,
@@ -85,7 +85,7 @@ pub async fn show(
     };
     let nick = me.member.account.as_str();
     render(&Guide {
-        layout: Layout::member(&app, &me.member),
+        layout: Layout::member(&app, &me.member).on(Tab::Help),
         nick,
         irc: &app.irc_server,
         client,

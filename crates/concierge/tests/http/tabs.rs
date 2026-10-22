@@ -59,6 +59,23 @@ async fn guests_are_sent_to_sign_in_from_every_tab() {
 }
 
 #[tokio::test]
+async fn the_app_guides_and_articles_keep_the_help_tab_open() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    for path in [
+        "/help/make-a-bot",
+        "/help/apps",
+        "/help/apps/all",
+        "/help/apps/halloy",
+        "/help/apps/halloy/certificate",
+    ] {
+        let page = body_text(site.get(path, Some(&cookie)).await).await;
+        assert_eq!(open_tab(&page), Some("/help"), "{path}");
+    }
+}
+
+#[tokio::test]
 async fn other_pages_show_members_the_tabs_with_none_open() {
     let site = Site::start().await;
     site.add_member("alice").await;
