@@ -40,8 +40,8 @@ mod tests {
     #[test]
     fn is_long_and_drawn_from_the_alphabet() {
         let password = generate();
-        assert_eq!(password.as_str().len(), LENGTH);
-        assert!(password.as_str().bytes().all(|c| ALPHABET.contains(&c)));
+        assert_eq!(password.expose().len(), LENGTH);
+        assert!(password.expose().bytes().all(|c| ALPHABET.contains(&c)));
     }
 
     #[test]
@@ -57,6 +57,6 @@ mod tests {
 
     #[test]
     fn differs_every_time() {
-        assert_ne!(generate().as_str(), generate().as_str());
+        assert_ne!(generate().expose(), generate().expose());
     }
 }

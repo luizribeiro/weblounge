@@ -247,7 +247,7 @@ async fn saregister(State(state): State<Shared>, Json(request): Json<SaRegister>
         key,
         FakeAccount {
             name: request.account_name,
-            passphrase: request.passphrase.into(),
+            passphrase: request.passphrase.expose().to_owned(),
             settings: Settings {
                 always_on: Preference::Default,
                 auto_away: Preference::Default,
@@ -262,7 +262,8 @@ async fn saregister(State(state): State<Shared>, Json(request): Json<SaRegister>
 
 async fn check_auth(State(state): State<Shared>, Json(request): Json<CheckAuth>) -> Response {
     with_account(&state, &request.account_name, bare_refusal, |account| {
-        if !request.passphrase.is_empty() && account.passphrase == request.passphrase {
+        let given = request.passphrase.expose();
+        if !given.is_empty() && account.passphrase == *given {
             succeeded(Authenticated {
                 account_name: account.name.clone(),
             })
@@ -278,7 +279,7 @@ async fn passwd(State(state): State<Shared>, Json(request): Json<Passwd>) -> Res
         &request.account_name,
         account_does_not_exist,
         |account| {
-            account.passphrase = request.passphrase.into();
+            account.passphrase = request.passphrase.expose().to_owned();
             succeeded(Ack {})
         },
     )

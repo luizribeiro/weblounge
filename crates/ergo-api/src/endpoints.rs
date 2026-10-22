@@ -1,5 +1,4 @@
-use std::fmt;
-
+use secret::SecretString;
 use serde::{Deserialize, Serialize};
 
 use crate::{AccountName, Passphrase};
@@ -40,24 +39,15 @@ pub struct SaRegister {
 endpoint!(SaRegister, "/v1/ns/saregister" => Ack);
 
 /// `/v1/check_auth`: checks an account's passphrase. The passphrase is
-/// whatever someone typed, so it isn't a [`Passphrase`], and `Debug`
-/// redacts it by hand.
-#[derive(Clone, Serialize, Deserialize)]
+/// whatever someone typed, so it isn't a [`Passphrase`], only a secret.
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckAuth {
     pub account_name: AccountName,
-    pub passphrase: String,
+    #[serde(serialize_with = "secret::serialize_exposed")]
+    pub passphrase: SecretString,
 }
 endpoint!(CheckAuth, "/v1/check_auth" => Authenticated);
-
-impl fmt::Debug for CheckAuth {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CheckAuth")
-            .field("account_name", &self.account_name)
-            .field("passphrase", &format_args!("<redacted>"))
-            .finish()
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -103,7 +103,7 @@ impl Admin {
 /// A generated password as the commands print it: alone on its line, the
 /// only time anyone sees it.
 fn print_once(password: &Passphrase) -> String {
-    format!("{}\n", password.as_str())
+    format!("{}\n", password.expose())
 }
 
 /// What's left to do once concierge let go of `account`.

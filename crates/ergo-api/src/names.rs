@@ -1,5 +1,6 @@
 use std::{fmt, str::FromStr};
 
+use secret::SecretString;
 use serde::{Deserialize, Serialize};
 
 /// The name of an Ergo account, which is also the nick it reserves.
@@ -40,11 +41,11 @@ const MAX_PASSPHRASE_BYTES: usize = 300;
 /// A passphrase that passes Ergo's own checks.
 ///
 /// Ergo refuses malformed passphrases, but takes an empty one to mean "remove
-/// the account's passphrase"; a `Passphrase` is neither. Its `Debug` output
-/// is redacted.
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(try_from = "String", into = "String")]
-pub struct Passphrase(String);
+/// the account's passphrase"; a `Passphrase` is neither. It's a [`secret::Secret`]:
+/// wiped as it's dropped, refused or not, and redacted in `Debug` output.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(try_from = "String")]
+pub struct Passphrase(#[serde(serialize_with = "secret::serialize_exposed")] SecretString);
 
 /// Why a string can't be a [`Passphrase`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -63,8 +64,8 @@ pub enum InvalidPassphrase {
 
 impl Passphrase {
     pub fn new(passphrase: impl Into<String>) -> Result<Self, InvalidPassphrase> {
-        let passphrase = passphrase.into();
-        match passphrase.as_str() {
+        let passphrase = SecretString::new(passphrase.into());
+        match passphrase.expose().as_str() {
             "" => Err(InvalidPassphrase::Empty),
             "*" => Err(InvalidPassphrase::Asterisk),
             p if p.len() > MAX_PASSPHRASE_BYTES => Err(InvalidPassphrase::TooLong),
@@ -74,8 +75,16 @@ impl Passphrase {
         }
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.0
+    pub fn expose(&self) -> &str {
+        self.0.expose()
+    }
+}
+
+/// Ergo's request types own their passphrase, so sending one copies it,
+/// into another secret.
+impl Clone for Passphrase {
+    fn clone(&self) -> Self {
+        Self(self.expose().into())
     }
 }
 
@@ -95,18 +104,6 @@ impl FromStr for Passphrase {
     }
 }
 
-impl From<Passphrase> for String {
-    fn from(passphrase: Passphrase) -> Self {
-        passphrase.0
-    }
-}
-
-impl fmt::Debug for Passphrase {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Passphrase(<redacted>)")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,7 +117,7 @@ mod tests {
             "**",
             &"x".repeat(MAX_PASSPHRASE_BYTES),
         ] {
-            assert_eq!(Passphrase::new(passphrase).unwrap().as_str(), passphrase);
+            assert_eq!(Passphrase::new(passphrase).unwrap().expose(), passphrase);
         }
     }
 

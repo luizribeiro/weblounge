@@ -67,7 +67,7 @@
         <p class="bot-password-once" id="bot-password-once">Copy it now. It won't be shown again; if you lose it, make a new one.</p>
         <dl class="settings-list">
           {%- call components::copyable("Username", shown.bot) %}{% endcall %}
-          {%- call components::copyable("Password", shown.password.as_str()) %}{% endcall %}
+          {%- call components::copyable("Password", shown.password.expose()) %}{% endcall %}
         </dl>
         <a class="button button-primary" href="/bots" autofocus>Done</a>
       </dialog>

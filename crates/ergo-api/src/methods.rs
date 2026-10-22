@@ -56,7 +56,7 @@ impl Client {
     ) -> Result<Option<AccountName>> {
         let request = CheckAuth {
             account_name: account_name.into(),
-            passphrase: passphrase.to_owned(),
+            passphrase: passphrase.into(),
         };
         let authenticated = unless_bare_refusal(self.call(&request).await)?;
         Ok(authenticated.map(|authenticated| authenticated.account_name))

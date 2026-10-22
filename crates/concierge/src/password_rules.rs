@@ -180,7 +180,7 @@ mod tests {
             &"x".repeat(MAX_BYTES),
         ] {
             assert_eq!(
-                check(password, password).unwrap().as_str(),
+                check(password, password).unwrap().expose(),
                 password,
                 "{password}"
             );
