@@ -20,8 +20,8 @@ pub const OWN_APP: Topic = Topic {
 };
 
 const DEVICES: Topic = Topic {
-    title: "Use weblounge on several devices",
-    href: "/help/several-devices",
+    title: "Use weblounge on multiple devices",
+    href: "/help/multiple-devices",
 };
 
 const CHANNEL: Topic = Topic {
@@ -107,7 +107,7 @@ impl Article {
 
 pub fn articles(facts: &Facts) -> Vec<Article> {
     vec![
-        several_devices(facts),
+        multiple_devices(facts),
         start_a_channel(),
         make_a_bot(facts),
         share_an_image(facts),
@@ -127,7 +127,7 @@ pub fn index(facts: &Facts) -> Vec<Topic> {
         .collect()
 }
 
-fn several_devices(facts: &Facts) -> Article {
+fn multiple_devices(facts: &Facts) -> Article {
     Article {
         topic: DEVICES,
         lede: "You can be on your phone, your laptop and the web client at once, all as the same nick.",

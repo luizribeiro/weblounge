@@ -48,7 +48,10 @@ async fn the_help_index_lists_its_topics_and_where_to_ask_next() {
         topics(&page),
         [
             topic("/help/apps", "Use your own app"),
-            topic("/help/several-devices", "Use weblounge on several devices"),
+            topic(
+                "/help/multiple-devices",
+                "Use weblounge on multiple devices"
+            ),
             topic("/help/start-a-channel", "Start a channel and keep it"),
             topic("/help/make-a-bot", "Make a bot"),
             topic("/help/share-an-image", "Share an image"),
@@ -79,11 +82,14 @@ async fn every_help_topic_and_related_link_leads_to_a_page() {
 
 #[tokio::test]
 async fn an_article_leads_back_to_help_and_ends_with_where_to_ask_next() {
-    let page = Site::start().await.help_page("/help/several-devices").await;
+    let page = Site::start()
+        .await
+        .help_page("/help/multiple-devices")
+        .await;
 
     assert!(is_tab(&page, "/help"), "{page}");
     assert!(
-        page.contains("<title>Use weblounge on several devices · weblounge.org</title>"),
+        page.contains("<title>Use weblounge on multiple devices · weblounge.org</title>"),
         "{page}"
     );
     assert!(
@@ -96,10 +102,10 @@ async fn an_article_leads_back_to_help_and_ends_with_where_to_ask_next() {
 }
 
 #[tokio::test]
-async fn several_devices_says_where_to_turn_always_on_off_and_how_long_history_lasts() {
+async fn multiple_devices_says_where_to_turn_always_on_off_and_how_long_history_lasts() {
     let page = Site::start_with(|app| app.history_expiry = 3 * 24 * 60 * 60)
         .await
-        .help_page("/help/several-devices")
+        .help_page("/help/multiple-devices")
         .await;
 
     assert!(
@@ -204,7 +210,10 @@ async fn unknown_articles_are_not_found() {
 
 #[tokio::test]
 async fn guests_are_sent_to_sign_in_from_articles() {
-    let response = Site::start().await.get("/help/several-devices", None).await;
+    let response = Site::start()
+        .await
+        .get("/help/multiple-devices", None)
+        .await;
     assert_eq!(response.status(), 303);
     assert!(crate::location(&response).starts_with("/signin"));
 }
