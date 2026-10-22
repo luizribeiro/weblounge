@@ -5,6 +5,7 @@
 //! Times are Unix seconds.
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use secret::{SecretString, Zeroizing};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -230,20 +231,21 @@ pub fn authenticates_introspection(authorization: Option<&str>, secret: &str) ->
     let Some((id, given)) = authorization.and_then(basic_credentials) else {
         return false;
     };
-    let right_secret: bool = given.as_bytes().ct_eq(secret.as_bytes()).into();
+    let right_secret: bool = given.expose().as_bytes().ct_eq(secret.as_bytes()).into();
     id == INTROSPECTION_CLIENT && right_secret && !secret.is_empty()
 }
 
-fn basic_credentials(authorization: &str) -> Option<(String, String)> {
+fn basic_credentials(authorization: &str) -> Option<(String, SecretString)> {
     let Credentials::Basic { user, password } = Credentials::parse(authorization)? else {
         return None;
     };
     let unescape = |part: &str| {
-        form_urlencoded::parse(format!("x={part}").as_bytes())
+        let field = Zeroizing::new(format!("x={part}"));
+        form_urlencoded::parse(field.as_bytes())
             .next()
             .map(|(_, value)| value.into_owned())
     };
-    Some((unescape(&user)?, unescape(&password)?))
+    Some((unescape(&user)?, unescape(password.expose())?.into()))
 }
 
 #[cfg(test)]

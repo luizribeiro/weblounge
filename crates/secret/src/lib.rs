@@ -8,7 +8,8 @@
 use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+pub use zeroize::Zeroizing;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A secret `T`, overwritten with zeros as it's dropped.
 ///

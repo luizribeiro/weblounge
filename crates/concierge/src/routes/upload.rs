@@ -224,7 +224,7 @@ async fn authenticate(
             user: nick,
             password,
         }) => {
-            if !signin::plausible(&nick, &password) {
+            if !signin::plausible(&nick, password.expose()) {
                 return Ok(Authentication::Refused);
             }
             let now = Instant::now();
@@ -233,7 +233,7 @@ async fn authenticate(
             }
             let uploader = match app
                 .ergo
-                .check_auth(nick.as_str(), password.as_str())
+                .check_auth(nick.as_str(), password.expose())
                 .await?
             {
                 Some(account) => uploader_named(app, account.as_str()).await?,
