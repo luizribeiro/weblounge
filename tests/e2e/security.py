@@ -27,11 +27,17 @@ if TYPE_CHECKING:
 mallory: Account = {"account": "mallory", "password": "an-insider-gone-bad"}
 tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
 sites = ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]
+mallorys_browser = Browser("mallory")
+signed_out: list[str] = []
 pages_and_directives_they_need = [
-    ("weblounge.org", "/", {"script-src", "style-src", "img-src"}),
-    *((members, path, {"script-src", "style-src", "img-src"}) for path in ["/signin", "/no-such-page"]),
-    ("irc.weblounge.org", "/", {"script-src", "style-src", "img-src", "manifest-src"}),
-    *((name, "/no-such-page", {"style-src", "img-src"}) for name in sites if name != members),
+    ("weblounge.org", "/", signed_out, {"script-src", "style-src", "img-src"}),
+    (members, "/signin", signed_out, {"script-src", "style-src", "img-src"}),
+    *(
+        (members, path, mallorys_browser.cookies, {"script-src", "style-src", "img-src"})
+        for path in ["/", "/no-such-page"]
+    ),
+    ("irc.weblounge.org", "/", signed_out, {"script-src", "style-src", "img-src", "manifest-src"}),
+    *((name, "/no-such-page", signed_out, {"style-src", "img-src"}) for name in sites if name != members),
 ]
 
 in_ram, on_disk = "/run/weblounge-secrets", "/var/lib/weblounge-secrets"
@@ -49,8 +55,8 @@ def assert_loopback_only(port, path):
     client.fail(f"curl -s --max-time 3 http://credenza:{port}{path}")
 
 
-def headers_of(name, path):
-    response = https(name, path, "-I").lower()
+def headers_of(name, path, *flags):
+    response = https(name, path, "-I", *flags).lower()
     return dict(line.split(": ", 1) for line in response.strip().splitlines()[1:])
 
 
@@ -353,9 +359,10 @@ with subtest("every site sends HSTS, nosniff, a referrer policy and a CSP that f
             assert "frame-ancestors 'none'" in headers.get("content-security-policy", ""), (name, path, headers)
 
 with subtest("every site's pages, error pages too, load all they need under their CSP, and nothing inline"):
-    for name, path, directives in pages_and_directives_they_need:
-        policy = headers_of(name, path)["content-security-policy"]
-        needs = PageNeeds(https(name, path))
+    assert mallorys_browser.sign_in(**mallory).startswith("303 ")
+    for name, path, cookies, directives in pages_and_directives_they_need:
+        policy = headers_of(name, path, *cookies)["content-security-policy"]
+        needs = PageNeeds(https(name, path, *cookies))
         assert needs.inline == [], (name, needs.inline)
         assert {directive for directive, _ in needs.fetches} == directives, (name, needs.fetches)
         for directive, url in needs.fetches:
@@ -407,8 +414,6 @@ with subtest("the session cookie is host-only, Secure, HttpOnly and SameSite=Lax
     assert "SameSite=Lax" in cookie and "Path=/;" in cookie, cookie
 
 with subtest("a password change from another origin is refused, even with the member's session"):
-    mallorys_browser = Browser("mallory")
-    assert mallorys_browser.sign_in(**mallory).startswith("303 ")
     fields = [f"current={mallory['password']}", "password=chosen-by-evil-1", "confirmation=chosen-by-evil-1"]
     refused = https(
         members,
