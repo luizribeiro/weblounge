@@ -35,12 +35,12 @@ async fn create_root(admin: &Admin, makes_admin: bool) -> anyhow::Result<String>
     admin
         .db
         .insert_invite(&NewInvite {
-            code: &code,
+            code: code.expose(),
             created_by: None,
             created_at: now,
             expires_at: invite_rules::expires_at(now),
             makes_admin,
         })
         .await?;
-    Ok(format!("{}\n", admin.config.invite_url(&code)))
+    Ok(format!("{}\n", admin.config.invite_url(code.expose())))
 }

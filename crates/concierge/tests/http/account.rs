@@ -262,7 +262,7 @@ async fn with_a_code_mailed() -> (Site, String, String) {
         .issue_verification_code(&MemberName::new("alice"), db::now())
         .await;
     let cookie = site.sign_in("alice").await;
-    (site, cookie, issued.unwrap().unwrap().code)
+    (site, cookie, issued.unwrap().unwrap().code.expose().clone())
 }
 
 #[tokio::test]

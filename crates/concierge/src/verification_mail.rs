@@ -5,6 +5,7 @@
 
 use askama::Template;
 use outbox::{Message, Outbox, Subject};
+use secret::SecretString;
 
 use crate::{
     db::{Db, IssuedCode},
@@ -53,7 +54,7 @@ pub struct Batch {
 #[template(path = "verification-email.txt")]
 struct Body<'a> {
     nick: &'a str,
-    link: String,
+    link: SecretString,
     lifetime: String,
     grace_period: String,
     due: String,
@@ -70,7 +71,7 @@ pub fn message(
 ) -> anyhow::Result<Message> {
     let body = Body {
         nick: issued.account.as_str(),
-        link: format!("{public_url}/verify#{}", issued.code),
+        link: format!("{public_url}/verify#{}", issued.code.expose()).into(),
         lifetime: invite_rules::in_words(verification_rules::LIFETIME),
         grace_period: invite_rules::in_words(verification_rules::GRACE_PERIOD),
         due: crate::tree::day_in_words(issued.deadline),
@@ -160,7 +161,7 @@ mod tests {
 
     fn issued(account: &str) -> IssuedCode {
         IssuedCode {
-            code: "q".repeat(link_code::MAILED_LENGTH),
+            code: "q".repeat(link_code::MAILED_LENGTH).into(),
             account: MemberName::new(account),
             email: db::tests::email("bob@example.org"),
             expires_at: verification_rules::expires_at(SENT),

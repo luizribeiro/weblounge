@@ -9,7 +9,7 @@ Please confirm that this is your email address for weblounge.org:
 open this link and press "Confirm my email".
 {%- endif %}
 
-{{ link }}
+{{ link.expose() }}
 
 The link works for {{ lifetime }}. If it stops working, sign in and send
 yourself a new one from the Account tab.

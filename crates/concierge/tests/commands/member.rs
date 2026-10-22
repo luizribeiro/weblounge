@@ -350,7 +350,7 @@ mod send_verification {
         let carols = db
             .issue_verification_code(&MemberName::new("carol"), db::now())
             .await;
-        db.verify_email(&carols.unwrap().unwrap().code, db::now())
+        db.verify_email(carols.unwrap().unwrap().code.expose(), db::now())
             .await
             .unwrap();
         fixture

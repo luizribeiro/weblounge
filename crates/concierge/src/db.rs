@@ -1,9 +1,10 @@
 mod uploads;
 
-use std::{fmt, path::Path};
+use std::path::Path;
 
 use anyhow::Context;
 use common::sqlite;
+use secret::SecretString;
 use sqlx::{SqliteConnection, SqliteExecutor, SqlitePool, migrate::Migrator};
 
 use crate::{
@@ -225,10 +226,9 @@ pub struct BotAccount {
 }
 
 /// A code just issued to verify a member's email, to mail to them once.
-/// Its `Debug` output leaves the code out.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct IssuedCode {
-    pub code: String,
+    pub code: SecretString,
     /// Ergo's canonical spelling of the member's account name.
     pub account: MemberName,
     /// The address it verifies, and goes to.
@@ -241,18 +241,6 @@ pub struct IssuedCode {
 impl link_mail::Issued for IssuedCode {
     fn expires_at(&self) -> i64 {
         self.expires_at
-    }
-}
-
-impl fmt::Debug for IssuedCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IssuedCode")
-            .field("code", &format_args!("<redacted>"))
-            .field("account", &self.account)
-            .field("email", &self.email)
-            .field("expires_at", &self.expires_at)
-            .field("deadline", &self.deadline)
-            .finish()
     }
 }
 
@@ -305,7 +293,7 @@ pub struct Recoverable {
 
 /// A code just issued to reset a member's password, to mail to them once.
 pub struct IssuedReset {
-    pub code: String,
+    pub code: SecretString,
     pub member: Recoverable,
     pub expires_at: i64,
 }
@@ -470,7 +458,7 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         let code = link_code::generate(link_code::MAILED_LENGTH);
-        let code_hash = VerificationCodeHash::of(&code);
+        let code_hash = VerificationCodeHash::of(code.expose());
         let expires_at = verification_rules::expires_at(now);
         sqlx::query!(
             "INSERT INTO verification_codes (code_hash, account, email, created_at, expires_at)
@@ -632,7 +620,7 @@ impl Db {
         .execute(&mut *transaction)
         .await?;
         let code = link_code::generate(link_code::MAILED_LENGTH);
-        let code_hash = ResetCodeHash::of(&code);
+        let code_hash = ResetCodeHash::of(code.expose());
         let expires_at = reset_rules::expires_at(now);
         sqlx::query!(
             "INSERT INTO password_reset_codes (code_hash, account, email, created_at, expires_at)
@@ -1922,8 +1910,16 @@ pub(crate) mod tests {
         assert!(removal.off_the_disk);
         assert!(!files_contain(&dir, b"alice@example.org"));
         assert!(files_contain(&dir, b"bob@example.org"));
-        assert_eq!(db.verification_code(&alices.code).await.unwrap(), None);
-        assert!(db.verification_code(&bobs.code).await.unwrap().is_some());
+        assert_eq!(
+            db.verification_code(alices.code.expose()).await.unwrap(),
+            None
+        );
+        assert!(
+            db.verification_code(bobs.code.expose())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -2329,7 +2325,7 @@ pub(crate) mod tests {
         let (db, _dir) = with_unverified_members().await;
         let issued = issue(&db, "alice", MAILED).await;
         let debug = format!("{issued:?}");
-        assert!(!debug.contains(&issued.code), "{debug}");
+        assert!(!debug.contains(issued.code.expose().as_str()), "{debug}");
         assert!(debug.contains("alice@example.org"), "{debug}");
         assert!(debug.contains("code: <redacted>"), "{debug}");
     }
@@ -2340,7 +2336,7 @@ pub(crate) mod tests {
 
         let issued = issue(&db, "alice", MAILED).await;
 
-        assert_eq!(issued.code.len(), link_code::MAILED_LENGTH);
+        assert_eq!(issued.code.expose().len(), link_code::MAILED_LENGTH);
         let expires_at = verification_rules::expires_at(MAILED);
         assert_eq!(
             (
@@ -2351,7 +2347,7 @@ pub(crate) mod tests {
             ("Alice", "alice@example.org", expires_at)
         );
         assert_eq!(
-            db.verification_code(&issued.code).await.unwrap(),
+            db.verification_code(issued.code.expose()).await.unwrap(),
             Some(VerificationCode {
                 account: MemberName::new("Alice"),
                 email: email("alice@example.org"),
@@ -2360,7 +2356,7 @@ pub(crate) mod tests {
                 replaced_at: None,
             })
         );
-        assert!(!files_contain(&dir, issued.code.as_bytes()));
+        assert!(!files_contain(&dir, issued.code.expose().as_bytes()));
         let alice = db.member("alice").await.unwrap().unwrap();
         assert_eq!(alice.verification_first_sent_at, Some(MAILED));
     }
@@ -2373,17 +2369,21 @@ pub(crate) mod tests {
 
         let second = issue(&db, "alice", MAILED + 60).await;
 
-        assert_ne!(first.code, second.code);
+        assert_ne!(first.code.expose(), second.code.expose());
         assert_eq!(first.deadline, verification_rules::deadline(MAILED));
         assert_eq!(second.deadline, first.deadline);
-        let first = db.verification_code(&first.code).await.unwrap().unwrap();
+        let first = db
+            .verification_code(first.code.expose())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(first.replaced_at, Some(MAILED + 60));
         assert_eq!(
             first.status(MAILED + 60),
             verification_rules::Status::Replaced
         );
         for live in [second.code, bobs.code] {
-            let live = db.verification_code(&live).await.unwrap().unwrap();
+            let live = db.verification_code(live.expose()).await.unwrap().unwrap();
             assert_eq!(live.status(MAILED + 60), verification_rules::Status::Live);
         }
         let alice = db.member("alice").await.unwrap().unwrap();
@@ -2395,12 +2395,16 @@ pub(crate) mod tests {
         let (db, _dir) = with_unverified_members().await;
         let old = issue(&db, "alice", MAILED).await;
         let expired = verification_rules::expires_at(MAILED);
-        let stale = db.verification_code(&old.code).await.unwrap().unwrap();
+        let stale = db
+            .verification_code(old.code.expose())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(stale.status(expired), verification_rules::Status::Expired);
 
         issue(&db, "bob", expired).await;
 
-        assert_eq!(db.verification_code(&old.code).await.unwrap(), None);
+        assert_eq!(db.verification_code(old.code.expose()).await.unwrap(), None);
     }
 
     #[tokio::test]
@@ -2414,7 +2418,7 @@ pub(crate) mod tests {
                 .issue_verification_code(&MemberName::new(account), MAILED)
                 .await
                 .unwrap();
-            assert_eq!(issued, None, "{account}");
+            assert!(issued.is_none(), "{account}");
         }
         let carol = db.member("carol").await.unwrap().unwrap();
         assert_eq!(carol.verification_first_sent_at, None);
@@ -2428,7 +2432,7 @@ pub(crate) mod tests {
         let bobs = issue(&db, "bob", MAILED).await;
         let now = issued.expires_at - 1;
 
-        let verification = db.verify_email(&issued.code, now).await.unwrap();
+        let verification = db.verify_email(issued.code.expose(), now).await.unwrap();
 
         assert!(
             matches!(&verification, Verification::Verified { account } if account.as_str() == "Alice"),
@@ -2436,12 +2440,17 @@ pub(crate) mod tests {
         );
         let alice = db.member("alice").await.unwrap().unwrap();
         assert_eq!(alice.email_verified_at, Some(now));
-        for used_up in [&issued.code, &replaced.code] {
+        for used_up in [issued.code.expose(), replaced.code.expose()] {
             assert_eq!(db.verification_code(used_up).await.unwrap(), None);
             let again = db.verify_email(used_up, now).await.unwrap();
             assert_eq!(again, Verification::Unknown);
         }
-        assert!(db.verification_code(&bobs.code).await.unwrap().is_some());
+        assert!(
+            db.verification_code(bobs.code.expose())
+                .await
+                .unwrap()
+                .is_some()
+        );
         assert_eq!(
             db.member("bob").await.unwrap().unwrap().email_verified_at,
             None
@@ -2456,13 +2465,17 @@ pub(crate) mod tests {
         let expiring = issue(&db, "bob", MAILED).await;
 
         for (code, at, outcome) in [
-            (replaced.code.as_str(), MAILED + 60, Verification::Replaced),
             (
-                expiring.code.as_str(),
+                replaced.code.expose().as_str(),
+                MAILED + 60,
+                Verification::Replaced,
+            ),
+            (
+                expiring.code.expose().as_str(),
                 expiring.expires_at,
                 Verification::Expired,
             ),
-            (&live.code[1..], MAILED + 60, Verification::Unknown),
+            (&live.code.expose()[1..], MAILED + 60, Verification::Unknown),
         ] {
             assert_eq!(db.verify_email(code, at).await.unwrap(), outcome);
         }
@@ -2470,7 +2483,12 @@ pub(crate) mod tests {
             let member = db.member(account).await.unwrap().unwrap();
             assert_eq!(member.email_verified_at, None, "{account}");
         }
-        assert!(db.verification_code(&live.code).await.unwrap().is_some());
+        assert!(
+            db.verification_code(live.code.expose())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -2484,7 +2502,7 @@ pub(crate) mod tests {
         .await
         .unwrap();
 
-        let verification = db.verify_email(&issued.code, MAILED).await.unwrap();
+        let verification = db.verify_email(issued.code.expose(), MAILED).await.unwrap();
 
         assert_eq!(verification, Verification::AddressChanged);
         let alice = db.member("alice").await.unwrap().unwrap();
@@ -2502,12 +2520,17 @@ pub(crate) mod tests {
         .unwrap();
         let issued = issue(&db, "bob", MAILED).await;
 
-        let verification = db.verify_email(&issued.code, MAILED).await.unwrap();
+        let verification = db.verify_email(issued.code.expose(), MAILED).await.unwrap();
 
         assert_eq!(verification, Verification::AddressTaken);
         let bob = db.member("bob").await.unwrap().unwrap();
         assert_eq!(bob.email_verified_at, None);
-        assert!(db.verification_code(&issued.code).await.unwrap().is_some());
+        assert!(
+            db.verification_code(issued.code.expose())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -2518,15 +2541,25 @@ pub(crate) mod tests {
         db.update_settings(&MemberName::new("Alice"), &email("alice@example.org"), true)
             .await
             .unwrap();
-        assert!(db.verification_code(&kept.code).await.unwrap().is_some());
+        assert!(
+            db.verification_code(kept.code.expose())
+                .await
+                .unwrap()
+                .is_some()
+        );
 
         db.update_settings(&MemberName::new("Alice"), &email("alice@example.net"), true)
             .await
             .unwrap();
 
-        let verification = db.verify_email(&kept.code, MAILED).await.unwrap();
+        let verification = db.verify_email(kept.code.expose(), MAILED).await.unwrap();
         assert_eq!(verification, Verification::Unknown);
-        assert!(db.verification_code(&bobs.code).await.unwrap().is_some());
+        assert!(
+            db.verification_code(bobs.code.expose())
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -2581,7 +2614,9 @@ pub(crate) mod tests {
         let expired = verification_rules::expires_at(MAILED);
         issue(&db, "bob", MAILED).await;
         let alices = issue(&db, "alice", expired).await;
-        db.verify_email(&alices.code, expired).await.unwrap();
+        db.verify_email(alices.code.expose(), expired)
+            .await
+            .unwrap();
 
         let progress = db.verification_progress().await.unwrap();
 
@@ -2661,9 +2696,9 @@ pub(crate) mod tests {
             let issued = issue(&db, "CAROL", MAILED).await;
 
             assert_eq!(issued.member, carol());
-            assert_eq!(issued.code.len(), link_code::MAILED_LENGTH);
+            assert_eq!(issued.code.expose().len(), link_code::MAILED_LENGTH);
             assert_eq!(issued.expires_at, reset_rules::expires_at(MAILED));
-            assert!(!files_contain(&dir, issued.code.as_bytes()));
+            assert!(!files_contain(&dir, issued.code.expose().as_bytes()));
         }
 
         #[tokio::test]
@@ -2671,7 +2706,10 @@ pub(crate) mod tests {
             let (db, _dir) = with_unverified_members().await;
             let issued = issue(&db, "carol", MAILED).await;
 
-            let taken = db.take_reset_code(&issued.code, MAILED).await.unwrap();
+            let taken = db
+                .take_reset_code(issued.code.expose(), MAILED)
+                .await
+                .unwrap();
 
             let taken = taken.unwrap();
             assert_eq!(
@@ -2679,7 +2717,9 @@ pub(crate) mod tests {
                 ("carol", "carol@example.org")
             );
             assert_eq!(
-                db.take_reset_code(&issued.code, MAILED).await.unwrap(),
+                db.take_reset_code(issued.code.expose(), MAILED)
+                    .await
+                    .unwrap(),
                 None
             );
         }
@@ -2700,11 +2740,13 @@ pub(crate) mod tests {
 
             assert_eq!(reset_codes(&db).await, 1);
             assert_eq!(
-                db.take_reset_code(&first.code, MAILED + 60).await.unwrap(),
+                db.take_reset_code(first.code.expose(), MAILED + 60)
+                    .await
+                    .unwrap(),
                 None
             );
             assert!(
-                db.take_reset_code(&second.code, MAILED + 60)
+                db.take_reset_code(second.code.expose(), MAILED + 60)
                     .await
                     .unwrap()
                     .is_some()
@@ -2724,9 +2766,11 @@ pub(crate) mod tests {
             let bobs = issue(&db, "bob", MAILED).await;
 
             let just_before = db
-                .take_reset_code(&carols.code, carols.expires_at - 1)
+                .take_reset_code(carols.code.expose(), carols.expires_at - 1)
                 .await;
-            let at_expiry = db.take_reset_code(&bobs.code, bobs.expires_at).await;
+            let at_expiry = db
+                .take_reset_code(bobs.code.expose(), bobs.expires_at)
+                .await;
 
             assert!(just_before.unwrap().is_some());
             assert_eq!(at_expiry.unwrap(), None);
@@ -2746,7 +2790,9 @@ pub(crate) mod tests {
             .await
             .unwrap();
             assert_eq!(
-                db.take_reset_code(&changed.code, MAILED).await.unwrap(),
+                db.take_reset_code(changed.code.expose(), MAILED)
+                    .await
+                    .unwrap(),
                 None
             );
 
@@ -2784,14 +2830,21 @@ pub(crate) mod tests {
             )
             .await
             .unwrap();
-            assert_eq!(db.take_reset_code(&saved.code, MAILED).await.unwrap(), None);
+            assert_eq!(
+                db.take_reset_code(saved.code.expose(), MAILED)
+                    .await
+                    .unwrap(),
+                None
+            );
 
             let removed = issue(&db, "carol", MAILED).await;
             db.remove_member(&MemberName::new("carol"), MAILED)
                 .await
                 .unwrap();
             assert_eq!(
-                db.take_reset_code(&removed.code, MAILED).await.unwrap(),
+                db.take_reset_code(removed.code.expose(), MAILED)
+                    .await
+                    .unwrap(),
                 None
             );
         }
@@ -2801,23 +2854,28 @@ pub(crate) mod tests {
             let (db, _dir) = with_unverified_members().await;
             let issued = issue(&db, "carol", MAILED).await;
             let taken = db
-                .take_reset_code(&issued.code, MAILED)
+                .take_reset_code(issued.code.expose(), MAILED)
                 .await
                 .unwrap()
                 .unwrap();
 
             db.restore_reset_code(&taken).await.unwrap();
 
-            let again = db.take_reset_code(&issued.code, MAILED).await.unwrap();
+            let again = db
+                .take_reset_code(issued.code.expose(), MAILED)
+                .await
+                .unwrap();
             assert_eq!(again.as_ref(), Some(&taken));
             let newer = issue(&db, "carol", MAILED + 60).await;
             db.restore_reset_code(&taken).await.unwrap();
             assert_eq!(
-                db.take_reset_code(&issued.code, MAILED).await.unwrap(),
+                db.take_reset_code(issued.code.expose(), MAILED)
+                    .await
+                    .unwrap(),
                 None
             );
             assert!(
-                db.take_reset_code(&newer.code, MAILED)
+                db.take_reset_code(newer.code.expose(), MAILED)
                     .await
                     .unwrap()
                     .is_some()

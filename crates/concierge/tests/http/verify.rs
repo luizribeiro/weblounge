@@ -13,7 +13,7 @@ async fn with_a_code() -> (Site, String) {
         .db
         .issue_verification_code(&MemberName::new("alice"), db::now())
         .await;
-    (site, issued.unwrap().unwrap().code)
+    (site, issued.unwrap().unwrap().code.expose().clone())
 }
 
 async fn verified(site: &Site, account: &str) -> bool {
@@ -87,7 +87,7 @@ async fn used_unknown_expired_and_malformed_codes_get_the_same_answer() {
         .db
         .issue_verification_code(&MemberName::new("bob"), long_ago)
         .await;
-    let expired = expired.unwrap().unwrap().code;
+    let expired = expired.unwrap().unwrap().code.expose().clone();
     let unknown = "A".repeat(link_code::MAILED_LENGTH);
     let too_long = format!("{unknown}A");
     let odd = format!("{}+", &unknown[1..]);
@@ -157,7 +157,7 @@ async fn an_address_another_member_verified_first_stays_theirs() {
         .db
         .issue_verification_code(&MemberName::new("bob"), db::now())
         .await;
-    confirm(&site, &bobs.unwrap().unwrap().code).await;
+    confirm(&site, bobs.unwrap().unwrap().code.expose()).await;
 
     let (status, page) = confirm(&site, &alices).await;
 

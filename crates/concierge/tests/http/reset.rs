@@ -301,7 +301,12 @@ impl Site {
     async fn reset_code_of(&self, account: &str) -> String {
         let account = MemberName::new(account);
         let issued = self.db.issue_reset_code(&account, db::now()).await;
-        issued.unwrap().expect("a confirmed member").code
+        issued
+            .unwrap()
+            .expect("a confirmed member")
+            .code
+            .expose()
+            .clone()
     }
 
     async fn reset_code(&self) -> String {

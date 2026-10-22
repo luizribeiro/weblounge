@@ -3,6 +3,7 @@
 //! [`crate::secret_hash::SecretHash`]: nothing needs a code back.
 
 use common::random;
+use secret::SecretString;
 
 pub const ALPHABET: &[u8] = random::URL_SAFE;
 pub const HASH_LENGTH: usize = 32;
@@ -11,8 +12,8 @@ pub const HASH_LENGTH: usize = 32;
 pub const MAILED_LENGTH: usize = 43;
 
 /// A new code of `length` characters, none of which a URL needs escaped.
-pub fn generate(length: usize) -> String {
-    random::string(ALPHABET, length)
+pub fn generate(length: usize) -> SecretString {
+    random::string(ALPHABET, length).into()
 }
 
 /// The code in what someone typed into a code field: the code itself, or
@@ -48,6 +49,7 @@ mod tests {
     #[test]
     fn needs_no_escaping_in_a_url() {
         let code = generate(43);
+        let code = code.expose();
         assert_eq!(code.len(), 43);
         assert!(
             code.bytes()
@@ -122,6 +124,6 @@ mod tests {
 
     #[test]
     fn differs_every_time() {
-        assert_ne!(generate(22), generate(22));
+        assert_ne!(generate(22).expose(), generate(22).expose());
     }
 }

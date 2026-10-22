@@ -3,7 +3,7 @@ Hi {{ nick }},
 To choose a new password for weblounge.org, open this link and press
 "Set my password":
 
-{{ link }}
+{{ link.expose() }}
 
 The link works once, within {{ lifetime }}. If you didn't ask to reset
 your password, you can ignore this email; your password stays as it is.

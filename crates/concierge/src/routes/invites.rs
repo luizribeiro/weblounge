@@ -69,7 +69,7 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
     let now = db::now();
     let code = invite_code::generate();
     let invite = NewInvite {
-        code: &code,
+        code: code.expose(),
         created_by: Some(&me.member.account),
         created_at: now,
         expires_at: invite_rules::expires_at(now),
@@ -82,7 +82,7 @@ pub async fn create(State(app): State<AppState>, CurrentMember(me): CurrentMembe
     });
     match created.await {
         Ok(true) => {
-            let url = config::invite_url(&app.invite_links, &code);
+            let url = config::invite_url(&app.invite_links, code.expose());
             render(&NewInvitePage {
                 layout: Layout::new(&app, Some(me.member.account.as_str())).on(Tab::Invites),
                 svg: qr::svg(&url),

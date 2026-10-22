@@ -2,13 +2,15 @@
 
 pub use crate::link_code::{HASH_LENGTH, from_input};
 
+use secret::SecretString;
+
 use crate::link_code;
 
 const LENGTH: usize = 22;
 // The database tells hashed codes from ones kept before hashing by length.
 const _: () = assert!(LENGTH != HASH_LENGTH);
 
-pub fn generate() -> String {
+pub fn generate() -> SecretString {
     link_code::generate(LENGTH)
 }
 
@@ -24,6 +26,6 @@ mod tests {
 
     #[test]
     fn has_its_own_length() {
-        assert_eq!(generate().len(), LENGTH);
+        assert_eq!(generate().expose().len(), LENGTH);
     }
 }

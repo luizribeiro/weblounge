@@ -4,6 +4,7 @@
 
 use askama::Template;
 use outbox::{Message, Outbox, Subject};
+use secret::SecretString;
 
 use crate::{
     db::{Db, IssuedReset},
@@ -24,7 +25,7 @@ pub const RESET_PATH: &str = "/reset";
 #[template(path = "reset-email.txt")]
 struct LinkBody<'a> {
     nick: &'a str,
-    link: String,
+    link: SecretString,
     lifetime: String,
 }
 
@@ -39,7 +40,7 @@ struct ChangedBody<'a> {
 pub fn link_message(issued: &IssuedReset, public_url: &str) -> anyhow::Result<Message> {
     let body = LinkBody {
         nick: issued.member.account.as_str(),
-        link: format!("{public_url}{RESET_PATH}#{}", issued.code),
+        link: format!("{public_url}{RESET_PATH}#{}", issued.code.expose()).into(),
         lifetime: invite_rules::in_words(reset_rules::LIFETIME),
     };
     message(
@@ -125,7 +126,7 @@ mod tests {
 
     fn issued(account: &str) -> IssuedReset {
         IssuedReset {
-            code: "q".repeat(link_code::MAILED_LENGTH),
+            code: "q".repeat(link_code::MAILED_LENGTH).into(),
             member: db::Recoverable {
                 account: MemberName::new(account),
                 email: db::tests::email("bob@example.org"),
@@ -270,7 +271,7 @@ mod tests {
         assert_eq!(error.downcast_ref(), Some(&NoKey));
         assert!(outbox.due(SENT).await.unwrap().is_empty());
         assert!(
-            db.take_reset_code(&last.code, SENT)
+            db.take_reset_code(last.code.expose(), SENT)
                 .await
                 .unwrap()
                 .is_some()
