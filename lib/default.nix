@@ -20,8 +20,12 @@ let
     }
   ];
 
+  # Tests build from hostModules alone, so a new commit doesn't rebuild
+  # every VM test.
+  revision.system.configurationRevision = self.rev or self.dirtyRev or null;
+
   hosts = lib.genAttrs hostNames
-    (name: lib.nixosSystem { modules = hostModules name; });
+    (name: lib.nixosSystem { modules = hostModules name ++ [ revision ]; });
 
   systemOf = host: host.pkgs.stdenv.hostPlatform.system;
 
