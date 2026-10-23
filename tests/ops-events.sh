@@ -7,7 +7,7 @@ failures=0
 setup() {
   OPS_ROOT=$(mktemp -d)
   export OPS_ROOT
-  mkdir -p "$OPS_ROOT"/{stub,stub/active,run/ops-events/failed,run/nixos,proc,systems}
+  mkdir -p "$OPS_ROOT"/{stub/active,run/ops-events/failed,run/nixos,var/lib/ops-events,proc,systems}
   echo running >"$OPS_ROOT/stub/system-state"
   : >"$OPS_ROOT/proc/locks"
   touch "$OPS_ROOT/run/nixos/switch-to-configuration.lock"
@@ -159,6 +159,38 @@ ops-event started nginx
 expect "starts during a deploy post nothing themselves" "" "$(calls)"
 expect "starts during a deploy go in its line" "concierge nginx" "$(xargs <"$OPS_ROOT/run/ops-events/restarted")"
 expect "a deploy that restarts a failed unit clears its failure" "" "$(ls "$OPS_ROOT/run/ops-events/failed")"
+
+setup
+stub system-state starting
+ops-event boot
+expect "a first boot is a clean one" "start --no-block ops-notify@booted.service" "$(calls)"
+rm "$OPS_ROOT/stub/calls"
+ops-event boot
+expect "a boot that finds the last one never shut down followed a crash" \
+  "start --no-block ops-notify@crash-booted.service" "$(calls)"
+rm "$OPS_ROOT/stub/calls" "$OPS_ROOT/var/lib/ops-events/up"
+stub system-state running
+ops-event boot
+expect "a start outside a boot posts nothing, but marks the host up" "yes" \
+  "$(calls)$([ -e "$OPS_ROOT/var/lib/ops-events/up" ] && echo yes)"
+stub .FinishTimestampMonotonic 23400000
+expect "a boot's line gives its length and kernel" \
+  "credenza booted after 23s (kernel $(uname -r))" "$(ops-event line booted)"
+
+setup
+stub louro-status '{"connected": true, "nick": "bender", "channels": ["#ops"]}'
+stub jobs "  123 ctrl-alt-del.target start   waiting"
+ops-event shutdown
+stub jobs "124 poweroff.target start waiting"
+ops-event shutdown
+stub jobs ""
+ops-event shutdown
+expect "a reboot and a power-off say so, a stop by hand nothing" \
+  "credenza rebooting
+credenza shutting down" "$(cat "$OPS_ROOT/stub/sent")"
+touch "$OPS_ROOT/var/lib/ops-events/up"
+ops-event down
+expect "a clean shutdown clears the marker" "no" "$([ -e "$OPS_ROOT/var/lib/ops-events/up" ] && echo yes || echo no)"
 
 setup
 expect "ops-notify needs a line" "2" "$(ops-notify 2>/dev/null || echo $?)"

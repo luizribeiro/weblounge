@@ -1,13 +1,15 @@
 # shellcheck shell=bash
 # Usage: ops-event started UNIT | record INSTANCE | switch TOPLEVEL ACTION
-#                  | post INSTANCE
+#                  | boot | shutdown | down | post INSTANCE
 # The host's major events, as lines in #ops. The hooks (started, switch,
-# and record, which ops-notify@ runs first) run as root: they keep the
-# little state there is and start ops-notify@<event>[:unit], whose
-# sandboxed post writes the line and hands it to ops-notify.
+# boot, down, and record, which ops-notify@ runs first) run as root:
+# they keep the little state there is and start ops-notify@<event>[:unit],
+# whose sandboxed post writes the line and hands it to ops-notify. No unit
+# starts while the host goes down, so shutdown posts its line itself.
 
 root=${OPS_ROOT:-}
 state=$root/run/ops-events
+persistent=$root/var/lib/ops-events
 switch_lock=$root/run/nixos/switch-to-configuration.lock
 current_system=$root/run/current-system
 # The trial's timer, as scripts/push names it.
@@ -104,6 +106,30 @@ switch() {
   esac
 }
 
+# The marker lives from boot to a clean shutdown, so a boot that finds it
+# follows a crash or a power loss.
+boot() {
+  if booting; then
+    if [ -e "$persistent/up" ]; then notify crash-booted; else notify booted; fi
+  fi
+  touch "$persistent/up"
+}
+
+shutdown() {
+  local jobs event
+  jobs=$(systemctl list-jobs --no-legend)
+  if grep -qE '(^| )(reboot|ctrl-alt-del|kexec|soft-reboot)\.target ' <<<"$jobs"; then
+    event=rebooting
+  elif grep -qE '(^| )(poweroff|halt)\.target ' <<<"$jobs"; then
+    event=shutting-down
+  fi
+  [ -z "${event:-}" ] || post "$event"
+}
+
+down() {
+  rm -f "$persistent/up"
+}
+
 revision_of() {
   local rev
   if ! rev=$("$1/sw/bin/nixos-version" --configuration-revision 2>/dev/null); then
@@ -130,6 +156,14 @@ wait_for_switch() {
   done
 }
 
+boot_seconds() {
+  local finished
+  timeout 600 systemctl is-system-running --wait >/dev/null || true
+  finished=$(systemctl show -P FinishTimestampMonotonic)
+  ((finished > 0)) || finished=$(awk '{ printf "%d", $1 * 1000000 }' "$root/proc/uptime")
+  echo $(((finished + 500000) / 1000000))
+}
+
 line() {
   local event=${1%%:*} unit=${1#*:}
   case $event in
@@ -154,6 +188,10 @@ line() {
       esac
       ;;
     kept) echo "kept $(revision_of "$current_system")" ;;
+    booted) echo "$OPS_HOST booted after $(boot_seconds)s (kernel $(uname -r))" ;;
+    crash-booted) echo "$OPS_HOST booted after a crash or power loss (kernel $(uname -r))" ;;
+    rebooting) echo "$OPS_HOST rebooting" ;;
+    shutting-down) echo "$OPS_HOST shutting down" ;;
     *)
       echo "ops-event: no such event: $event" >&2
       return 2
@@ -164,16 +202,22 @@ line() {
 post() {
   local line
   line=$(line "$1")
-  ops-notify "$line"
+  case $1 in
+    # The host is going down, and won't wait long.
+    rebooting | shutting-down) OPS_NOTIFY_PATIENCE=15 ops-notify "$line" ;;
+    # louro comes up last in a boot, behind Ergo, concierge and bender's account.
+    booted | crash-booted) OPS_NOTIFY_PATIENCE=600 ops-notify "$line" ;;
+    *) ops-notify "$line" ;;
+  esac
 }
 
 umask 022
 command=${1:-}
 shift || true
 case $command in
-  started | record | switch | post | line) "$command" "$@" ;;
+  started | record | switch | boot | shutdown | down | post | line) "$command" "$@" ;;
   *)
-    echo "usage: ops-event started UNIT | record INSTANCE | switch TOPLEVEL ACTION | post INSTANCE" >&2
+    echo "usage: ops-event started UNIT | record INSTANCE | switch TOPLEVEL ACTION | boot | shutdown | down | post INSTANCE" >&2
     exit 2
     ;;
 esac

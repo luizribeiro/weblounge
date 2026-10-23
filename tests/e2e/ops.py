@@ -1,3 +1,4 @@
+import re
 import shlex
 from typing import TYPE_CHECKING
 
@@ -6,6 +7,7 @@ if TYPE_CHECKING:
     from helpers import Account, add_member, ops_lines, register, wait_for_bender, wait_for_ops_line
 
 olive: Account = {"account": "olive", "password": "watches-the-ops-channel"}
+booted = r"credenza booted after \d+s \(kernel \d+\.\d+\S*\)"
 
 
 def lines_so_far() -> int:
@@ -83,3 +85,23 @@ with subtest("a service that gives up restarting says so, and says when it's bac
     )
     lines = wait_for_line("concierge-mailer is back", since)
     assert lines == ["concierge-mailer failed — gave up restarting", "concierge-mailer is back"], lines
+
+with subtest("a clean shutdown and the boot after it say so, with the boot's length and kernel"):
+    since = lines_so_far()
+    credenza.shutdown()
+    credenza.start()
+    lines = wait_for_line(booted, since)
+    assert lines[0] == "credenza shutting down" and re.fullmatch(booted, lines[1]), lines
+
+with subtest("a boot after a crash says so"):
+    credenza.crash()
+    credenza.start(allow_reboot=True)
+    # The crash may take Ergo's last lines of history with it, so this counts from the start.
+    wait_for_line(r"credenza booted after a crash or power loss \(kernel \d+\.\d+\S*\)", since=0)
+
+with subtest("a reboot says so, and the boot posts nothing of the services it starts"):
+    since = lines_so_far()
+    credenza.reboot()
+    lines = wait_for_line(booted, since)
+    assert lines[0] == "credenza rebooting" and re.fullmatch(booted, lines[1]), lines
+    assert len(lines) == 2, lines

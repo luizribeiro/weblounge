@@ -8,7 +8,9 @@ let
     case "$*" in
       "start --no-block "*) echo "$*" >>"$stub/calls" ;;
       is-system-running) cat "$stub/system-state" ;;
+      "is-system-running --wait") ;;
       "-q is-active "*) [ -e "$stub/active/$3" ] ;;
+      "list-jobs --no-legend") cat "$stub/jobs" 2>/dev/null || true ;;
       "show -P "*) cat "$stub/$4.$3" ;;
       *) echo "systemctl stand-in: $*" >&2; exit 1 ;;
     esac
@@ -25,6 +27,7 @@ let
   opsEvents = pkgs.callPackage ../pkgs/ops-events {
     systemd = systemctl;
     inherit louro;
+    host = "credenza";
     socket = "/run/louro/louro.sock";
   };
 in
