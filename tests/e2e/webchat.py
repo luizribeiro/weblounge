@@ -170,14 +170,14 @@ with subtest("gamja shows each line once when one arrives while it catches up af
 
 with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web client's login and bender take them"):
     add_member("luiz", "plain-old-vanilla")
-    credenza.succeed("systemctl restart bender-account.service weblounge-bot-bender.service")
+    credenza.succeed("systemctl restart bender-account.service louro.service")
     in_ram = [
         f"/run/weblounge-secrets/{name}" for name in ["ergo-api-token", "oauth-introspection-secret", "bender-password"]
     ]
     before = credenza.succeed(shlex.join(["cat", *in_ram])).split()
     credenza.shutdown()
     credenza.start()
-    credenza.wait_for_unit("weblounge-bot-bender.service")
+    credenza.wait_for_unit("louro.service")
     credenza.wait_for_open_port(8080)
     credenza.wait_for_open_port(8089)
     after = credenza.succeed(shlex.join(["cat", *in_ram])).split()

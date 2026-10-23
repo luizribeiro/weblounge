@@ -1,4 +1,4 @@
-{ self, nixpkgs, disko, sops-nix, crane, advisory-db, ... }:
+{ self, nixpkgs, disko, sops-nix, louro, crane, advisory-db, ... }:
 
 let
   inherit (nixpkgs) lib;
@@ -11,6 +11,7 @@ let
   hostModules = name: [
     disko.nixosModules.disko
     sops-nix.nixosModules.sops
+    louro.nixosModules.default
     ../modules
     ../hosts/${name}
     {

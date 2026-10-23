@@ -181,8 +181,8 @@ with subtest("the generated secrets stay out of the Nix store, readable by root 
     )
     concierge_config = "systemctl cat concierge; cat $(readlink -f $(command -v concierge-admin))"
     bender_config = (
-        "systemctl cat weblounge-bot-bender bender-account; "
-        "cat $(systemctl show -P ExecStart bender-account | grep -o '/nix/store/[^ ;]*')"
+        "systemctl cat louro bender-account; "
+        "cat $(systemctl show -P ExecStart louro bender-account | grep -o '/nix/store/[^ ;]*')"
     )
     for secret, config in [
         ("ergo-api-token", ergo_config),
@@ -241,7 +241,7 @@ with subtest("ergo, concierge and its other units, nginx, bender and the vacuum 
         "concierge-expire-uploads",
         "concierge-mailer",
         "nginx",
-        "weblounge-bot-bender",
+        "louro",
         "concierge-vacuum",
         "concierge-mailer-vacuum",
         "ergochat-vacuum",

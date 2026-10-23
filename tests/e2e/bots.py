@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         irc,
         irc_command,
         register,
+        wait_for_bender,
     )
 
 luiz: Account = {"account": "luiz", "password": "plain-old-vanilla"}
@@ -61,17 +62,10 @@ def bots_browser(owner: Account, action, name):
     return client.succeed(command).strip().splitlines()[-1]
 
 
-def wait_for_bender_to_answer():
-    client.wait_until_succeeds(
-        irc_command("PRIVMSG bender :!ping", **alice) + " | grep '^:bender!\\S* PRIVMSG alice :pong' >/dev/null",
-        timeout=60,
-    )
-
-
 with subtest("bender waits for its owner to be a member"):
     credenza.wait_for_unit("concierge.service")
     credenza.wait_until_fails("systemctl is-active bender-account.service", timeout=60)
-    credenza.fail("systemctl is-active weblounge-bot-bender.service")
+    credenza.fail("systemctl is-active louro.service")
 
 with subtest("luiz becomes a member and founds #lounge, as on credenza"):
     add_member(**luiz)
@@ -79,60 +73,59 @@ with subtest("luiz becomes a member and founds #lounge, as on credenza"):
     assert "Channel #lounge successfully registered" in session, session
 
 with subtest("once its owner is a member, bender registers itself as their bot"):
-    credenza.succeed("systemctl start weblounge-bot-bender.service")
+    credenza.succeed("systemctl start louro.service")
     bots = concierge_admin("bot", "list", "luiz")
     assert re.match(r"bender luiz \d{4}-\d\d-\d\d$", bots), bots
 
-with subtest("bender joins #bots marked as a bot, and answers !ping"):
+with subtest("louro logs bender in to #bots and #ops, marked as a bot, from luiz's vhost"):
     register(**alice)
-    client.wait_until_succeeds(
-        irc_command("JOIN #bots", "NAMES #bots", **alice) + " | grep ' 353 alice = #bots :.*bender' >/dev/null",
-        timeout=60,
-    )
-    session = irc("PRIVMSG #bots :!ping", "WHOIS bender", **alice)
-    assert re.search(r"^:bender!\S+ PRIVMSG #bots :alice: pong", session, re.M), session
+    wait_for_bender()
+    session = irc("JOIN #bots", "JOIN #ops", "WHOIS bender", **alice)
+    for channel in ["#bots", "#ops"]:
+        assert re.search(rf" 353 alice [=*@] {channel} :.*\bbender\b", session), (channel, session)
     assert " 335 alice bender " in session, session
+    assert re.search(r"^:\S+ 311 alice bender \S+ weblounge/bot/luiz ", session, re.M), session
 
 with subtest("a restart puts back bender's password, whatever it was changed to"):
     concierge_admin("bot", "reset-password", "bender")
-    credenza.succeed("systemctl restart bender-account.service weblounge-bot-bender.service")
-    wait_for_bender_to_answer()
+    credenza.succeed("systemctl restart bender-account.service louro.service")
+    wait_for_bender()
 
 with subtest("bender logs in again after its password's generator and its account restart, as a deploy may do"):
     password = credenza.succeed("cat /run/weblounge-secrets/bender-password")
     credenza.succeed("systemctl stop weblounge-secrets")
-    credenza.fail("systemctl is-active weblounge-bot-bender.service")
-    credenza.succeed("systemctl start weblounge-bot-bender.service")
+    credenza.fail("systemctl is-active louro.service")
+    credenza.succeed("systemctl start louro.service")
     assert credenza.succeed("cat /run/weblounge-secrets/bender-password") == password
-    wait_for_bender_to_answer()
+    wait_for_bender()
 
 with subtest("a deploy that changes concierge restarts it but leaves bender connected"):
-    concierge, bender = main_pid("concierge"), main_pid("weblounge-bot-bender")
+    concierge, bender = main_pid("concierge"), main_pid("louro")
     credenza.succeed("/run/booted-system/specialisation/changed-concierge/bin/switch-to-configuration test")
     credenza.wait_for_unit("concierge.service")
     assert main_pid("concierge") != concierge
-    assert main_pid("weblounge-bot-bender") == bender
+    assert main_pid("louro") == bender
 
 with subtest("bender reaches credenza's loopback alone, so a bad dependency can't send its password off"):
     nginx = "curl -sk -o /dev/null --max-time 3 https://{}"
     public = credenza.succeed("ip -4 -o addr show eth1 | awk '{print $4}' | cut -d/ -f1").strip()
-    credenza.succeed(in_cgroup_of("weblounge-bot-bender.service", nginx.format("127.0.0.1")))
-    credenza.fail(in_cgroup_of("weblounge-bot-bender.service", nginx.format(public)))
+    credenza.succeed(in_cgroup_of("louro.service", nginx.format("127.0.0.1")))
+    credenza.fail(in_cgroup_of("louro.service", nginx.format(public)))
     credenza.succeed(nginx.format(public))
 
 with subtest("a deploy that restarts ergo and bender together starts bender once ergo is ready"):
-    restarts = credenza.succeed("systemctl show -P NRestarts weblounge-bot-bender").strip()
-    credenza.succeed("systemctl restart ergochat.service weblounge-bot-bender.service")
-    credenza.wait_for_unit("weblounge-bot-bender.service")
-    assert credenza.succeed("systemctl show -P NRestarts weblounge-bot-bender").strip() == restarts
+    restarts = credenza.succeed("systemctl show -P NRestarts louro").strip()
+    credenza.succeed("systemctl restart ergochat.service louro.service")
+    credenza.wait_for_unit("louro.service")
+    assert credenza.succeed("systemctl show -P NRestarts louro").strip() == restarts
 
 with subtest("going back to secrets on disk, and deploying them to RAM again, keeps bender and concierge working"):
     for system in ["/run/booted-system/specialisation/secrets-on-disk", "/run/booted-system"]:
         credenza.succeed(f"{system}/bin/switch-to-configuration test")
-        credenza.wait_for_unit("weblounge-bot-bender.service")
+        credenza.wait_for_unit("louro.service")
         credenza.wait_for_open_port(8089)
         assert "ergo: http://127.0.0.1:8089/ answers" in concierge_admin("status"), system
-        wait_for_bender_to_answer()
+        wait_for_bender()
         broken = credenza.succeed("systemctl list-units --no-legend --plain --state=failed,auto-restart")
         assert broken == "", (system, broken)
 
@@ -147,14 +140,14 @@ with subtest("bots connect from their owner's vhost, members from the network's 
 with subtest("once #lounge's founder bans bots' hosts, bots stay out of it but still join #bots"):
     session = irc("MODE #lounge +b *!*@weblounge/bot/*", "MODE #lounge b", **luiz)
     assert re.search(r" 367 luiz #lounge \*!\*@weblounge/bot/\* ", session), session
-    credenza.succeed("systemctl restart weblounge-bot-bender.service")
+    credenza.succeed("systemctl restart louro.service")
     wait_for_bender_in_bots_alone()
     assert_kept_out_of_lounge()
     session = irc(**zoe)
     assert re.search(r"^:zoe!~u@weblounge JOIN #lounge", session, re.M), session
 
 with subtest("vhosts and the ban survive an Ergo restart"):
-    credenza.succeed("systemctl restart ergochat.service weblounge-bot-bender.service")
+    credenza.succeed("systemctl restart ergochat.service louro.service")
     credenza.wait_for_open_port(8089)
     wait_for_bender_in_bots_alone()
     assert host_of("bender") == "weblounge/bot/luiz"

@@ -77,7 +77,7 @@ with subtest("systemd knows every setting in credenza's units, so no sandbox opt
 with subtest("the deploy checks pass on a healthy credenza, and name a unit that failed"):
     mail.wait_for_open_port(465)
     add_member("luiz", "plain-old-vanilla")
-    credenza.succeed("systemctl restart bender-account.service weblounge-bot-bender.service")
+    credenza.succeed("systemctl restart bender-account.service louro.service")
     credenza.succeed("/run/current-system/deploy-checks-host")
     credenza.succeed("systemd-run --unit=doomed false")
     status, report = credenza.execute("DEPLOY_CHECKS_TIMEOUT=3 /run/current-system/deploy-checks-host 2>&1")

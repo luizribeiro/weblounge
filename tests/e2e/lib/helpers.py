@@ -47,6 +47,18 @@ def irc(*commands: str, machine: "QemuMachine" = client, **options: str) -> str:
     return machine.succeed(irc_command(*commands, **options))
 
 
+def wait_for_bender(timeout: int = 60) -> None:
+    """Once louro, which holds bender's connection, has it logged in and in #bots and #ops."""
+    deadline = time.monotonic() + timeout
+    while True:
+        status, output = credenza.execute("louro status")
+        louro = json.loads(output) if status == 0 else {}
+        if louro.get("connected") and {"#bots", "#ops"} <= set(louro.get("channels", [])):
+            return
+        assert time.monotonic() < deadline, f"bender isn't in #bots and #ops after {timeout}s: {output}"
+        time.sleep(1)
+
+
 def https(name: str, path: str = "/", *flags: str) -> str:
     address = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
     return client.succeed(

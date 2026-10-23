@@ -21,6 +21,13 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # The daemon that holds bender's IRC connection.
+    louro = {
+      url = "github:luizribeiro/louro";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.crane.follows = "crane";
+      inputs.git-hooks.follows = "git-hooks";
+    };
   };
 
   outputs = { nixpkgs, git-hooks, ... } @ inputs:
