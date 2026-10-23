@@ -59,6 +59,35 @@ def wait_for_bender(timeout: int = 60) -> None:
         time.sleep(1)
 
 
+def ops_history(account: str, password: str) -> list[str] | None:
+    """What bender has said in #ops, oldest first, from the channel's history; None while IRC is down."""
+    commands = ["CAP REQ :batch message-tags draft/chathistory", "JOIN #ops", "CHATHISTORY LATEST #ops * 100"]
+    status, session = client.execute(irc_command(*commands, account=account, password=password))
+    if status != 0:
+        return None
+    lines: dict[str, str] = {}
+    for msgid, text in re.findall(r"^@\S*?\bmsgid=([^;\s]+)\S* :bender!\S+ PRIVMSG #ops :(.*)$", session, re.M):
+        lines.setdefault(msgid, text)
+    return list(lines.values())
+
+
+def ops_lines(account: str, password: str) -> list[str]:
+    lines = ops_history(account, password)
+    assert lines is not None, "IRC is down"
+    return lines
+
+
+def wait_for_ops_line(pattern: str, account: str, password: str, since: int = 0, timeout: int = 400) -> list[str]:
+    """The lines in #ops from the since'th on, once one of them matches pattern, riding out a reboot."""
+    deadline = time.monotonic() + timeout
+    while True:
+        lines = (ops_history(account, password) or [])[since:]
+        if any(re.fullmatch(pattern, line) for line in lines):
+            return lines
+        assert time.monotonic() < deadline, f"nothing in #ops matches {pattern!r} after {timeout}s: {lines}"
+        time.sleep(2)
+
+
 def https(name: str, path: str = "/", *flags: str) -> str:
     address = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
     return client.succeed(

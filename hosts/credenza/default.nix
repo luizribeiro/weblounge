@@ -8,6 +8,7 @@
     ../../services/concierge.nix
     ../../services/webchat.nix
     ../../services/bender.nix
+    ../../services/ops-events.nix
     ../../services/mail.nix
   ];
 
