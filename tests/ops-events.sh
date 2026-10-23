@@ -7,8 +7,34 @@ failures=0
 setup() {
   OPS_ROOT=$(mktemp -d)
   export OPS_ROOT
-  mkdir -p "$OPS_ROOT"/{stub,stub/active,run/ops-events/failed}
+  mkdir -p "$OPS_ROOT"/{stub,stub/active,run/ops-events/failed,run/nixos,proc,systems}
   echo running >"$OPS_ROOT/stub/system-state"
+  : >"$OPS_ROOT/proc/locks"
+  touch "$OPS_ROOT/run/nixos/switch-to-configuration.lock"
+  system old ""
+  ln -sfn "$OPS_ROOT/systems/old" "$OPS_ROOT/run/current-system"
+}
+
+# A system whose nixos-version knows the revision given, if any.
+system() {
+  mkdir -p "$OPS_ROOT/systems/$1/sw/bin"
+  local version=$OPS_ROOT/systems/$1/sw/bin/nixos-version
+  if [ -n "$2" ]; then
+    printf '#!%s\necho %s\n' "$BASH" "$2" >"$version"
+  else
+    printf '#!%s\nexit 1\n' "$BASH" >"$version"
+  fi
+  chmod +x "$version"
+}
+
+switch_to() {
+  ln -sfn "$OPS_ROOT/systems/$1" "$OPS_ROOT/run/current-system"
+}
+
+hold_switch_lock() {
+  local major minor inode
+  read -r major minor inode < <(stat -c '%Hd %Ld %i' "$OPS_ROOT/run/nixos/switch-to-configuration.lock")
+  printf '1: FLOCK  ADVISORY  WRITE 4242 %02x:%02x:%d 0 EOF\n' "$major" "$minor" "$inode" >"$OPS_ROOT/proc/locks"
 }
 
 stub() {
@@ -77,6 +103,62 @@ ops-event record failed:concierge
 expect "a unit left failed is remembered" "concierge" "$(ls "$OPS_ROOT/run/ops-events/failed")"
 ops-event record booted
 expect "other events need no record" "concierge" "$(ls "$OPS_ROOT/run/ops-events/failed")"
+
+setup
+system new 0123456789abcdef0123456789abcdef01234567
+switch_to new
+expect "a deploy names the revision, short" "deployed 0123456" "$(ops-event line deployed)"
+printf '%s\n' concierge ergochat concierge >"$OPS_ROOT/run/ops-events/restarted"
+expect "a deploy lists what it restarted, once each" \
+  "deployed 0123456 (on trial) — restarted: concierge, ergochat" "$(ops-event line trial)"
+system dirty 0123456789abcdef0123456789abcdef01234567-dirty
+switch_to dirty
+expect "a dirty tree says so" \
+  "rolled back to dirty tree on 0123456 — restarted: concierge, ergochat" "$(ops-event line rolled-back)"
+switch_to old
+expect "a system without a revision says so" "kept an unknown revision" "$(ops-event line kept)"
+
+setup
+old=$(readlink -f "$OPS_ROOT/run/current-system")
+system new 0123456789abcdef0123456789abcdef01234567
+new=$OPS_ROOT/systems/new
+echo stale >"$OPS_ROOT/run/ops-events/restarted"
+touch "$OPS_ROOT/stub/active/weblounge-rollback.timer"
+ops-event switch "$new" test
+expect "a switch while a push's rollback is armed is a trial" "start --no-block ops-notify@trial.service" "$(calls)"
+expect "a trial remembers the system it may go back to" "$old" "$(cat "$OPS_ROOT/run/ops-events/trial")"
+expect "a switch forgets the last one's restarts" "" "$(cat "$OPS_ROOT/run/ops-events/restarted")"
+switch_to new
+rm "$OPS_ROOT/stub/calls" "$OPS_ROOT/stub/active/weblounge-rollback.timer"
+ops-event switch "$new" boot
+expect "making the trial's system the boot default keeps it" "start --no-block ops-notify@kept.service" "$(calls)"
+rm "$OPS_ROOT/stub/calls"
+ops-event switch "$new" boot
+ops-event switch "$new" test
+expect "booting or activating the running system again says nothing" "" "$(calls)"
+ops-event switch "$old" switch
+expect "a switch with no trial is a plain deploy" "start --no-block ops-notify@deployed.service" "$(calls)"
+
+setup
+old=$(readlink -f "$OPS_ROOT/run/current-system")
+system new ""
+touch "$OPS_ROOT/stub/active/weblounge-rollback.timer"
+ops-event switch "$OPS_ROOT/systems/new" test
+switch_to new
+rm "$OPS_ROOT/stub/calls"
+ops-event switch "$old" test
+expect "a switch back to the trial's old system is a rollback" "start --no-block ops-notify@rolled-back.service" "$(calls)"
+expect "a rollback ends the trial" "no" "$([ -e "$OPS_ROOT/run/ops-events/trial" ] && echo yes || echo no)"
+
+setup
+stub concierge.NRestarts 0
+hold_switch_lock
+touch "$OPS_ROOT/run/ops-events/failed/concierge"
+ops-event started concierge
+ops-event started nginx
+expect "starts during a deploy post nothing themselves" "" "$(calls)"
+expect "starts during a deploy go in its line" "concierge nginx" "$(xargs <"$OPS_ROOT/run/ops-events/restarted")"
+expect "a deploy that restarts a failed unit clears its failure" "" "$(ls "$OPS_ROOT/run/ops-events/failed")"
 
 setup
 expect "ops-notify needs a line" "2" "$(ops-notify 2>/dev/null || echo $?)"

@@ -1,6 +1,6 @@
 # The host's major events, one plain line each in #ops, through bender's
-# louro: the key services' crashes, failures and recoveries. ops-notify
-# posts a line of root's.
+# louro: deploys and rollbacks, and the key services' crashes, failures
+# and recoveries. ops-notify posts a line of root's.
 { config, lib, pkgs, ... }:
 
 let
@@ -16,7 +16,9 @@ let
     (lib.attrNames config.security.acme.certs);
 
   reportsFailure.onFailure = [ "ops-notify@failed:%N.service" ];
-  # Not in serviceConfig, which concierge-admin and the mailer's check copy.
+  # Without an order, so it looks for a deploy while the switch that
+  # (re)started the service still runs. Not in serviceConfig, which
+  # concierge-admin and the mailer's check copy.
   reportsStart = name: { wants = [ "ops-started@${name}.service" ]; };
 
   # What may post to #ops: louro's group, and nothing else.
@@ -27,6 +29,8 @@ let
     PrivateNetwork = true;
     # louro's socket and systemd's bus.
     RestrictAddressFamilies = [ "AF_UNIX" ];
+    # /proc/locks tells when a deploy is done.
+    ProcSubset = "all";
   };
 in
 {
@@ -39,12 +43,14 @@ in
     "d /run/ops-events/failed 0755 root root -"
   ];
 
+  system.preSwitchChecks.ops-events = ''${opsEvent} switch "$1" "$2" || true'';
+
   systemd.services = lib.mkMerge [
     (lib.genAttrs keyServices (name: reportsFailure // reportsStart name))
     (lib.genAttrs certificateUnits (_: reportsFailure))
     {
       "ops-started@" = {
-        description = "Tell #ops of %i's start, unless a boot covers it";
+        description = "Tell #ops of %i's start, unless a boot or deploy covers it";
         restartIfChanged = false;
         serviceConfig = {
           Type = "oneshot";
@@ -53,7 +59,7 @@ in
         };
       };
 
-      # One line, ops-notify@<event>:<unit>, each its own run.
+      # One line, ops-notify@<event>[:<unit>], each its own run.
       "ops-notify@" = {
         description = "Post %i to #ops";
         # A deploy that changes it leaves the one waiting to post alone.

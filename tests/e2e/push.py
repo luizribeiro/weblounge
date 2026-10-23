@@ -1,9 +1,12 @@
+import re
 import shlex
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import add_member
+    from helpers import Account, add_member, ops_lines, wait_for_ops_line
+
+luiz: Account = {"account": "luiz", "password": "plain-old-vanilla"}
 
 ssh_options = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
 
@@ -26,7 +29,7 @@ def boots_into() -> str:
 
 
 credenza.wait_for_unit("multi-user.target")
-add_member("luiz", "plain-old-vanilla")
+add_member(**luiz)
 credenza.succeed("systemctl restart bender-account.service louro.service")
 client.succeed("ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/id_ed25519")
 credenza.succeed(
@@ -63,3 +66,13 @@ with subtest("a push of a healthy system keeps it, and boots into it"):
     for check in ["Ergo's API answers its token", "IRC turns away clients that don't log in"]:
         assert f"✓ {check}" in output, (check, output)
     assert running() == "healthy" and boots_into() == client.succeed("readlink -f /etc/variants/healthy"), output
+
+with subtest("#ops hears of every trial, and of whether it was kept or rolled back"):
+    wait_for_ops_line("kept an unknown revision", **luiz)
+    kinds = [
+        re.sub(r" — restarted: .*", "", line)
+        for line in ops_lines(**luiz)
+        if re.match(r"deployed |rolled back |kept ", line)
+    ]
+    trial, rolled_back = "deployed an unknown revision (on trial)", "rolled back to an unknown revision"
+    assert kinds == [trial, rolled_back] * 4 + [trial, "kept an unknown revision"], kinds

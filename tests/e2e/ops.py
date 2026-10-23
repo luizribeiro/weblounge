@@ -49,6 +49,12 @@ with subtest("louro speaks in #ops alone"):
         status, output = credenza.execute(f"louro send {shlex.quote(target)} hello 2>&1")
         assert status == 5, (target, status, output)
 
+with subtest("a deploy says what it deployed and restarted, and the restarts say nothing of their own"):
+    since = lines_so_far()
+    credenza.succeed("/run/booted-system/specialisation/deployed/bin/switch-to-configuration test")
+    lines = wait_for_line(r"deployed 0123456 — restarted: (.*, )?concierge(, .*)?", since)
+    assert not any(line.startswith("concierge") for line in lines), lines
+
 with subtest("a crash and the restart after it say so, with the restart's count and where to look"):
     since = lines_so_far()
     credenza.succeed(f"kill -KILL {main_pid('concierge')}")

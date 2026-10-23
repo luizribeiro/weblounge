@@ -8,6 +8,7 @@ let
     case "$*" in
       "start --no-block "*) echo "$*" >>"$stub/calls" ;;
       is-system-running) cat "$stub/system-state" ;;
+      "-q is-active "*) [ -e "$stub/active/$3" ] ;;
       "show -P "*) cat "$stub/$4.$3" ;;
       *) echo "systemctl stand-in: $*" >&2; exit 1 ;;
     esac
