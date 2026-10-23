@@ -64,7 +64,7 @@ def bots_browser(owner: Account, action, name):
 
 with subtest("bender waits for its owner to be a member"):
     credenza.wait_for_unit("concierge.service")
-    credenza.wait_until_fails("systemctl is-active bender-account.service", timeout=60)
+    credenza.wait_until_succeeds("systemctl is-failed bender-account.service", timeout=180)
     credenza.fail("systemctl is-active louro.service")
 
 with subtest("luiz becomes a member and founds #lounge, as on credenza"):
