@@ -17,6 +17,10 @@ def wait_for_line(pattern: str, since: int) -> list[str]:
     return wait_for_ops_line(pattern, **olive, since=since)
 
 
+def main_pid(unit: str) -> str:
+    return credenza.succeed(f"systemctl show -P MainPID {unit}").strip()
+
+
 def louro_status_as_service(*properties: str) -> str:
     flags = " ".join(f"-p {shlex.quote(p)}" for p in ["DynamicUser=yes", *properties])
     return f"systemd-run --wait --pipe --quiet {flags} -E LOURO_SOCKET=/run/louro/louro.sock louro status"
@@ -44,3 +48,32 @@ with subtest("louro speaks in #ops alone"):
     for target in ["#bots", "#lounge", "luiz"]:
         status, output = credenza.execute(f"louro send {shlex.quote(target)} hello 2>&1")
         assert status == 5, (target, status, output)
+
+with subtest("a crash and the restart after it say so, with the restart's count and where to look"):
+    since = lines_so_far()
+    credenza.succeed(f"kill -KILL {main_pid('concierge')}")
+    wait_for_line(r"concierge crashed and restarted \(restart #1\) — journalctl -u concierge", since)
+
+with subtest("a service that gives up restarting says so, and says when it's back"):
+    since = lines_so_far()
+    drop_in = "/run/systemd/system/concierge-mailer.service.d"
+    failing_twice = (
+        "[Unit]\\nStartLimitBurst=2\\nStartLimitIntervalSec=5min\\n"
+        "[Service]\\nExecStartPre=/run/current-system/sw/bin/false\\n"
+    )
+    credenza.succeed(
+        f"mkdir -p {drop_in}",
+        f"printf '{failing_twice}' > {drop_in}/fail.conf",
+        "systemctl daemon-reload",
+        "systemctl kill -s KILL concierge-mailer",
+    )
+    credenza.wait_until_succeeds("systemctl is-failed concierge-mailer", timeout=60)
+    wait_for_line("concierge-mailer failed — gave up restarting", since)
+    credenza.succeed(
+        f"rm -r {drop_in}",
+        "systemctl daemon-reload",
+        "systemctl reset-failed concierge-mailer",
+        "systemctl start concierge-mailer",
+    )
+    lines = wait_for_line("concierge-mailer is back", since)
+    assert lines == ["concierge-mailer failed — gave up restarting", "concierge-mailer is back"], lines

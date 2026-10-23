@@ -1,8 +1,18 @@
-# ops-notify against a stand-in for louro, which answers from files
-# under $OPS_ROOT/stub and logs what it's asked.
+# ops-event and ops-notify against stand-ins for systemctl and louro,
+# which answer from files under $OPS_ROOT/stub and log what they're asked.
 { pkgs, ... }:
 
 let
+  systemctl = pkgs.writeShellScriptBin "systemctl" ''
+    stub=$OPS_ROOT/stub
+    case "$*" in
+      "start --no-block "*) echo "$*" >>"$stub/calls" ;;
+      is-system-running) cat "$stub/system-state" ;;
+      "show -P "*) cat "$stub/$4.$3" ;;
+      *) echo "systemctl stand-in: $*" >&2; exit 1 ;;
+    esac
+  '';
+
   louro = pkgs.writeShellScriptBin "louro" ''
     stub=$OPS_ROOT/stub
     case $1 in
@@ -11,14 +21,15 @@ let
     esac
   '';
 
-  opsNotify = pkgs.callPackage ../pkgs/ops-events {
+  opsEvents = pkgs.callPackage ../pkgs/ops-events {
+    systemd = systemctl;
     inherit louro;
     socket = "/run/louro/louro.sock";
   };
 in
 pkgs.runCommand "ops-events"
 {
-  nativeBuildInputs = [ opsNotify ];
+  nativeBuildInputs = [ opsEvents ];
 } ''
   bash ${./ops-events.sh}
   touch $out
