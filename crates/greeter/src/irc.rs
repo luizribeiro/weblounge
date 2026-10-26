@@ -63,7 +63,14 @@ impl Connection {
 /// How the greeter connects. papo reconnects by itself, until a refusal
 /// it takes for permanent, such as a wrong password.
 pub fn builder(server: &IrcServer, password: &SecretString) -> papo::Builder {
-    Client::builder(format!("ircs://{}:{}", server.host, server.port))
+    as_the_house(
+        Client::builder(format!("ircs://{}:{}", server.host, server.port)),
+        password,
+    )
+}
+
+fn as_the_house(builder: papo::Builder, password: &SecretString) -> papo::Builder {
+    builder
         .nick(house::ACCOUNT)
         .realname("weblounge's host")
         .sasl(Sasl::plain(house::ACCOUNT, password.expose()))
@@ -111,11 +118,10 @@ pub(crate) mod tests {
     /// The greeter, connected to an in-memory Ergo that logged it in, and
     /// what it sent once in, up to its JOIN.
     pub async fn connected() -> (Client, Events, Wire, Vec<String>) {
-        let server = IrcServer {
-            host: "irc.weblounge.org".into(),
-            port: 6697,
-        };
-        let builder = builder(&server, &SecretString::from(PASSWORD))
+        // Over TLS, papo would load the system's CAs, which the build
+        // sandbox lacks; the in-memory wire carries no TLS anyway.
+        let plaintext = Client::builder("irc://irc.test:6667").allow_insecure_auth(true);
+        let builder = as_the_house(plaintext, &SecretString::from(PASSWORD))
             .rate_limit(papo::RateLimit::unlimited())
             .reconnect(papo::Reconnect::never());
         let (client, events, mut wire) = wire(builder);
