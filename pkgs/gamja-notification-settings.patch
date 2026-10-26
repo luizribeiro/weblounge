@@ -1,0 +1,338 @@
+diff --git a/components/app.js b/components/app.js
+--- a/components/app.js
++++ b/components/app.js
+@@ -1,6 +1,7 @@
+ import * as irc from "../lib/irc.js";
+ import Client from "../lib/client.js";
+ import * as oauth2 from "../lib/oauth2.js";
++import * as notification from "../lib/notification.js";
+ import Buffer from "./buffer.js";
+ import BufferList from "./buffer-list.js";
+ import BufferHeader from "./buffer-header.js";
+@@ -122,21 +123,6 @@
+ 	return params;
+ }
+ 
+-function showNotification(title, options) {
+-	if (!window.Notification || Notification.permission !== "granted") {
+-		return null;
+-	}
+-
+-	// This can still fail due to:
+-	// https://bugs.chromium.org/p/chromium/issues/detail?id=481856
+-	try {
+-		return new Notification(title, options);
+-	} catch (err) {
+-		console.error("Failed to show notification: ", err);
+-		return null;
+-	}
+-}
+-
+ function getReceipt(stored, type) {
+ 	if (!stored || !stored.receipts) {
+ 		return null;
+@@ -805,7 +791,7 @@
+ 				if (client.isChannel(bufName)) {
+ 					title += " in " + bufName;
+ 				}
+-				let notif = showNotification(title, {
++				let notif = notification.show(this.state.settings, title, {
+ 					body: stripANSI(text),
+ 					requireInteraction: true,
+ 					tag: "msg,server=" + serverID + ",from=" + msg.prefix.name + ",to=" + bufName,
+@@ -827,7 +813,7 @@
+ 			msgUnread = Unread.HIGHLIGHT;
+ 
+ 			let channel = msg.params[1];
+-			let notif = new Notification("Invitation to " + channel, {
++			let notif = notification.show(this.state.settings, "Invitation to " + channel, {
+ 				body: msg.prefix.name + " has invited you to " + channel,
+ 				requireInteraction: true,
+ 				tag: "invite,server=" + serverID + ",from=" + msg.prefix.name + ",channel=" + channel,
+diff --git a/components/buffer.js b/components/buffer.js
+--- a/components/buffer.js
++++ b/components/buffer.js
+@@ -1,6 +1,7 @@
+ import { html, Component } from "../lib/index.js";
+ import linkify from "../lib/linkify.js";
+ import * as irc from "../lib/irc.js";
++import * as notification from "../lib/notification.js";
+ import { strip as stripANSI } from "../lib/ansi.js";
+ import { BufferType, ServerStatus, BufferEventsDisplayMode, getMessageURL, isMessageBeforeReceipt, SettingsContext } from "../state.js";
+ import * as store from "../store.js";
+@@ -526,54 +527,45 @@
+ 	}
+ }
+ 
+-// Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=481856
+-let notificationsSupported = false;
+-if (window.Notification) {
+-	notificationsSupported = true;
+-	if (Notification.permission === "default") {
+-		try {
+-			new Notification("");
+-		} catch (err) {
+-			if (err.name === "TypeError") {
+-				notificationsSupported = false;
+-			}
+-		}
+-	}
+-}
+-
+ class NotificationNagger extends Component {
+-	state = { nag: false };
+-
+ 	constructor(props) {
+ 		super(props);
+ 
+ 		this.handleClick = this.handleClick.bind(this);
+-
+-		this.state.nag = this.shouldNag();
++		this.handleDismiss = this.handleDismiss.bind(this);
+ 	}
+ 
+ 	shouldNag() {
+-		return notificationsSupported && Notification.permission === "default";
++		return notification.supported &&
++			Notification.permission === "default" &&
++			this.props.enabled &&
++			!store.naggedNotifications.load();
+ 	}
+ 
+ 	handleClick(event) {
+ 		event.preventDefault();
+ 
+-		Notification.requestPermission((permission) => {
+-			this.setState({ nag: this.shouldNag() });
++		Notification.requestPermission(() => {
++			this.forceUpdate();
+ 		});
+ 	}
+ 
++	handleDismiss() {
++		store.naggedNotifications.put(true);
++		this.forceUpdate();
++	}
++
+ 	render() {
+-		if (!this.state.nag) {
++		if (!this.shouldNag()) {
+ 			return null;
+ 		}
+ 
+ 		return html`
+-			<div class="logline nag" role="listitem">
+-				<${Timestamp}/>
+-				${" "}
+-				<a href="#" onClick=${this.handleClick}>Turn on desktop notifications</a> to get notified about new messages
++			<div class="nag notification-nag" role="listitem">
++				<span>
++					<a href="#" onClick=${this.handleClick}>Turn on desktop notifications</a> to get notified about new messages
++				</span>
++				<button type="button" onClick=${this.handleDismiss}>Dismiss</button>
+ 			</div>
+ 		`;
+ 	}
+@@ -700,10 +692,7 @@
+ 		let settings = this.props.settings;
+ 		let serverName = server.name;
+ 
+-		let children = [];
+-		if (buf.type === BufferType.SERVER) {
+-			children.push(html`<${NotificationNagger}/>`);
+-		}
++		let children = [html`<${NotificationNagger} enabled=${settings.desktopNotifications}/>`];
+ 		if (buf.type === BufferType.SERVER && server.isBouncer && !server.bouncerNetID) {
+ 			children.push(html`<${ProtocolHandlerNagger} bouncerName=${serverName}/>`);
+ 		}
+diff --git a/components/settings-form.js b/components/settings-form.js
+--- a/components/settings-form.js
++++ b/components/settings-form.js
+@@ -1,4 +1,5 @@
+ import { html, Component } from "../lib/index.js";
++import * as notification from "../lib/notification.js";
+ 
+ export default class SettingsForm extends Component {
+ 	state = {};
+@@ -10,6 +11,7 @@
+ 		this.state.bufferEvents = props.settings.bufferEvents;
+ 		this.state.fontSize = props.settings.fontSize;
+ 		this.state.fontFamily = props.settings.fontFamily;
++		this.state.desktopNotifications = props.settings.desktopNotifications;
+ 
+ 		this.handleInput = this.handleInput.bind(this);
+ 		this.handleSubmit = this.handleSubmit.bind(this);
+@@ -21,6 +23,11 @@
+ 		this.setState({ [target.name]: value }, () => {
+ 			this.props.onChange(this.state);
+ 		});
++		if (target.name === "desktopNotifications" && value) {
++			Notification.requestPermission(() => {
++				this.forceUpdate();
++			});
++		}
+ 	}
+ 
+ 	handleSubmit(event) {
+@@ -38,6 +45,37 @@
+ 		}
+ 	}
+ 
++	renderNotifications() {
++		if (!notification.supported) {
++			return null;
++		}
++
++		let permission = Notification.permission;
++		let blocked = null;
++		if (this.state.desktopNotifications && permission === "denied") {
++			blocked = html`
++				<p class="notifications-blocked">
++					Your browser blocks notifications from this site, and the
++					page can't ask again. Allow them in the site's settings,
++					next to the address bar, then reload the page.
++				</p>
++			`;
++		}
++
++		return html`
++			<label class="checkbox">
++				<input
++					type="checkbox"
++					name="desktopNotifications"
++					checked=${this.state.desktopNotifications && permission === "granted"}
++				/>
++				Desktop notifications
++			</label>
++			${blocked}
++			<br/>
++		`;
++	}
++
+ 	render() {
+ 		let protocolHandler = null;
+ 		if (this.props.showProtocolHandler) {
+@@ -122,6 +160,8 @@
+ 				</label>
+ 				<br/><br/>
+ 
++				${this.renderNotifications()}
++
+ 				${protocolHandler}
+ 
+ 				<button type="button" class="danger" onClick=${() => this.props.onDisconnect()}>
+diff --git a/lib/notification.js b/lib/notification.js
+--- /dev/null
++++ b/lib/notification.js
+@@ -0,0 +1,33 @@
++// Workaround for https://bugs.chromium.org/p/chromium/issues/detail?id=481856
++function checkSupported() {
++	if (!window.Notification) {
++		return false;
++	}
++	if (Notification.permission === "default") {
++		try {
++			new Notification("");
++		} catch (err) {
++			if (err.name === "TypeError") {
++				return false;
++			}
++		}
++	}
++	return true;
++}
++
++export const supported = checkSupported();
++
++export function show(settings, title, options) {
++	if (!supported || !settings.desktopNotifications || Notification.permission !== "granted") {
++		return null;
++	}
++
++	// This can still fail due to:
++	// https://bugs.chromium.org/p/chromium/issues/detail?id=481856
++	try {
++		return new Notification(title, options);
++	} catch (err) {
++		console.error("Failed to show notification: ", err);
++		return null;
++	}
++}
+diff --git a/state.js b/state.js
+--- a/state.js
++++ b/state.js
+@@ -265,6 +265,7 @@
+ 				bufferEvents: BufferEventsDisplayMode.FOLD,
+ 				fontSize: "",
+ 				fontFamily: "monospace",
++				desktopNotifications: true,
+ 			},
+ 		};
+ 	},
+diff --git a/store.js b/store.js
+--- a/store.js
++++ b/store.js
+@@ -27,6 +27,7 @@
+ 
+ export const autoconnect = new Item("autoconnect");
+ export const naggedProtocolHandler = new Item("naggedProtocolHandler");
++export const naggedNotifications = new Item("naggedNotifications");
+ export const settings = new Item("settings");
+ 
+ export class Buffer {
+diff --git a/style.css b/style.css
+--- a/style.css
++++ b/style.css
+@@ -424,6 +424,19 @@
+ form label input[type="checkbox"], form label input[type="radio"] {
+ 	margin-right: 0.5em;
+ }
++form label.checkbox {
++	display: flex;
++	align-items: center;
++	min-height: 44px;
++}
++form label.checkbox input[type="checkbox"] {
++	width: 1.25em;
++	height: 1.25em;
++}
++.notifications-blocked {
++	margin: 0 0 0.5em;
++	color: var(--red);
++}
+ 
+ a {
+ 	color: var(--green);
+@@ -467,6 +480,32 @@
+ #buffer .error {
+ 	color: red;
+ }
++#buffer .notification-nag {
++	position: sticky;
++	top: 0;
++	z-index: 1;
++	display: flex;
++	align-items: center;
++	gap: 1em;
++	margin: -10px -10px 10px;
++	padding: 0 10px;
++	background: var(--main-background);
++	border-bottom: 1px solid var(--sidebar-background);
++}
++#buffer .notification-nag span {
++	flex: 1;
++	padding: 13px 0;
++}
++#buffer .notification-nag a {
++	display: inline-block;
++	line-height: 18px;
++	padding: 13px 0;
++	margin: -13px 0;
++}
++#buffer .notification-nag button {
++	min-width: 44px;
++	min-height: 44px;
++}
+ #buffer .me-tell {
+ 	color: #b37400;
+ }

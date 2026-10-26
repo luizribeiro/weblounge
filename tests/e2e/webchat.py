@@ -195,6 +195,32 @@ with subtest("gamja shows each line once when one arrives while it catches up af
     shown = json.loads(client.succeed(shlex.join(browser)))
     assert set(shown.values()) == {1}, shown
 
+with subtest("in a browser, gamja offers desktop notifications atop every buffer, and Settings turns them on and off"):
+    browser = ["webchat-notifications-browser", grace["account"], grace["password"], ada["account"], ada["password"]]
+    report = json.loads(client.succeed(shlex.join(browser)))
+    asking, granted = report["asking"], report["granted"]
+    assert asking["permission"] == "default", report
+    for where in ["phone lounge", "desktop lounge", "server buffer"]:
+        nag = asking[where]
+        assert nag["text"] == "Turn on desktop notifications to get notified about new messages Dismiss", (where, nag)
+        assert nag["link"] == "Turn on desktop notifications", (where, nag)
+        assert nag["link_height"] >= 44 and nag["dismiss_height"] >= 44 and nag["fits"], (where, nag)
+    assert asking["dismissed"] is None and asking["reopened"] is None, report
+    assert asking["settings"]["label"] == "Desktop notifications", report
+    assert not asking["settings"]["checked"] and asking["settings"]["blocked"] is None, report
+    assert asking["permission after asking"] == "denied", report
+    for width in ["phone", "desktop"]:
+        denied = asking[f"{width} denied"]
+        assert not denied["checked"] and denied["label_height"] >= 44 and denied["fits"], (width, denied)
+        assert denied["blocked"].startswith("Your browser blocks notifications from this site"), (width, denied)
+    assert granted["nagger"] is None and granted["on"]["checked"], report
+    assert not granted["off after reopening"]["checked"] and granted["on again"]["checked"], report
+    # Reopening gamja starts the record of shown notifications afresh.
+    mentioned = ["New highlight from ada in #lounge"]
+    assert granted["shown when on"] == mentioned and granted["shown when off"] == [], report
+    assert granted["shown when on again"] == mentioned, report
+    client.copy_from_vm("/tmp/screens", "notifications")
+
 with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web client's login and bender take them"):
     add_member("luiz", "plain-old-vanilla")
     credenza.succeed("systemctl restart bender-account.service louro.service")

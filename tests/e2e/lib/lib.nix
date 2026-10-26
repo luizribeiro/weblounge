@@ -20,9 +20,9 @@ let
   ircClient = pkgs.writers.writePython3Bin "irc-client" { doCheck = false; } ../clients/irc-client.py;
   browsers = test.browsers or { };
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
-  # The headless shell is all a headless test needs.
+  # The headless shell, and full Chromium for the notification permissions
+  # the shell always denies.
   playwrightBrowsers = pkgs.playwright-driver.browsers.override {
-    withChromium = false;
     withFirefox = false;
     withWebkit = false;
     withFfmpeg = false;

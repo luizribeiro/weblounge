@@ -42,11 +42,15 @@ def open_settings(page):
 
 
 @contextmanager
-def browsing(expected_errors=()):
-    """expected_errors: substrings of console errors the caller provokes."""
+def browsing(expected_errors=(), notifications=False):
+    """expected_errors: substrings of console errors the caller provokes.
+    notifications: run full Chromium, whose notification permission starts
+    at "default" and can be granted; the headless shell always denies it."""
     errors = []
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(args=["--host-resolver-rules=MAP *.weblounge.org credenza"])
+        browser = playwright.chromium.launch(
+            channel="chromium" if notifications else None, args=["--host-resolver-rules=MAP *.weblounge.org credenza"]
+        )
         page = browser.new_page(ignore_https_errors=True)
         page.set_default_timeout(TIMEOUT_MS)
         expect.set_options(timeout=TIMEOUT_MS)
@@ -59,8 +63,8 @@ def browsing(expected_errors=()):
 
 
 @contextmanager
-def signed_in(nick, password, expected_errors=()):
-    with browsing(expected_errors) as page:
+def signed_in(nick, password, expected_errors=(), notifications=False):
+    with browsing(expected_errors, notifications) as page:
         page.goto(f"{MEMBERS}/signin")
         page.fill("#nick", nick)
         page.fill("#password", password)

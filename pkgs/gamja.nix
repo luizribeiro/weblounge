@@ -36,6 +36,11 @@ gamja.overrideAttrs (finalAttrs: old: {
     # tells the network a connection is the web client's. Written to be
     # offered upstream.
     ./gamja-realname.patch
+    # gamja offers desktop notifications once, in the server buffer, which
+    # newcomers never look at. This offers them atop every buffer until
+    # they're on or dismissed, and adds a Settings toggle for them. Written
+    # to be offered upstream.
+    ./gamja-notification-settings.patch
   ];
 
   postInstall = (old.postInstall or "") + ''
