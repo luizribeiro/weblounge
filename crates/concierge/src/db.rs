@@ -2286,6 +2286,20 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn removing_an_inviter_takes_their_invitees_arrivals_with_them() {
+        let (db, _dir) = with_open_invite().await;
+        let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
+        db.redeem_invite(&claim, &newcomer(&MemberName::new("bob"), CREATED))
+            .await
+            .unwrap();
+
+        db.remove_member(&ALICE, CREATED + 60).await.unwrap();
+
+        assert!(arrivals_recorded(&db).await.is_empty());
+        assert!(db.member("bob").await.unwrap().is_some());
+    }
+
+    #[tokio::test]
     async fn a_root_invite_records_no_arrival() {
         let (db, _dir) = with_open_invite().await;
         add_invite(
