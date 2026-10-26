@@ -98,7 +98,6 @@ impl Config {
         let webchat_url = require("CONCIERGE_WEBCHAT_URL")?;
         let join_url = var("CONCIERGE_JOIN_URL");
         let irc_server = require("CONCIERGE_IRC_SERVER")?;
-        let ergo_api = var("CONCIERGE_ERGO_API").unwrap_or_else(|| DEFAULT_ERGO_API.into());
         let multiclient_default = |name| {
             let value = require(name)?;
             parse_multiclient_default(&value).ok_or_else(|| {
@@ -128,13 +127,7 @@ impl Config {
             files_url: origin("CONCIERGE_FILES_URL", require("CONCIERGE_FILES_URL")?)?,
             uploads: Store::from_vars(&var)?,
             irc_server: irc_server_in(irc_server)?,
-            ergo_api: parse_http_url(&ergo_api).ok_or_else(|| {
-                invalid(
-                    "CONCIERGE_ERGO_API",
-                    ergo_api.clone(),
-                    "expected a plain http URL",
-                )
-            })?,
+            ergo_api: ergo_api_in(var("CONCIERGE_ERGO_API"))?,
             assets_dir: require("CONCIERGE_ASSETS")?.into(),
             state_dir: require("STATE_DIRECTORY")?.into(),
             outbox_path: require("CONCIERGE_OUTBOX")?.into(),
@@ -167,12 +160,7 @@ impl Config {
 
     /// A client for Ergo's API, with the token from the credentials.
     pub fn ergo_client(&self) -> anyhow::Result<Client> {
-        let token = self.read_credential(ERGO_API_TOKEN_CREDENTIAL)?;
-        anyhow::ensure!(
-            !token.expose().is_empty(),
-            "the {ERGO_API_TOKEN_CREDENTIAL} credential is empty"
-        );
-        Ok(Client::new(self.ergo_api.clone(), token))
+        ergo_client(&self.ergo_api, &self.credentials_dir)
     }
 
     /// The secret Ergo authenticates with to introspect tokens.
@@ -280,8 +268,58 @@ impl GreeterConfig {
 
 pub const GREETER_PASSWORD_CREDENTIAL: &str = "concierge-greeter-password";
 
+/// What `concierge ensure-greeter-account` needs: concierge's database,
+/// which says whether a member or bot holds the name, Ergo's API with its
+/// token, and the house account's password, which it hands the greeter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GreeterAccountConfig {
+    pub database: PathBuf,
+    pub ergo_api: Url,
+    pub credentials_dir: PathBuf,
+}
+
+impl GreeterAccountConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let require = |name| required(&var, name);
+        Ok(Self {
+            database: database_in(Path::new(&require("STATE_DIRECTORY")?)),
+            ergo_api: ergo_api_in(var("CONCIERGE_ERGO_API"))?,
+            credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
+        })
+    }
+
+    pub fn ergo_client(&self) -> anyhow::Result<Client> {
+        ergo_client(&self.ergo_api, &self.credentials_dir)
+    }
+
+    pub fn read_password(&self) -> anyhow::Result<SecretString> {
+        read_credential(&self.credentials_dir, GREETER_PASSWORD_CREDENTIAL)
+    }
+}
+
 fn database_in(state_dir: &Path) -> PathBuf {
     state_dir.join(DATABASE)
+}
+
+/// Ergo's API at `url`, or where it listens by default.
+fn ergo_api_in(url: Option<String>) -> Result<Url, ConfigError> {
+    let url = url.unwrap_or_else(|| DEFAULT_ERGO_API.into());
+    parse_http_url(&url)
+        .ok_or_else(|| invalid("CONCIERGE_ERGO_API", url, "expected a plain http URL"))
+}
+
+/// A client for Ergo's API at `url`, with the token in `credentials_dir`.
+fn ergo_client(url: &Url, credentials_dir: &Path) -> anyhow::Result<Client> {
+    let token = read_credential(credentials_dir, ERGO_API_TOKEN_CREDENTIAL)?;
+    anyhow::ensure!(
+        !token.expose().is_empty(),
+        "the {ERGO_API_TOKEN_CREDENTIAL} credential is empty"
+    );
+    Ok(Client::new(url.clone(), token))
 }
 
 fn irc_server_in(address: String) -> Result<IrcServer, ConfigError> {
@@ -724,6 +762,35 @@ mod tests {
         );
         for name in vars.keys() {
             assert_eq!(greeter(Some(name)), Err(ConfigError::Missing(name)));
+        }
+    }
+
+    #[test]
+    fn ensuring_the_greeters_account_needs_the_database_and_credentials_alone() {
+        let vars = HashMap::from([
+            ("STATE_DIRECTORY", "/var/lib/concierge"),
+            (
+                "CREDENTIALS_DIRECTORY",
+                "/run/credentials/concierge-greeter-account.service",
+            ),
+        ]);
+        let account = |missing: Option<&str>| {
+            GreeterAccountConfig::from_vars(|name| {
+                (Some(name) != missing)
+                    .then(|| vars.get(name).map(|value| (*value).to_owned()))
+                    .flatten()
+            })
+        };
+        assert_eq!(
+            account(None),
+            Ok(GreeterAccountConfig {
+                database: "/var/lib/concierge/concierge.db".into(),
+                ergo_api: "http://127.0.0.1:8089".parse().unwrap(),
+                credentials_dir: "/run/credentials/concierge-greeter-account.service".into(),
+            })
+        );
+        for name in vars.keys() {
+            assert_eq!(account(Some(name)), Err(ConfigError::Missing(name)));
         }
     }
 

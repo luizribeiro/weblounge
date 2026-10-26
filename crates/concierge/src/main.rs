@@ -7,8 +7,9 @@ use concierge::{
     app::{self, App},
     assets::Assets,
     background::Background,
-    config::{Config, Databases, ExpiryConfig, RemindConfig},
+    config::{Config, Databases, ExpiryConfig, GreeterAccountConfig, RemindConfig},
     db::{self, Db},
+    house,
     oauth::Webchat,
     rate_limit::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
@@ -28,6 +29,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve => serve(Config::from_env()?).await,
         Command::Remind => remind(&RemindConfig::from_env()?).await,
         Command::ExpireUploads => expire_uploads(&ExpiryConfig::from_env()?).await,
+        Command::EnsureGreeterAccount => {
+            let ensured = house::ensure_account(&GreeterAccountConfig::from_env()?).await?;
+            eprintln!("{ensured} {}", house::ACCOUNT);
+            Ok(())
+        }
         Command::Admin(command) => admin::run(command, &Config::from_env()?)
             .await
             .map(|output| print!("{output}")),

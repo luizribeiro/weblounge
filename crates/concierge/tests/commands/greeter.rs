@@ -1,25 +1,27 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::fs;
 
+use concierge::{
+    config::{GREETER_PASSWORD_CREDENTIAL, GreeterAccountConfig},
+    house::{self, Ensured},
+};
 use ergo_api::Preference;
 
 use crate::Fixture;
 
 const PASSWORD: &str = "0f3a9c51d2e84b7f6a0c19e2d4b5a7c8";
 
-/// A file holding `contents`, as systemd hands the greeter's secret over.
-fn password_file(fixture: &Fixture, contents: &str) -> PathBuf {
-    let path = fixture.state_dir().join("concierge-greeter-password");
-    fs::write(&path, contents).unwrap();
-    path
-}
-
-async fn ensure_account(fixture: &Fixture, file: &Path) -> anyhow::Result<String> {
-    let file = file.to_str().unwrap();
-    let args = ["greeter", "ensure-account", "--password-file", file];
-    fixture.run(&args).await
+/// Runs `concierge ensure-greeter-account` with `password` in its
+/// credential, as systemd hands the generated one over.
+async fn ensure_account(fixture: &Fixture, password: &str) -> anyhow::Result<Ensured> {
+    let config = &fixture.config;
+    let credential = config.credentials_dir.join(GREETER_PASSWORD_CREDENTIAL);
+    fs::write(credential, format!("{password}\n")).unwrap();
+    let config = GreeterAccountConfig {
+        database: config.database_path(),
+        ergo_api: config.ergo_api.clone(),
+        credentials_dir: config.credentials_dir.clone(),
+    };
+    house::ensure_account(&config).await
 }
 
 /// Whether concierge is set up the way the greeter needs it.
@@ -31,27 +33,24 @@ async fn set_up(fixture: &Fixture, password: &str) -> bool {
 }
 
 #[tokio::test]
-async fn creates_the_house_account_with_the_files_password_vhost_and_always_on() {
+async fn creates_the_house_account_with_its_password_vhost_and_always_on() {
     let fixture = Fixture::start().await;
-    let file = password_file(&fixture, &format!("{PASSWORD}\n"));
 
-    let output = ensure_account(&fixture, &file).await.unwrap();
+    let ensured = ensure_account(&fixture, PASSWORD).await.unwrap();
 
-    assert_eq!(output, "created concierge\n");
+    assert_eq!(ensured, Ensured::Created);
     assert!(set_up(&fixture, PASSWORD).await);
 }
 
 #[tokio::test]
 async fn sets_the_password_again_on_every_start() {
     let fixture = Fixture::start().await;
-    ensure_account(&fixture, &password_file(&fixture, PASSWORD))
-        .await
-        .unwrap();
+    ensure_account(&fixture, PASSWORD).await.unwrap();
     let next_boot = "7be2c0d94f1a63e85d0b2c47a9f1e3d6";
 
-    let output = ensure_account(&fixture, &password_file(&fixture, next_boot)).await;
+    let ensured = ensure_account(&fixture, next_boot).await.unwrap();
 
-    assert_eq!(output.unwrap(), "updated concierge\n");
+    assert_eq!(ensured, Ensured::Updated);
     assert!(set_up(&fixture, next_boot).await);
     assert!(!fixture.signs_in_to_ergo("concierge", PASSWORD).await);
 }
@@ -65,9 +64,8 @@ async fn refuses_while_a_member_or_a_bot_holds_the_name() {
     ] {
         let fixture = Fixture::start().await;
         fixture.execute(held_by).await;
-        let file = password_file(&fixture, PASSWORD);
 
-        let error = ensure_account(&fixture, &file).await.unwrap_err();
+        let error = ensure_account(&fixture, PASSWORD).await.unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -78,23 +76,15 @@ async fn refuses_while_a_member_or_a_bot_holds_the_name() {
 }
 
 #[tokio::test]
-async fn refuses_a_file_without_a_usable_password() {
+async fn refuses_a_credential_without_a_usable_password() {
     let fixture = Fixture::start().await;
-    let file = password_file(&fixture, "short\n");
 
-    let error = ensure_account(&fixture, &file).await.unwrap_err();
+    let error = ensure_account(&fixture, "short").await.unwrap_err();
 
     assert!(
         error.to_string().contains("doesn't hold a usable password"),
         "{error}"
     );
-    assert!(
-        fixture
-            .ergo
-            .client()
-            .info("concierge")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    let account = fixture.ergo.client().info("concierge").await.unwrap();
+    assert!(account.is_none());
 }

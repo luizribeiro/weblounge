@@ -3,10 +3,12 @@
 //! `concierge!~u@weblounge/concierge`, outside the `weblounge/bot/*` ban
 //! that keeps members' bots out of #lounge, where it welcomes newcomers.
 
+use std::fmt;
+
 use anyhow::Context;
 use ergo_api::{Client, Passphrase, Preference, Registration, SettingsChanges};
 
-use crate::db::Db;
+use crate::{config::GreeterAccountConfig, db::Db, password_rules};
 
 pub const ACCOUNT: &str = "concierge";
 pub const VHOST: &str = "weblounge/concierge";
@@ -16,6 +18,25 @@ pub const VHOST: &str = "weblounge/concierge";
 pub enum Ensured {
     Created,
     Updated,
+}
+
+impl fmt::Display for Ensured {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Created => "created",
+            Self::Updated => "updated",
+        })
+    }
+}
+
+/// [`ensure`]s the house account with the password in its credential.
+pub async fn ensure_account(config: &GreeterAccountConfig) -> anyhow::Result<Ensured> {
+    let credential = config.read_password()?;
+    let password = credential.expose();
+    let password = password_rules::check(password, password)
+        .context("the greeter's password credential doesn't hold a usable password")?;
+    let db = Db::open(&config.database).await?;
+    ensure(&db, &config.ergo_client()?, &password).await
 }
 
 /// Registers the house account with `password`, or sets its password to
