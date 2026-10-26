@@ -332,6 +332,13 @@ def files_containing(*texts: str) -> list[str]:
     return credenza.succeed(f"grep -rlaF --exclude-dir=journal {patterns(texts)} /var/lib /var/log || true").split()
 
 
+def unit_file_problems(*paths: str) -> list[str]:
+    """What systemd-analyze objects to in these unit files, beyond upstream units that are masked or name
+    programs left out of this system."""
+    _, output = credenza.execute(f"systemd-analyze verify --man=no --recursive-errors=no {' '.join(paths)} 2>&1")
+    return [line for line in output.splitlines() if not re.search(r"is masked|is not executable", line)]
+
+
 Mail = TypedDict("Mail", {"from": str, "to": list[str], "subject": str, "text": str})
 
 
