@@ -7,9 +7,13 @@ pub const MAX_LENGTH: usize = 32;
 const SPECIALS: [char; 2] = ['-', '_'];
 /// The services Ergo runs, and the ones it keeps free for networks that run
 /// their own; Ergo refuses accounts under these names.
-const RESERVED: [&str; 8] = [
+const SERVICES: [&str; 8] = [
     "NickServ", "ChanServ", "HostServ", "HistServ", "MemoServ", "BotServ", "OperServ", "Global",
 ];
+/// The accounts the network runs itself, which are neither members nor
+/// bots: the greeter's. Nobody may sign up or make a bot under them, and
+/// `member reconcile` expects them in Ergo alone.
+pub const SYSTEM_ACCOUNTS: [&str; 1] = ["concierge"];
 
 /// The rule in words, for forms to show next to the field.
 pub const RULE: &str = "Up to 32 letters, digits, hyphens and underscores, starting with a letter.";
@@ -68,7 +72,7 @@ impl Nick {
         if !first.is_ascii_alphabetic() {
             return Err(InvalidNick::StartsWithoutALetter);
         }
-        if RESERVED.iter().any(|name| name.eq_ignore_ascii_case(nick)) {
+        if SERVICES.iter().any(|name| name.eq_ignore_ascii_case(nick)) || is_system_account(nick) {
             return Err(InvalidNick::Reserved);
         }
         Ok(Self(nick.to_owned()))
@@ -77,6 +81,13 @@ impl Nick {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+/// Whether `account` is one of [`SYSTEM_ACCOUNTS`], in any case.
+pub fn is_system_account(account: &str) -> bool {
+    SYSTEM_ACCOUNTS
+        .iter()
+        .any(|name| name.eq_ignore_ascii_case(account))
 }
 
 fn allowed(c: char) -> bool {
@@ -177,6 +188,17 @@ mod tests {
             assert_eq!(Nick::parse(nick), Err(InvalidNick::Reserved), "{nick}");
         }
         assert!(Nick::parse("NickServer").is_ok());
+    }
+
+    #[test]
+    fn rejects_the_networks_own_accounts_in_any_case() {
+        for nick in ["concierge", "Concierge", "CONCIERGE"] {
+            assert_eq!(Nick::parse(nick), Err(InvalidNick::Reserved), "{nick}");
+            assert!(is_system_account(nick), "{nick}");
+        }
+        assert!(Nick::parse("concierge2").is_ok());
+        assert!(!is_system_account("concierge2"));
+        assert!(!is_system_account("NickServ"));
     }
 
     #[test]

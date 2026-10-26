@@ -6,7 +6,7 @@ use super::{Admin, bot, erase_reminder, print_once};
 use crate::{
     db,
     name::MemberName,
-    password,
+    nick, password,
     verification_mail::{self, Kind},
 };
 
@@ -19,9 +19,9 @@ pub enum MemberCommand {
     /// uploads and bots, and revoke their open invites, keeping their
     /// place in the invite tree.
     Delete { account: String },
-    /// List Ergo accounts that are neither members nor bots, members and
-    /// bots Ergo lacks, removed ones whose accounts are still to be erased,
-    /// and bots whose owner was removed.
+    /// List Ergo accounts that are neither members, bots nor the network's
+    /// own, members and bots Ergo lacks, removed ones whose accounts are
+    /// still to be erased, and bots whose owner was removed.
     Reconcile,
     /// Mail a member a link to confirm their email, replacing any they
     /// had. Temporary: for the members who joined before emails were
@@ -131,6 +131,7 @@ async fn reconcile(admin: &Admin) -> anyhow::Result<String> {
         .await?
         .into_iter()
         .map(|account| String::from(account.account_name.as_str()))
+        .filter(|name| !nick::is_system_account(name))
         .map(|name| (name.to_ascii_lowercase(), name))
         .collect();
     let members = admin.db.member_accounts().await?;

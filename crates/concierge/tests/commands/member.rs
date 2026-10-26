@@ -316,6 +316,14 @@ mod reconcile {
     }
 
     #[tokio::test]
+    async fn expects_the_networks_own_accounts_in_ergo_alone() {
+        let fixture = Fixture::start().await;
+        fixture.add_member("alice", None).await;
+        fixture.register("concierge").await;
+        assert_eq!(fixture.run(&["member", "reconcile"]).await.unwrap(), "");
+    }
+
+    #[tokio::test]
     async fn matches_names_whatever_their_case() {
         let fixture = Fixture::start().await;
         fixture.register("Alice").await;

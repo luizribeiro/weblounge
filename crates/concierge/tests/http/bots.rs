@@ -278,6 +278,10 @@ async fn a_name_the_rules_refuse_is_given_back_with_why() {
             "That nick is reserved for the network&#39;s services.",
         ),
         (
+            "Concierge",
+            "That nick is reserved for the network&#39;s services.",
+        ),
+        (
             "bob!",
             &format!(
                 "Nicks can&#39;t contain &#39;!&#39;. {}",
