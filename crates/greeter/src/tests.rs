@@ -135,10 +135,10 @@ impl Fixture {
         &self.greeter.irc
     }
 
-    /// `account` signs up at `joined_at` with an invite from `inviter`, or
-    /// a root invite, as the invite page redeems it.
-    async fn join(&self, account: &str, inviter: Option<&str>, joined_at: i64) {
-        let inviter = inviter.map(MemberName::new);
+    /// `account` signs up at `joined_at` with an invite from `inviter`, as
+    /// the invite page redeems it.
+    async fn join(&self, account: &str, inviter: &str, joined_at: i64) {
+        let inviter = Some(MemberName::new(inviter));
         let invite = NewInvite {
             code: account,
             created_by: inviter.as_ref(),
@@ -191,7 +191,7 @@ fn email(account: &str) -> Email {
 #[tokio::test]
 async fn notes_when_a_newcomer_is_first_seen_and_stops_asking() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
 
     fixture.tick(JOINED + 5).await;
     assert_eq!(fixture.arrival("erin").await.arrived_at, None);
@@ -206,8 +206,8 @@ async fn notes_when_a_newcomer_is_first_seen_and_stops_asking() {
 #[tokio::test]
 async fn asks_about_every_newcomer_not_seen_yet_and_nobody_else() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
-    fixture.join("frank", None, JOINED + 1).await;
+    fixture.join("erin", "luiz", JOINED).await;
+    fixture.join("frank", "luiz", JOINED + 1).await;
 
     fixture.tick(JOINED + 5).await;
 
@@ -220,7 +220,7 @@ const TOLD_LUIZ: &str =
 #[tokio::test]
 async fn welcomes_a_newcomer_at_first_sight_then_tells_their_inviter() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     fixture.irc().attach("erin");
 
     fixture.tick(JOINED + 5).await;
@@ -245,23 +245,23 @@ async fn welcomes_a_newcomer_at_first_sight_then_tells_their_inviter() {
 }
 
 #[tokio::test]
-async fn names_and_tells_no_inviter_removed_since() {
+async fn greets_nobody_an_inviter_removed_since_brought() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     let luiz = MemberName::new("luiz");
     fixture.db().remove_member(&luiz, JOINED + 1).await.unwrap();
     fixture.irc().attach("erin");
 
     fixture.tick(JOINED + 5).await;
 
-    assert_eq!(fixture.irc().said_to("#lounge"), ["Welcome erin!"]);
-    assert_eq!(fixture.irc().said_to("luiz"), Vec::<String>::new());
+    assert_eq!(fixture.irc().said(), []);
+    assert_eq!(fixture.irc().asked(), Vec::<String>::new());
 }
 
 #[tokio::test]
 async fn tells_an_inviter_who_was_unreachable_once_they_are_back() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     fixture.irc().attach("erin");
     fixture.irc().set_absent("luiz", true);
 
@@ -281,7 +281,7 @@ async fn tells_an_inviter_who_was_unreachable_once_they_are_back() {
 #[tokio::test]
 async fn says_hello_to_a_newcomer_first_seen_after_the_fallback_welcome() {
     let fixture = Fixture::start().await;
-    fixture.join("frank", None, JOINED).await;
+    fixture.join("frank", "luiz", JOINED).await;
     fixture.tick(JOINED + 600).await;
     assert_eq!(fixture.irc().said_to("frank"), Vec::<String>::new());
 
@@ -292,7 +292,10 @@ async fn says_hello_to_a_newcomer_first_seen_after_the_fallback_welcome() {
     let hello = fixture.irc().said_to("frank");
     assert_eq!(hello[0], "Hi frank, I'm the concierge, weblounge's host.");
     assert_eq!(hello.len(), 2);
-    assert_eq!(fixture.irc().said_to("#lounge"), ["Welcome frank!"]);
+    assert_eq!(
+        fixture.irc().said_to("#lounge"),
+        ["Welcome frank, invited by luiz!"]
+    );
 }
 
 const TWO_DAYS: i64 = 2 * 24 * 60 * 60;
@@ -300,7 +303,7 @@ const TWO_DAYS: i64 = 2 * 24 * 60 * 60;
 #[tokio::test]
 async fn nudges_the_inviter_once_when_the_newcomer_never_came() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     fixture.tick(JOINED + 600).await;
 
     fixture.tick(JOINED + TWO_DAYS - 1).await;
@@ -316,7 +319,7 @@ async fn nudges_the_inviter_once_when_the_newcomer_never_came() {
 #[tokio::test]
 async fn nudges_nobody_once_the_newcomer_came() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     fixture.irc().attach("erin");
     fixture.tick(JOINED + 5).await;
 
@@ -326,21 +329,24 @@ async fn nudges_nobody_once_the_newcomer_came() {
 }
 
 #[tokio::test]
-async fn welcomes_a_root_invitee_ten_minutes_in_even_unseen() {
+async fn welcomes_a_newcomer_ten_minutes_in_even_unseen() {
     let fixture = Fixture::start().await;
-    fixture.join("frank", None, JOINED).await;
+    fixture.join("frank", "luiz", JOINED).await;
 
     fixture.tick(JOINED + 599).await;
     assert_eq!(fixture.irc().said(), []);
     fixture.tick(JOINED + 600).await;
 
-    assert_eq!(fixture.irc().said(), [line("#lounge", "Welcome frank!")]);
+    assert_eq!(
+        fixture.irc().said_to("#lounge"),
+        ["Welcome frank, invited by luiz!"]
+    );
 }
 
 #[tokio::test]
 async fn skips_the_welcome_of_an_arrival_two_days_old() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     fixture.irc().attach("erin");
 
     fixture.tick(JOINED + 2 * 24 * 60 * 60).await;
@@ -353,7 +359,7 @@ async fn skips_the_welcome_of_an_arrival_two_days_old() {
 #[tokio::test]
 async fn a_welcome_that_didnt_go_out_goes_out_on_a_later_tick() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     fixture.irc().attach("erin");
     fixture.irc().time_out(true);
 
@@ -372,8 +378,8 @@ async fn a_welcome_that_didnt_go_out_goes_out_on_a_later_tick() {
 #[tokio::test]
 async fn forgets_a_newcomer_two_weeks_after_they_joined() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
-    fixture.join("frank", None, JOINED + 1).await;
+    fixture.join("erin", "luiz", JOINED).await;
+    fixture.join("frank", "luiz", JOINED + 1).await;
     let two_weeks = 14 * 24 * 60 * 60;
 
     fixture.tick(JOINED + two_weeks).await;
@@ -450,7 +456,7 @@ async fn reminds_nobody_without_a_weekly_host() {
 #[tokio::test]
 async fn a_hello_cut_short_is_never_repeated() {
     let fixture = Fixture::start().await;
-    fixture.join("frank", None, JOINED).await;
+    fixture.join("frank", "luiz", JOINED).await;
     fixture.irc().attach("frank");
     let apps = "Get pinged when someone replies: https://members.weblounge.org/help/apps";
     fixture.irc().lose(apps);
@@ -466,7 +472,7 @@ async fn a_hello_cut_short_is_never_repeated() {
 #[tokio::test]
 async fn a_restart_repeats_nothing() {
     let fixture = Fixture::start().await;
-    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("erin", "luiz", JOINED).await;
     fixture.irc().attach("erin");
     fixture.tick(JOINED + 5).await;
 

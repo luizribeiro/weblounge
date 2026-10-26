@@ -41,7 +41,6 @@ pub fn due(arrival: &Arrival, attached: bool, now: i64) -> Vec<Step> {
     }
     let announced_at = arrival.announced_at.or(welcoming.then_some(now));
     if let Some(announced_at) = announced_at
-        && arrival.inviter.is_some()
         && arrival.inviter_told_at.is_none()
         && !welcome_rules::stale(arrival.joined_at, now)
         && welcome_rules::still_trying(announced_at, now)
@@ -56,7 +55,6 @@ pub fn due(arrival: &Arrival, attached: bool, now: i64) -> Vec<Step> {
     }
     let nudge_at = welcome_rules::nudge_at(arrival.joined_at);
     if arrived_at.is_none()
-        && arrival.inviter.is_some()
         && arrival.nudged_at.is_none()
         && now >= nudge_at
         && welcome_rules::still_trying(nudge_at, now)
@@ -78,7 +76,7 @@ pub(crate) mod tests {
     pub fn erin() -> Arrival {
         Arrival {
             account: MemberName::new("erin"),
-            inviter: Some(MemberName::new("luiz")),
+            inviter: MemberName::new("luiz"),
             joined_at: JOINED,
             arrived_at: None,
             announced_at: None,
@@ -88,22 +86,13 @@ pub(crate) mod tests {
         }
     }
 
-    /// frank, who came in through a root invite at JOINED.
-    fn frank() -> Arrival {
-        Arrival {
-            account: MemberName::new("frank"),
-            inviter: None,
-            ..erin()
-        }
-    }
-
-    /// `arrival`, once seen, welcomed and said hello to at `at`.
-    fn welcomed(arrival: Arrival, at: i64) -> Arrival {
+    /// erin, once seen, welcomed and said hello to at `at`.
+    fn welcomed(at: i64) -> Arrival {
         Arrival {
             arrived_at: Some(at),
             announced_at: Some(at),
             oriented_at: Some(at),
-            ..arrival
+            ..erin()
         }
     }
 
@@ -111,15 +100,15 @@ pub(crate) mod tests {
     fn told(at: i64) -> Arrival {
         Arrival {
             inviter_told_at: Some(at),
-            ..welcomed(erin(), at)
+            ..welcomed(at)
         }
     }
 
     #[test]
     fn notes_the_first_sight_of_a_session_once() {
         assert_eq!(
-            due(&frank(), true, JOINED),
-            [Step::Arrive, Step::Welcome, Step::Orient]
+            due(&erin(), true, JOINED),
+            [Step::Arrive, Step::Welcome, Step::TellInviter, Step::Orient]
         );
         assert_eq!(due(&told(JOINED + 5), true, JOINED + 10), []);
     }
@@ -132,20 +121,19 @@ pub(crate) mod tests {
 
     #[test]
     fn welcomes_at_first_sight_or_once_the_fallback_comes() {
-        assert_eq!(due(&frank(), false, JOINED + FALLBACK - 1), []);
-        assert_eq!(due(&frank(), false, JOINED + FALLBACK), [Step::Welcome]);
-        let seen_earlier = Arrival {
-            arrived_at: Some(JOINED + 1),
-            oriented_at: Some(JOINED + 1),
-            ..frank()
-        };
-        assert_eq!(due(&seen_earlier, false, JOINED + 2), [Step::Welcome]);
+        assert_eq!(due(&erin(), false, JOINED + FALLBACK - 1), []);
+        assert_eq!(
+            due(&erin(), false, JOINED + FALLBACK),
+            [Step::Welcome, Step::TellInviter]
+        );
     }
 
     #[test]
     fn never_welcomes_twice_or_late() {
-        let announced = welcomed(frank(), JOINED + FALLBACK);
-        assert_eq!(due(&announced, false, JOINED + FALLBACK + 5), []);
+        assert_eq!(
+            due(&told(JOINED + FALLBACK), false, JOINED + FALLBACK + 5),
+            []
+        );
         assert_eq!(
             due(&erin(), true, JOINED + STALE_AFTER),
             [Step::Arrive, Step::Orient]
@@ -156,23 +144,22 @@ pub(crate) mod tests {
     fn says_hello_once_the_newcomer_is_seen_and_only_then() {
         let unseen = Arrival {
             announced_at: Some(JOINED + FALLBACK),
-            ..frank()
+            inviter_told_at: Some(JOINED + FALLBACK),
+            ..erin()
         };
         assert_eq!(due(&unseen, false, JOINED + FALLBACK + 5), []);
         assert_eq!(
             due(&unseen, true, JOINED + 3 * 24 * 60 * 60),
             [Step::Arrive, Step::Orient]
         );
-        let oriented = welcomed(frank(), JOINED);
-        assert_eq!(due(&oriented, false, JOINED + 5), []);
+        assert_eq!(due(&told(JOINED), false, JOINED + 5), []);
     }
 
     #[test]
     fn gives_up_on_a_hello_that_cant_get_through_for_a_day() {
         let seen = Arrival {
-            arrived_at: Some(JOINED),
-            announced_at: Some(JOINED),
-            ..frank()
+            oriented_at: None,
+            ..told(JOINED)
         };
         let day = welcome_rules::RETRY_FOR;
         assert_eq!(due(&seen, false, JOINED + day - 1), [Step::Orient]);
@@ -182,22 +169,15 @@ pub(crate) mod tests {
     #[test]
     fn tells_the_inviter_right_after_the_welcome() {
         assert_eq!(
-            due(&erin(), true, JOINED),
-            [Step::Arrive, Step::Welcome, Step::TellInviter, Step::Orient]
+            due(&welcomed(JOINED), false, JOINED + 5),
+            [Step::TellInviter]
         );
-        let announced = welcomed(erin(), JOINED);
-        assert_eq!(due(&announced, false, JOINED + 5), [Step::TellInviter]);
         assert_eq!(due(&told(JOINED), false, JOINED + 5), []);
     }
 
     #[test]
-    fn tells_nobody_of_a_root_invitee_or_a_removed_inviters() {
-        assert_eq!(due(&welcomed(frank(), JOINED), false, JOINED + 5), []);
-    }
-
-    #[test]
     fn gives_up_on_an_inviter_who_cant_be_reached_for_a_day() {
-        let announced = welcomed(erin(), JOINED);
+        let announced = welcomed(JOINED);
         let day = welcome_rules::RETRY_FOR;
         assert_eq!(
             due(&announced, false, JOINED + day - 1),
@@ -228,7 +208,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn nudges_nobody_about_a_newcomer_who_came_or_has_no_inviter() {
+    fn nudges_nobody_about_a_newcomer_who_came() {
         let nudge_at = welcome_rules::nudge_at(JOINED);
         assert_eq!(due(&unseen(), true, nudge_at), [Step::Arrive, Step::Orient]);
         let came = Arrival {
@@ -237,11 +217,6 @@ pub(crate) mod tests {
             ..unseen()
         };
         assert_eq!(due(&came, false, nudge_at), []);
-        let root = Arrival {
-            inviter: None,
-            ..unseen()
-        };
-        assert_eq!(due(&root, false, nudge_at), []);
     }
 
     #[test]

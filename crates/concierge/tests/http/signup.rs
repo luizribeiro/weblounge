@@ -189,7 +189,7 @@ async fn signs_bob_up_without_a_link(site: &Site) {
 }
 
 #[tokio::test]
-async fn a_root_invite_makes_a_root_member_without_news() {
+async fn a_root_invite_makes_a_root_member_without_news_or_a_welcome() {
     let site = Site::start().await;
     site.add_invite(CODE, None).await;
     let form: Vec<_> = bob()
@@ -200,6 +200,7 @@ async fn a_root_invite_makes_a_root_member_without_news() {
     let member = site.db.member("bob").await.unwrap().unwrap();
     assert_eq!(member.invited_by, None);
     assert!(!member.news_opt_in);
+    assert_eq!(arrivals(&site).await, 0);
 }
 
 #[tokio::test]

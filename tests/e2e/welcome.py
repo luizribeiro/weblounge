@@ -87,12 +87,9 @@ with subtest("both greeter units run sandboxed as concierge, and only the accoun
     assert held == ["ca", "concierge-greeter-password"], held
     credenza.succeed("systemctl cat concierge-greeter-account | grep -q '^LoadCredential=ergo-api-token:'")
 
-with subtest("a root invitee is welcomed ten minutes in, naming no inviter, and nobody is told"):
+with subtest("a root invite, which bootstraps the network, gets no welcome"):
     add_member(**luiz, admin=True)
-    joined_minutes_ago("luiz", 11)
-    wait_for_step("luiz", "announced_at")
-    assert lounge() == ["Welcome luiz!"], lounge()
-    assert told_luiz() == []
+    assert concierge_sql("SELECT count(*) FROM arrivals") == "0\n"
 
 with subtest("an offline inviter hears once the welcome is in #lounge, before the newcomer ever connects"):
     confirm_email("luiz")

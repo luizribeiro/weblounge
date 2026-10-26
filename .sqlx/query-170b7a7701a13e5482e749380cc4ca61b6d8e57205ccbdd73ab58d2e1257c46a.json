@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT arrivals.account AS \"account!: MemberName\",\n                      CASE WHEN inviter.removed_at IS NULL THEN newcomer.invited_by END\n                          AS \"inviter: MemberName\",\n                      newcomer.joined_at, arrivals.arrived_at, arrivals.announced_at,\n                      arrivals.inviter_told_at, arrivals.nudged_at, arrivals.oriented_at\n               FROM arrivals\n               JOIN members newcomer ON newcomer.account = arrivals.account\n               LEFT JOIN members inviter ON inviter.account = newcomer.invited_by\n               ORDER BY newcomer.joined_at, arrivals.account",
+  "query": "SELECT arrivals.account AS \"account!: MemberName\",\n                      newcomer.invited_by AS \"inviter!: MemberName\",\n                      newcomer.joined_at, arrivals.arrived_at, arrivals.announced_at,\n                      arrivals.inviter_told_at, arrivals.nudged_at, arrivals.oriented_at\n               FROM arrivals\n               JOIN members newcomer ON newcomer.account = arrivals.account\n               WHERE newcomer.invited_by IS NOT NULL\n               ORDER BY newcomer.joined_at, arrivals.account",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Text"
       },
       {
-        "name": "inviter: MemberName",
+        "name": "inviter!: MemberName",
         "ordinal": 1,
         "type_info": "Text"
       },
@@ -58,5 +58,5 @@
       true
     ]
   },
-  "hash": "1a4a2d5363cc264fb8bada896f60d44407afd2ef15ace71cb26ac05bc041ad97"
+  "hash": "170b7a7701a13e5482e749380cc4ca61b6d8e57205ccbdd73ab58d2e1257c46a"
 }

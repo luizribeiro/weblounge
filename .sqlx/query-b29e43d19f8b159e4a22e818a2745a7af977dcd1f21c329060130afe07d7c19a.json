@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM arrivals WHERE account = ?1\n                 OR account IN (SELECT account FROM members WHERE invited_by = ?1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b29e43d19f8b159e4a22e818a2745a7af977dcd1f21c329060130afe07d7c19a"
+}

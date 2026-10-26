@@ -181,9 +181,9 @@ pub struct Session {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Arrival {
     pub account: MemberName,
-    /// Who invited them, unless a root invite did or the inviter was
-    /// removed since.
-    pub inviter: Option<MemberName>,
+    /// The member who invited them: root invites record no arrival, and
+    /// removing a member takes their invitees' arrivals with them.
+    pub inviter: MemberName,
     pub joined_at: i64,
     /// When they were first seen with a session attached.
     pub arrived_at: Option<i64>,
@@ -834,6 +834,7 @@ impl Db {
     /// Clears everything personal about a member, their verification and
     /// reset codes and their arrival included, so a newcomer not welcomed
     /// yet never is, ends their sessions and revokes their open invites.
+    /// Their invitees' arrivals go too, so the greeter never names them.
     /// Their row stays as their place in the invite tree, so the people
     /// they invited stay attached. Mail waiting for them is in the
     /// outbox's own database.
@@ -857,9 +858,13 @@ impl Db {
         )
         .execute(&mut *transaction)
         .await?;
-        sqlx::query!("DELETE FROM arrivals WHERE account = ?", account)
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query!(
+            "DELETE FROM arrivals WHERE account = ?1
+                 OR account IN (SELECT account FROM members WHERE invited_by = ?1)",
+            account
+        )
+        .execute(&mut *transaction)
+        .await?;
         let sessions_ended = delete_sessions(&mut *transaction, account).await?;
         let invites_revoked = revoke_open_invites(&mut *transaction, account, now).await?;
         transaction.commit().await?;
@@ -1000,8 +1005,9 @@ impl Db {
         .map(drop)
     }
 
-    /// Adds `member`, marks the claimed invite redeemed by them and records
-    /// their arrival for the greeter, all or none.
+    /// Adds `member`, marks the claimed invite redeemed by them and, if a
+    /// member invited them, records their arrival for the greeter, all or
+    /// none.
     pub async fn redeem_invite(
         &self,
         claim: &Claim,
@@ -1022,9 +1028,13 @@ impl Db {
         if redeemed.rows_affected() == 0 {
             return Ok(Redemption::Lost);
         }
-        sqlx::query!("INSERT INTO arrivals (account) VALUES (?)", member.account)
-            .execute(&mut *transaction)
-            .await?;
+        // Root invites only bootstrap the network, so nobody's there to
+        // introduce their redeemer.
+        if member.invited_by.is_some() {
+            sqlx::query!("INSERT INTO arrivals (account) VALUES (?)", member.account)
+                .execute(&mut *transaction)
+                .await?;
+        }
         transaction.commit().await?;
         Ok(Redemption::Redeemed)
     }
@@ -1281,13 +1291,12 @@ impl Db {
         sqlx::query_as!(
             Arrival,
             r#"SELECT arrivals.account AS "account!: MemberName",
-                      CASE WHEN inviter.removed_at IS NULL THEN newcomer.invited_by END
-                          AS "inviter: MemberName",
+                      newcomer.invited_by AS "inviter!: MemberName",
                       newcomer.joined_at, arrivals.arrived_at, arrivals.announced_at,
                       arrivals.inviter_told_at, arrivals.nudged_at, arrivals.oriented_at
                FROM arrivals
                JOIN members newcomer ON newcomer.account = arrivals.account
-               LEFT JOIN members inviter ON inviter.account = newcomer.invited_by
+               WHERE newcomer.invited_by IS NOT NULL
                ORDER BY newcomer.joined_at, arrivals.account"#
         )
         .fetch_all(&self.pool)
@@ -2277,6 +2286,30 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn a_root_invite_records_no_arrival() {
+        let (db, _dir) = with_open_invite().await;
+        add_invite(
+            &db,
+            "root",
+            None,
+            CREATED,
+            invite_rules::expires_at(CREATED),
+        )
+        .await;
+        let claim = db.claim_invite("root", CREATED).await.unwrap().unwrap();
+        let bob = MemberName::new("bob");
+        let root_invitee = NewMember {
+            invited_by: None,
+            ..newcomer(&bob, CREATED)
+        };
+
+        let redeemed = db.redeem_invite(&claim, &root_invitee).await.unwrap();
+
+        assert_eq!(redeemed, Redemption::Redeemed);
+        assert!(arrivals_recorded(&db).await.is_empty());
+    }
+
+    #[tokio::test]
     async fn removing_a_newcomer_takes_their_arrival_with_them() {
         let (db, _dir) = with_open_invite().await;
         let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
@@ -2291,7 +2324,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
-    async fn lists_arrivals_in_joining_order_with_their_live_inviters() {
+    async fn lists_arrivals_in_joining_order_with_their_inviters() {
         let (db, _dir) = temp_db().await;
         execute(
             &db,
@@ -2301,7 +2334,7 @@ pub(crate) mod tests {
                     ('gone', 'gone@example.org', 'root', 10),
                     ('erin', 'erin@example.org', 'alice', 30),
                     ('dave', 'dave@example.org', 'gone', 20),
-                    ('carol', 'carol@example.org', NULL, 40);
+                    ('carol', 'carol@example.org', 'alice', 40);
              INSERT INTO arrivals (account) VALUES ('erin'), ('dave'), ('carol');",
         )
         .await
@@ -2309,6 +2342,7 @@ pub(crate) mod tests {
         db.remove_member(&MemberName::new("gone"), 25)
             .await
             .unwrap();
+        assert_eq!(arrivals_recorded(&db).await, ["carol", "erin"]);
         let erin = MemberName::new("erin");
         db.record(&erin, Milestone::Arrived, 35).await.unwrap();
         db.record(&erin, Milestone::Announced(Some("msg-1")), 36)
@@ -2322,9 +2356,9 @@ pub(crate) mod tests {
 
         let arrivals = db.arrivals().await.unwrap();
 
-        let arrival = |account: &str, inviter: Option<&str>, joined_at| Arrival {
+        let arrival = |account: &str, joined_at| Arrival {
             account: MemberName::new(account),
-            inviter: inviter.map(MemberName::new),
+            inviter: MemberName::new("alice"),
             joined_at,
             arrived_at: None,
             announced_at: None,
@@ -2335,17 +2369,16 @@ pub(crate) mod tests {
         assert_eq!(
             arrivals,
             [
-                arrival("dave", None, 20),
                 Arrival {
                     arrived_at: Some(35),
                     announced_at: Some(36),
                     inviter_told_at: Some(37),
                     oriented_at: Some(38),
-                    ..arrival("erin", Some("alice"), 30)
+                    ..arrival("erin", 30)
                 },
                 Arrival {
                     nudged_at: Some(50),
-                    ..arrival("carol", None, 40)
+                    ..arrival("carol", 40)
                 },
             ]
         );

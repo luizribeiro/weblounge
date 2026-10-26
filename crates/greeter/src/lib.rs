@@ -101,30 +101,27 @@ impl<I: Irc> Greeter<I> {
                 return Ok(());
             }
             Step::Welcome => {
-                let line = lines::welcome(newcomer, arrival.inviter.as_ref());
+                let line = lines::welcome(newcomer, &arrival.inviter);
                 let msgid = self.irc.say(irc::LOUNGE, &line).await?;
                 let announced = Milestone::Announced(msgid.as_deref());
                 self.db.record(newcomer, announced, now).await?;
                 return Ok(());
             }
             Step::TellInviter => (
-                arrival.inviter.as_ref(),
+                &arrival.inviter,
                 vec![lines::inviter_told(newcomer)],
                 Milestone::InviterTold,
             ),
             Step::Orient => (
-                Some(newcomer),
+                newcomer,
                 lines::orientation(newcomer, &self.public_url).to_vec(),
                 Milestone::Oriented,
             ),
             Step::Nudge => (
-                arrival.inviter.as_ref(),
+                &arrival.inviter,
                 vec![lines::nudge(newcomer)],
                 Milestone::Nudged,
             ),
-        };
-        let Some(to) = to else {
-            return Ok(());
         };
         let (first, rest) = said.split_first().expect("every step says something");
         if !self.tell(to, first).await? {
