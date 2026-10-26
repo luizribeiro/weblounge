@@ -106,6 +106,12 @@ switch() {
   esac
 }
 
+# A crash seconds after the marker changes would otherwise beat the
+# filesystem's next commit to disk.
+persist() {
+  sync -f "$persistent"
+}
+
 # The marker lives from boot to a clean shutdown, so a boot that finds it
 # follows a crash or a power loss.
 boot() {
@@ -113,6 +119,7 @@ boot() {
     if [ -e "$persistent/up" ]; then notify crash-booted; else notify booted; fi
   fi
   touch "$persistent/up"
+  persist
 }
 
 shutdown() {
@@ -128,6 +135,7 @@ shutdown() {
 
 down() {
   rm -f "$persistent/up"
+  persist
 }
 
 revision_of() {
