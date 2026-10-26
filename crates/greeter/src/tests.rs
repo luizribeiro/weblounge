@@ -25,6 +25,8 @@ struct FakeIrc {
     absent: Mutex<HashSet<String>>,
     /// Whether sending times out, as it does while Ergo is down.
     timing_out: Mutex<bool>,
+    /// Lines that time out, as if Ergo went down as they were sent.
+    lost: Mutex<HashSet<String>>,
 }
 
 impl FakeIrc {
@@ -54,6 +56,10 @@ impl FakeIrc {
         *self.timing_out.lock().unwrap() = timing_out;
     }
 
+    fn lose(&self, text: &str) {
+        self.lost.lock().unwrap().insert(text.to_owned());
+    }
+
     fn set_absent(&self, nick: &str, absent: bool) {
         let mut nicks = self.absent.lock().unwrap();
         if absent {
@@ -71,7 +77,7 @@ impl Irc for FakeIrc {
     }
 
     async fn say(&self, target: &str, text: &str) -> Result<Option<String>, papo::Error> {
-        if *self.timing_out.lock().unwrap() {
+        if *self.timing_out.lock().unwrap() || self.lost.lock().unwrap().contains(text) {
             return Err(papo::Error::Timeout);
         }
         if self.absent.lock().unwrap().contains(target) {
@@ -439,6 +445,22 @@ async fn reminds_nobody_without_a_weekly_host() {
     fixture.tick(MONDAY_AT_TEN).await;
 
     assert_eq!(fixture.irc().said(), []);
+}
+
+#[tokio::test]
+async fn a_hello_cut_short_is_never_repeated() {
+    let fixture = Fixture::start().await;
+    fixture.join("frank", None, JOINED).await;
+    fixture.irc().attach("frank");
+    let apps = "Get pinged when someone replies: https://members.weblounge.org/help/apps";
+    fixture.irc().lose(apps);
+
+    fixture.tick(JOINED + 5).await;
+    fixture.tick(JOINED + 10).await;
+
+    let hello = "Hi frank, I'm the concierge, weblounge's host.";
+    assert_eq!(fixture.irc().said_to("frank"), [hello]);
+    assert_eq!(fixture.arrival("frank").await.oriented_at, Some(JOINED + 5));
 }
 
 #[tokio::test]

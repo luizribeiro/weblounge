@@ -126,9 +126,16 @@ impl<I: Irc> Greeter<I> {
         let Some(to) = to else {
             return Ok(());
         };
-        for line in &said {
-            if !self.tell(to, line).await? {
-                return Ok(());
+        let (first, rest) = said.split_first().expect("every step says something");
+        if !self.tell(to, first).await? {
+            return Ok(());
+        }
+        // Once the first line is out, trying again would repeat it, so a
+        // later line that fails is dropped and the step counts as done.
+        for line in rest {
+            if !matches!(self.tell(to, line).await, Ok(true)) {
+                eprintln!("A line to {to} didn't go out; it won't be sent again");
+                break;
             }
         }
         self.db.record(newcomer, milestone, now).await?;
