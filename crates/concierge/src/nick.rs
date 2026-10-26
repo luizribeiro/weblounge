@@ -11,9 +11,10 @@ const SERVICES: [&str; 8] = [
     "NickServ", "ChanServ", "HostServ", "HistServ", "MemoServ", "BotServ", "OperServ", "Global",
 ];
 /// The accounts the network runs itself, which are neither members nor
-/// bots: the greeter's. Nobody may sign up or make a bot under them, and
-/// `member reconcile` expects them in Ergo alone.
-pub const SYSTEM_ACCOUNTS: [&str; 1] = ["concierge"];
+/// bots: the house account the greeter connects as. Nobody may sign up
+/// or make a bot under them, and `member reconcile` expects them in Ergo
+/// alone.
+pub const SYSTEM_ACCOUNTS: [&str; 1] = [crate::house::ACCOUNT];
 
 /// The rule in words, for forms to show next to the field.
 pub const RULE: &str = "Up to 32 letters, digits, hyphens and underscores, starting with a letter.";

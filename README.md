@@ -242,6 +242,7 @@ machine. They print plain lines a script can read:
 | `bot reset-password <name>`                     | Sets a bot's new generated password, prints it once              |
 | `bot delete <name>`                             | Erases a bot and its uploads, disconnecting it; frees its name   |
 | `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password; `-` is stdin |
+| `greeter ensure-account --password-file <f>`    | The same for `concierge`, the greeter's account, with its vhost  |
 
 After `member delete`, an oper still runs `/NS ERASE <account>`. `bot
 delete` erases the bot's account itself, through

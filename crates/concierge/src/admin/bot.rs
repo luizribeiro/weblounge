@@ -1,19 +1,15 @@
-use std::{
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use clap::Subcommand;
 use ergo_api::Passphrase;
-use secret::Zeroizing;
 
-use super::{Admin, print_once};
+use super::{Admin, print_once, read_password};
 use crate::{
     bots::{Bots, Refusal},
     db::{Bot, Member},
     name::BotName,
-    password, password_rules, tree,
+    password, tree,
 };
 
 #[derive(Subcommand)]
@@ -115,19 +111,6 @@ async fn ensure(
     admin.bots().set_up(&bot.account, &bot.owner).await?;
     password::set(&admin.ergo, &bot.account, &password).await?;
     Ok(format!("updated {}\n", bot.account))
-}
-
-/// The password in `path`, or on standard input for `-`, without the
-/// newline that may end it.
-fn read_password(path: &Path) -> anyhow::Result<Passphrase> {
-    let contents = Zeroizing::new(if path == Path::new("-") {
-        io::read_to_string(io::stdin()).context("can't read standard input")?
-    } else {
-        fs::read_to_string(path).with_context(|| format!("can't read {}", path.display()))?
-    });
-    let password = contents.strip_suffix('\n').unwrap_or(&contents);
-    password_rules::check(password, password)
-        .with_context(|| format!("{} doesn't hold a usable password", path.display()))
 }
 
 async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {

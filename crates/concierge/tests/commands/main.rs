@@ -3,6 +3,7 @@
 
 mod bot;
 mod expire;
+mod greeter;
 mod invite;
 mod mail;
 mod member;

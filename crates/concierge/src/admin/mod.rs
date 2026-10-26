@@ -2,20 +2,24 @@
 //! prints plain lines a script can read.
 
 mod bot;
+mod greeter;
 mod invite;
 mod mail;
 mod member;
+
+use std::{fs, io, path::Path};
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use ergo_api::{Client, Passphrase};
 use outbox::Outbox;
+use secret::Zeroizing;
 
 use crate::{
     config::Config,
     db::{Db, Member},
     name::MemberName,
-    status,
+    password_rules, status,
 };
 
 /// The members' site of weblounge.org, and the admin commands behind it.
@@ -53,6 +57,9 @@ pub enum AdminCommand {
     /// Check that mail goes out.
     #[command(subcommand)]
     Mail(mail::MailCommand),
+    /// Manage the account the greeter connects as.
+    #[command(subcommand)]
+    Greeter(greeter::GreeterCommand),
 }
 
 /// Runs `command` and answers with what it prints.
@@ -63,6 +70,9 @@ pub async fn run(command: AdminCommand, config: &Config) -> anyhow::Result<Strin
         AdminCommand::Member(command) => member::run(command, &Admin::connect(config).await?).await,
         AdminCommand::Bot(command) => bot::run(command, &Admin::connect(config).await?).await,
         AdminCommand::Mail(command) => mail::run(command, &Admin::connect(config).await?).await,
+        AdminCommand::Greeter(command) => {
+            greeter::run(command, &Admin::connect(config).await?).await
+        }
     }
 }
 
@@ -104,6 +114,19 @@ impl Admin {
 /// only time anyone sees it.
 fn print_once(password: &Passphrase) -> String {
     format!("{}\n", password.expose())
+}
+
+/// The password in `path`, or on standard input for `-`, without the
+/// newline that may end it.
+fn read_password(path: &Path) -> anyhow::Result<Passphrase> {
+    let contents = Zeroizing::new(if path == Path::new("-") {
+        io::read_to_string(io::stdin()).context("can't read standard input")?
+    } else {
+        fs::read_to_string(path).with_context(|| format!("can't read {}", path.display()))?
+    });
+    let password = contents.strip_suffix('\n').unwrap_or(&contents);
+    password_rules::check(password, password)
+        .with_context(|| format!("{} doesn't hold a usable password", path.display()))
 }
 
 /// What's left to do once concierge let go of `account`.
