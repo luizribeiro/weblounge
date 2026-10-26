@@ -7,6 +7,7 @@ use concierge::{
     email::Email,
     invite_rules,
     name::MemberName,
+    origin::SiteOrigin,
 };
 
 use super::*;
@@ -38,6 +39,15 @@ impl FakeIrc {
     /// What the greeter said, as (target, text), oldest first.
     fn said(&self) -> Vec<(String, String)> {
         self.said.lock().unwrap().clone()
+    }
+
+    /// What the greeter said in `target`, oldest first.
+    fn said_to(&self, target: &str) -> Vec<String> {
+        let said = self.said.lock().unwrap();
+        said.iter()
+            .filter(|(to, _)| to == target)
+            .map(|(_, text)| text.clone())
+            .collect()
     }
 
     fn time_out(&self, timing_out: bool) {
@@ -104,6 +114,7 @@ impl Fixture {
             greeter: Greeter {
                 db,
                 irc: FakeIrc::default(),
+                public_url: SiteOrigin::parse("https://members.weblounge.org").unwrap(),
             },
             _dir: dir,
         }
@@ -152,8 +163,8 @@ impl Fixture {
     fn restart(self) -> Self {
         Self {
             greeter: Greeter {
-                db: self.greeter.db,
                 irc: FakeIrc::default(),
+                ..self.greeter
             },
             _dir: self._dir,
         }
@@ -213,11 +224,17 @@ async fn welcomes_a_newcomer_at_first_sight_then_tells_their_inviter() {
         [
             line("#lounge", "Welcome erin, invited by luiz!"),
             line("luiz", TOLD_LUIZ),
+            line("erin", "Hi erin, I'm the concierge, weblounge's host."),
+            line(
+                "erin",
+                "Get pinged when someone replies: https://members.weblounge.org/help/apps"
+            ),
         ]
     );
     let arrival = fixture.arrival("erin").await;
     assert_eq!(arrival.announced_at, Some(JOINED + 5));
     assert_eq!(arrival.inviter_told_at, Some(JOINED + 5));
+    assert_eq!(arrival.oriented_at, Some(JOINED + 5));
 }
 
 #[tokio::test]
@@ -230,7 +247,8 @@ async fn names_and_tells_no_inviter_removed_since() {
 
     fixture.tick(JOINED + 5).await;
 
-    assert_eq!(fixture.irc().said(), [line("#lounge", "Welcome erin!")]);
+    assert_eq!(fixture.irc().said_to("#lounge"), ["Welcome erin!"]);
+    assert_eq!(fixture.irc().said_to("luiz"), Vec::<String>::new());
 }
 
 #[tokio::test]
@@ -241,16 +259,33 @@ async fn tells_an_inviter_who_was_unreachable_once_they_are_back() {
     fixture.irc().set_absent("luiz", true);
 
     fixture.tick(JOINED + 5).await;
-    assert_eq!(fixture.irc().said().len(), 1);
+    assert_eq!(fixture.irc().said_to("erin").len(), 2);
     assert_eq!(fixture.arrival("erin").await.inviter_told_at, None);
     fixture.irc().set_absent("luiz", false);
     fixture.tick(JOINED + 60).await;
 
-    assert_eq!(fixture.irc().said()[1], line("luiz", TOLD_LUIZ));
+    assert_eq!(fixture.irc().said_to("luiz"), [TOLD_LUIZ]);
     assert_eq!(
         fixture.arrival("erin").await.inviter_told_at,
         Some(JOINED + 60)
     );
+}
+
+#[tokio::test]
+async fn says_hello_to_a_newcomer_first_seen_after_the_fallback_welcome() {
+    let fixture = Fixture::start().await;
+    fixture.join("frank", None, JOINED).await;
+    fixture.tick(JOINED + 600).await;
+    assert_eq!(fixture.irc().said_to("frank"), Vec::<String>::new());
+
+    fixture.irc().attach("frank");
+    fixture.tick(JOINED + 3 * 24 * 60 * 60).await;
+    fixture.tick(JOINED + 3 * 24 * 60 * 60 + 5).await;
+
+    let hello = fixture.irc().said_to("frank");
+    assert_eq!(hello[0], "Hi frank, I'm the concierge, weblounge's host.");
+    assert_eq!(hello.len(), 2);
+    assert_eq!(fixture.irc().said_to("#lounge"), ["Welcome frank!"]);
 }
 
 #[tokio::test]
@@ -273,7 +308,8 @@ async fn skips_the_welcome_of_an_arrival_two_days_old() {
 
     fixture.tick(JOINED + 2 * 24 * 60 * 60).await;
 
-    assert_eq!(fixture.irc().said(), []);
+    assert_eq!(fixture.irc().said_to("#lounge"), Vec::<String>::new());
+    assert_eq!(fixture.irc().said_to("luiz"), Vec::<String>::new());
     assert_eq!(fixture.arrival("erin").await.announced_at, None);
 }
 
@@ -289,7 +325,7 @@ async fn a_welcome_that_didnt_go_out_goes_out_on_a_later_tick() {
     fixture.irc().time_out(false);
     fixture.tick(JOINED + 10).await;
 
-    assert_eq!(fixture.irc().said().len(), 2);
+    assert_eq!(fixture.irc().said().len(), 4);
     assert_eq!(
         fixture.arrival("erin").await.announced_at,
         Some(JOINED + 10)

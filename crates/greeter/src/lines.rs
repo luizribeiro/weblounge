@@ -1,7 +1,7 @@
 //! What the greeter says. Plain lines, naming people by their nicks and
 //! never guessing at pronouns.
 
-use concierge::name::MemberName;
+use concierge::{clients::GUIDES, name::MemberName, origin::SiteOrigin};
 
 /// The welcome in #lounge, naming the inviter unless a root invite, or a
 /// member removed since, brought the newcomer.
@@ -18,6 +18,15 @@ pub fn inviter_told(newcomer: &MemberName) -> String {
         "{newcomer} accepted your invite and was welcomed in #lounge. \
          Say hi when you get a chance."
     )
+}
+
+/// The newcomer's one direct message, the first time they're seen
+/// connected, each line sent on its own.
+pub fn orientation(newcomer: &MemberName, public_url: &SiteOrigin) -> [String; 2] {
+    [
+        format!("Hi {newcomer}, I'm the concierge, weblounge's host."),
+        format!("Get pinged when someone replies: {public_url}{GUIDES}"),
+    ]
 }
 
 #[cfg(test)]

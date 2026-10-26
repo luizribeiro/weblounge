@@ -3,7 +3,10 @@
 
 use crate::{config::IrcServer, platform::Platform};
 
-const CHANNEL: &str = "#lounge";
+/// The channel everyone joins, where the greeter welcomes newcomers.
+pub const CHANNEL: &str = "#lounge";
+/// Where the guides to the apps live, under the Help tab.
+pub use crate::routes::clients::PATH as GUIDES;
 /// What clients assume when a server's address names no port.
 const DEFAULT_TLS_PORT: u16 = 6697;
 

@@ -13,6 +13,8 @@ pub enum Step {
     Welcome,
     /// Tell their inviter, by direct message, that they were welcomed.
     TellInviter,
+    /// Say hello to them by direct message, once they've been seen.
+    Orient,
 }
 
 /// Whether the greeter needs to know if the newcomer is connected now.
@@ -28,9 +30,10 @@ pub fn due(arrival: &Arrival, attached: bool, now: i64) -> Vec<Step> {
     if first_sight {
         steps.push(Step::Arrive);
     }
-    let seen = first_sight || arrival.arrived_at.is_some();
-    let welcoming =
-        arrival.announced_at.is_none() && welcome_rules::welcome_due(arrival.joined_at, seen, now);
+    // A step due this tick counts as done at `now` for the ones after it.
+    let arrived_at = arrival.arrived_at.or(first_sight.then_some(now));
+    let welcoming = arrival.announced_at.is_none()
+        && welcome_rules::welcome_due(arrival.joined_at, arrived_at.is_some(), now);
     if welcoming {
         steps.push(Step::Welcome);
     }
@@ -42,6 +45,12 @@ pub fn due(arrival: &Arrival, attached: bool, now: i64) -> Vec<Step> {
         && welcome_rules::still_trying(announced_at, now)
     {
         steps.push(Step::TellInviter);
+    }
+    if let Some(arrived_at) = arrived_at
+        && arrival.oriented_at.is_none()
+        && welcome_rules::still_trying(arrived_at, now)
+    {
+        steps.push(Step::Orient);
     }
     steps
 }
@@ -77,16 +86,17 @@ pub(crate) mod tests {
         }
     }
 
-    /// `arrival`, once seen and welcomed at `at`.
+    /// `arrival`, once seen, welcomed and said hello to at `at`.
     fn welcomed(arrival: Arrival, at: i64) -> Arrival {
         Arrival {
             arrived_at: Some(at),
             announced_at: Some(at),
+            oriented_at: Some(at),
             ..arrival
         }
     }
 
-    /// erin, once seen, welcomed and announced to luiz at `at`.
+    /// erin, once everything was done at `at`.
     fn told(at: i64) -> Arrival {
         Arrival {
             inviter_told_at: Some(at),
@@ -96,7 +106,10 @@ pub(crate) mod tests {
 
     #[test]
     fn notes_the_first_sight_of_a_session_once() {
-        assert_eq!(due(&frank(), true, JOINED), [Step::Arrive, Step::Welcome]);
+        assert_eq!(
+            due(&frank(), true, JOINED),
+            [Step::Arrive, Step::Welcome, Step::Orient]
+        );
         assert_eq!(due(&told(JOINED + 5), true, JOINED + 10), []);
     }
 
@@ -112,6 +125,7 @@ pub(crate) mod tests {
         assert_eq!(due(&frank(), false, JOINED + FALLBACK), [Step::Welcome]);
         let seen_earlier = Arrival {
             arrived_at: Some(JOINED + 1),
+            oriented_at: Some(JOINED + 1),
             ..frank()
         };
         assert_eq!(due(&seen_earlier, false, JOINED + 2), [Step::Welcome]);
@@ -121,14 +135,44 @@ pub(crate) mod tests {
     fn never_welcomes_twice_or_late() {
         let announced = welcomed(frank(), JOINED + FALLBACK);
         assert_eq!(due(&announced, false, JOINED + FALLBACK + 5), []);
-        assert_eq!(due(&erin(), true, JOINED + STALE_AFTER), [Step::Arrive]);
+        assert_eq!(
+            due(&erin(), true, JOINED + STALE_AFTER),
+            [Step::Arrive, Step::Orient]
+        );
+    }
+
+    #[test]
+    fn says_hello_once_the_newcomer_is_seen_and_only_then() {
+        let unseen = Arrival {
+            announced_at: Some(JOINED + FALLBACK),
+            ..frank()
+        };
+        assert_eq!(due(&unseen, false, JOINED + FALLBACK + 5), []);
+        assert_eq!(
+            due(&unseen, true, JOINED + 3 * 24 * 60 * 60),
+            [Step::Arrive, Step::Orient]
+        );
+        let oriented = welcomed(frank(), JOINED);
+        assert_eq!(due(&oriented, false, JOINED + 5), []);
+    }
+
+    #[test]
+    fn gives_up_on_a_hello_that_cant_get_through_for_a_day() {
+        let seen = Arrival {
+            arrived_at: Some(JOINED),
+            announced_at: Some(JOINED),
+            ..frank()
+        };
+        let day = welcome_rules::RETRY_FOR;
+        assert_eq!(due(&seen, false, JOINED + day - 1), [Step::Orient]);
+        assert_eq!(due(&seen, false, JOINED + day), []);
     }
 
     #[test]
     fn tells_the_inviter_right_after_the_welcome() {
         assert_eq!(
             due(&erin(), true, JOINED),
-            [Step::Arrive, Step::Welcome, Step::TellInviter]
+            [Step::Arrive, Step::Welcome, Step::TellInviter, Step::Orient]
         );
         let announced = welcomed(erin(), JOINED);
         assert_eq!(due(&announced, false, JOINED + 5), [Step::TellInviter]);

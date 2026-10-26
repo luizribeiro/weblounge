@@ -202,6 +202,7 @@ pub enum Milestone<'a> {
     /// gave one.
     Announced(Option<&'a str>),
     InviterTold,
+    Oriented,
 }
 
 /// What [`Db::remove_member`] did besides clearing the member's data.
@@ -1329,6 +1330,15 @@ impl Db {
                 .execute(pool)
                 .await
             }
+            Milestone::Oriented => {
+                sqlx::query!(
+                    "UPDATE arrivals SET oriented_at = ? WHERE account = ?",
+                    at,
+                    account
+                )
+                .execute(pool)
+                .await
+            }
         }
         .map(drop)
     }
@@ -2261,6 +2271,7 @@ pub(crate) mod tests {
             .await
             .unwrap();
         db.record(&erin, Milestone::InviterTold, 37).await.unwrap();
+        db.record(&erin, Milestone::Oriented, 38).await.unwrap();
 
         let arrivals = db.arrivals().await.unwrap();
 
@@ -2282,6 +2293,7 @@ pub(crate) mod tests {
                     arrived_at: Some(35),
                     announced_at: Some(36),
                     inviter_told_at: Some(37),
+                    oriented_at: Some(38),
                     ..arrival("erin", Some("alice"), 30)
                 },
                 arrival("carol", None, 40),

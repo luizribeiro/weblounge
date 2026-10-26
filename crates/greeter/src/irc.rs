@@ -11,7 +11,7 @@ use concierge::{config::IrcServer, house};
 use papo::{Away, Client, Event, Events, Refusal, Sasl};
 use secret::SecretString;
 
-pub const LOUNGE: &str = "#lounge";
+pub const LOUNGE: &str = concierge::clients::CHANNEL;
 
 /// What the greeter does on IRC, which tests fake.
 pub(crate) trait Irc {

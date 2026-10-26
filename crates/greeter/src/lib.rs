@@ -17,6 +17,7 @@ use std::time::Duration;
 use concierge::{
     db::{self, Arrival, Db, Milestone},
     name::MemberName,
+    origin::SiteOrigin,
 };
 use papo::Client;
 
@@ -29,9 +30,19 @@ use crate::{
 const TICK: Duration = Duration::from_secs(5);
 
 /// Greets newcomers over `client`, for as long as the process runs,
-/// skipping ticks while `connection` is down.
-pub async fn run(db: Db, client: Client, connection: Connection) -> anyhow::Error {
-    let greeter = Greeter { db, irc: client };
+/// skipping ticks while `connection` is down. Its lines link to
+/// `public_url`, the members' site.
+pub async fn run(
+    db: Db,
+    client: Client,
+    connection: Connection,
+    public_url: SiteOrigin,
+) -> anyhow::Error {
+    let greeter = Greeter {
+        db,
+        irc: client,
+        public_url,
+    };
     let mut ticks = tokio::time::interval(TICK);
     loop {
         ticks.tick().await;
@@ -47,6 +58,7 @@ pub async fn run(db: Db, client: Client, connection: Connection) -> anyhow::Erro
 struct Greeter<I> {
     db: Db,
     irc: I,
+    public_url: SiteOrigin,
 }
 
 impl<I: Irc> Greeter<I> {
@@ -86,6 +98,16 @@ impl<I: Irc> Greeter<I> {
                         .record(&arrival.account, Milestone::InviterTold, now)
                         .await?;
                 }
+            }
+            Step::Orient => {
+                for line in lines::orientation(&arrival.account, &self.public_url) {
+                    if !self.tell(&arrival.account, &line).await? {
+                        return Ok(());
+                    }
+                }
+                self.db
+                    .record(&arrival.account, Milestone::Oriented, now)
+                    .await?;
             }
         }
         Ok(())
