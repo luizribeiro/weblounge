@@ -114,7 +114,7 @@ impl<I: Irc> Greeter<I> {
             ),
             Step::Orient => (
                 newcomer,
-                lines::orientation(newcomer, &self.public_url).to_vec(),
+                lines::hello(newcomer, &arrival.inviter, &self.public_url),
                 Milestone::Oriented,
             ),
             Step::Nudge => (

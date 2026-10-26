@@ -120,7 +120,7 @@ impl Fixture {
             greeter: Greeter {
                 db,
                 irc: FakeIrc::default(),
-                public_url: SiteOrigin::parse("https://members.weblounge.org").unwrap(),
+                public_url: public_url(),
                 weekly_host: Some(MemberName::new("luiz")),
             },
             _dir: dir,
@@ -226,22 +226,43 @@ async fn welcomes_a_newcomer_at_first_sight_then_tells_their_inviter() {
     fixture.tick(JOINED + 5).await;
     fixture.tick(JOINED + 10).await;
 
-    assert_eq!(
-        fixture.irc().said(),
-        [
-            line("#lounge", "Welcome erin, invited by luiz!"),
-            line("luiz", TOLD_LUIZ),
-            line("erin", "Hi erin, I'm the concierge, weblounge's host."),
-            line(
-                "erin",
-                "Get pinged when someone replies: https://members.weblounge.org/help/apps"
-            ),
-        ]
-    );
+    let welcome = line("#lounge", "Welcome erin, invited by luiz!");
+    let hello = hello("erin").into_iter().map(|text| line("erin", &text));
+    let said: Vec<_> = [welcome, line("luiz", TOLD_LUIZ)]
+        .into_iter()
+        .chain(hello)
+        .collect();
+    assert_eq!(fixture.irc().said(), said);
     let arrival = fixture.arrival("erin").await;
     assert_eq!(arrival.announced_at, Some(JOINED + 5));
     assert_eq!(arrival.inviter_told_at, Some(JOINED + 5));
     assert_eq!(arrival.oriented_at, Some(JOINED + 5));
+}
+
+fn public_url() -> SiteOrigin {
+    SiteOrigin::parse("https://members.weblounge.org").unwrap()
+}
+
+/// The hello to `newcomer`, invited by luiz.
+fn hello(newcomer: &str) -> Vec<String> {
+    let inviter = MemberName::new("luiz");
+    lines::hello(&MemberName::new(newcomer), &inviter, &public_url())
+}
+
+#[tokio::test]
+async fn a_hello_that_failed_goes_out_once_the_newcomer_can_get_it() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", "luiz", JOINED).await;
+    fixture.irc().attach("erin");
+    fixture.irc().set_absent("erin", true);
+    fixture.tick(JOINED + 5).await;
+    assert_eq!(fixture.arrival("erin").await.oriented_at, None);
+
+    fixture.irc().set_absent("erin", false);
+    fixture.tick(JOINED + 10).await;
+
+    assert_eq!(fixture.irc().said_to("erin"), hello("erin"));
+    assert_eq!(fixture.arrival("erin").await.oriented_at, Some(JOINED + 10));
 }
 
 #[tokio::test]
@@ -266,7 +287,7 @@ async fn tells_an_inviter_who_was_unreachable_once_they_are_back() {
     fixture.irc().set_absent("luiz", true);
 
     fixture.tick(JOINED + 5).await;
-    assert_eq!(fixture.irc().said_to("erin").len(), 2);
+    assert_eq!(fixture.irc().said_to("erin"), hello("erin"));
     assert_eq!(fixture.arrival("erin").await.inviter_told_at, None);
     fixture.irc().set_absent("luiz", false);
     fixture.tick(JOINED + 60).await;
@@ -312,7 +333,7 @@ async fn welcomes_a_newcomer_who_first_connects_after_the_nudge() {
         fixture.irc().said_to("#lounge"),
         ["Welcome erin, invited by luiz!"]
     );
-    assert_eq!(fixture.irc().said_to("erin").len(), 2);
+    assert_eq!(fixture.irc().said_to("erin"), hello("erin"));
 }
 
 #[tokio::test]
@@ -339,7 +360,7 @@ async fn a_welcome_that_didnt_go_out_goes_out_on_a_later_tick() {
     fixture.irc().time_out(false);
     fixture.tick(JOINED + 10).await;
 
-    assert_eq!(fixture.irc().said().len(), 4);
+    assert_eq!(fixture.irc().said().len(), 6);
     assert_eq!(
         fixture.arrival("erin").await.announced_at,
         Some(JOINED + 10)
@@ -429,14 +450,13 @@ async fn a_hello_cut_short_is_never_repeated() {
     let fixture = Fixture::start().await;
     fixture.join("frank", "luiz", JOINED).await;
     fixture.irc().attach("frank");
-    let apps = "Get pinged when someone replies: https://members.weblounge.org/help/apps";
-    fixture.irc().lose(apps);
+    let hello = hello("frank");
+    fixture.irc().lose(&hello[1]);
 
     fixture.tick(JOINED + 5).await;
     fixture.tick(JOINED + 10).await;
 
-    let hello = "Hi frank, I'm the concierge, weblounge's host.";
-    assert_eq!(fixture.irc().said_to("frank"), [hello]);
+    assert_eq!(fixture.irc().said_to("frank"), hello[..1]);
     assert_eq!(fixture.arrival("frank").await.oriented_at, Some(JOINED + 5));
 }
 

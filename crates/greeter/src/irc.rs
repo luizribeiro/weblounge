@@ -224,7 +224,7 @@ pub(crate) mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn an_away_client_or_none_at_all_is_not() {
+    async fn an_away_client_or_none_at_all_is_not_attached() {
         let away = [
             "311 concierge erin ~u weblounge * :erin",
             "301 concierge erin :Auto-away",

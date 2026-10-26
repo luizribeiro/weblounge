@@ -116,12 +116,14 @@ with subtest("a newcomer is welcomed as they first connect, and gets one hello")
     session = irc(**frank, linger=str(two_ticks))
     concierge = ":concierge!~u@weblounge/concierge PRIVMSG"
     assert f"{concierge} #lounge :Welcome frank, invited by luiz!" in session, session
-    assert f"{concierge} frank :Hi frank, I'm the concierge, weblounge's host." in session, session
-    apps = "Get pinged when someone replies: https://members.weblounge.org/help/apps"
-    assert f"{concierge} frank :{apps}" in session, session
     wait_for_step("frank", "oriented_at")
-    hellos = history_lines("concierge", **frank, speaker="concierge")
-    assert len(hellos) == 2, hellos
+    assert history_lines("concierge", **frank, speaker="concierge") == [
+        "Hi frank! I'm concierge, weblounge's resident bot. Welcome aboard.",
+        "Make sure notifications are on, so you hear when someone mentions you. On the webchat, "
+        'use the "Turn on desktop notifications" link at the top or Settings, if your browser supports it.',
+        "Want weblounge on your phone or desktop? These apps work well here: https://members.weblounge.org/help/apps",
+        "I can't chat yet. Questions? Ask luiz, who invited you, or anyone in #lounge.",
+    ]
 
 with subtest("a restart repeats nothing, and someone who connected while it was down is welcomed at first sight"):
     welcomes = lounge()

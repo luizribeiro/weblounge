@@ -19,7 +19,8 @@ pub enum Step {
     Nudge,
 }
 
-/// Whether the greeter needs to know if the newcomer is connected now.
+/// Whether the greeter needs to WHOIS the newcomer, to see them for the
+/// first time.
 pub fn needs_presence(arrival: &Arrival) -> bool {
     arrival.arrived_at.is_none()
 }
@@ -122,7 +123,12 @@ mod tests {
     #[test]
     fn does_nothing_twice() {
         assert_eq!(due(&done(JOINED + 5), true, JOINED + 10), []);
-        assert!(!needs_presence(&done(JOINED + 5)));
+    }
+
+    #[test]
+    fn asks_about_presence_until_the_first_sight() {
+        assert!(needs_presence(&erin()));
+        assert!(!needs_presence(&welcomed(JOINED)));
     }
 
     #[test]

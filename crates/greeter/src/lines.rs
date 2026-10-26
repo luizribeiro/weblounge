@@ -22,12 +22,22 @@ pub fn nudge(newcomer: &MemberName) -> String {
     )
 }
 
-/// The newcomer's one direct message, the first time they're seen
-/// connected, each line sent on its own.
-pub fn orientation(newcomer: &MemberName, public_url: &SiteOrigin) -> [String; 2] {
-    [
-        format!("Hi {newcomer}, I'm the concierge, weblounge's host."),
-        format!("Get pinged when someone replies: {public_url}{GUIDES}"),
+/// The newcomer's hello, the first time they're seen connected, each line
+/// a message of its own.
+pub fn hello(newcomer: &MemberName, inviter: &MemberName, public_url: &SiteOrigin) -> Vec<String> {
+    vec![
+        format!("Hi {newcomer}! I'm concierge, weblounge's resident bot. Welcome aboard."),
+        "Make sure notifications are on, so you hear when someone mentions you. On the \
+         webchat, use the \"Turn on desktop notifications\" link at the top or Settings, if \
+         your browser supports it."
+            .to_owned(),
+        format!(
+            "Want weblounge on your phone or desktop? These apps work well here: \
+             {public_url}{GUIDES}"
+        ),
+        format!(
+            "I can't chat yet. Questions? Ask {inviter}, who invited you, or anyone in #lounge."
+        ),
     ]
 }
 
@@ -40,5 +50,23 @@ mod tests {
         let erin = MemberName::new("erin");
         let luiz = MemberName::new("luiz");
         assert_eq!(welcome(&erin, &luiz), "Welcome erin, invited by luiz!");
+    }
+
+    #[test]
+    fn the_hello_points_at_notifications_the_apps_and_the_inviter() {
+        let public_url = SiteOrigin::parse("https://members.weblounge.org").unwrap();
+        let erin = MemberName::new("erin");
+        assert_eq!(
+            hello(&erin, &MemberName::new("luiz"), &public_url),
+            [
+                "Hi erin! I'm concierge, weblounge's resident bot. Welcome aboard.",
+                "Make sure notifications are on, so you hear when someone mentions you. \
+                 On the webchat, use the \"Turn on desktop notifications\" link at the top \
+                 or Settings, if your browser supports it.",
+                "Want weblounge on your phone or desktop? These apps work well here: \
+                 https://members.weblounge.org/help/apps",
+                "I can't chat yet. Questions? Ask luiz, who invited you, or anyone in #lounge.",
+            ]
+        );
     }
 }
