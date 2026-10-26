@@ -169,8 +169,17 @@ def sqlite(database: str, query: str, *, write: bool = False) -> str:
     return credenza.succeed(sqlite_command(database, query, write=write))
 
 
+concierge_db = "/var/lib/private/concierge/concierge.db"
+
+
 def concierge_sql(query: str, *, write: bool = False) -> str:
-    return sqlite("/var/lib/private/concierge/concierge.db", query, write=write)
+    return sqlite(concierge_db, query, write=write)
+
+
+def wait_for_concierge_sql(query: str, answer: str, timeout: int = 60) -> None:
+    """Waits until query on concierge's database answers answer, without IRC's connection limits."""
+    command = sqlite_command(concierge_db, query)
+    credenza.wait_until_succeeds(f'[ "$({command})" = {shlex.quote(answer)} ]', timeout=timeout)
 
 
 outbox = "/var/lib/concierge-outbox/outbox.db"
