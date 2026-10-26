@@ -1,4 +1,4 @@
-# The greeter: concierge, the network's host on IRC, welcomes newcomers in
+# The greeter: concierge, weblounge's resident bot, welcomes newcomers in
 # #lounge and tells their inviters. It parses what the network sends it,
 # so it holds concierge's database and its account's password alone; the
 # oneshot that puts the password back before every start holds Ergo's API

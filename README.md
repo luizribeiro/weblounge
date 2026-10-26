@@ -136,8 +136,8 @@ out of #lounge, which everyone auto-joins, through its one ban
 
 ## The greeter
 
-`concierge`, the network's host, is an account of the network's own,
-neither a member nor a bot: nobody may take the name, and `member
+`concierge`, weblounge's resident bot, is an account of the network's own,
+neither a member nor a member's bot: nobody may take the name, and `member
 reconcile` expects it. `crates/greeter` connects as it, in bot mode,
 from `concierge!~u@weblounge/concierge`, outside the bots' ban, so it
 sits in #lounge. Every invite a member made records an arrival when

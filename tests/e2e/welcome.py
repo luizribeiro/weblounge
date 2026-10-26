@@ -1,4 +1,4 @@
-# The greeter, concierge, the network's host: how it runs, and what it
+# The greeter, concierge, weblounge's resident bot: how it runs, and what it
 # says to newcomers and their inviters. It's off in every other VM test.
 #
 # Ergo takes 32 connections from the client in ten minutes, so the
