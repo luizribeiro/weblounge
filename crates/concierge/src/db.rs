@@ -803,9 +803,11 @@ impl Db {
     }
 
     /// Clears everything personal about a member, their verification and
-    /// reset codes included, ends their sessions and revokes their open invites. Their row stays as their place in the
-    /// invite tree, so the people they invited stay attached. Mail waiting
-    /// for them is in the outbox's own database.
+    /// reset codes and their arrival included, so a newcomer not welcomed
+    /// yet never is, ends their sessions and revokes their open invites.
+    /// Their row stays as their place in the invite tree, so the people
+    /// they invited stay attached. Mail waiting for them is in the
+    /// outbox's own database.
     pub async fn remove_member(&self, account: &MemberName, now: i64) -> sqlx::Result<Removal> {
         let mut transaction = self.pool.begin().await?;
         sqlx::query!(
@@ -826,6 +828,9 @@ impl Db {
         )
         .execute(&mut *transaction)
         .await?;
+        sqlx::query!("DELETE FROM arrivals WHERE account = ?", account)
+            .execute(&mut *transaction)
+            .await?;
         let sessions_ended = delete_sessions(&mut *transaction, account).await?;
         let invites_revoked = revoke_open_invites(&mut *transaction, account, now).await?;
         transaction.commit().await?;
@@ -966,8 +971,8 @@ impl Db {
         .map(drop)
     }
 
-    /// Adds `member` and marks the claimed invite redeemed by them, both or
-    /// neither.
+    /// Adds `member`, marks the claimed invite redeemed by them and records
+    /// their arrival for the greeter, all or none.
     pub async fn redeem_invite(
         &self,
         claim: &Claim,
@@ -988,6 +993,9 @@ impl Db {
         if redeemed.rows_affected() == 0 {
             return Ok(Redemption::Lost);
         }
+        sqlx::query!("INSERT INTO arrivals (account) VALUES (?)", member.account)
+            .execute(&mut *transaction)
+            .await?;
         transaction.commit().await?;
         Ok(Redemption::Redeemed)
     }
@@ -1984,6 +1992,15 @@ pub(crate) mod tests {
         .unwrap();
     }
 
+    /// The accounts with an arrival on record, which no query of the
+    /// site's lists.
+    async fn arrivals_recorded(db: &Db) -> Vec<String> {
+        sqlx::query_scalar("SELECT account FROM arrivals ORDER BY account")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap()
+    }
+
     /// alice invited someone with the code "open", which nobody used yet.
     async fn with_open_invite() -> (Db, tempfile::TempDir) {
         let (db, dir) = temp_db().await;
@@ -2052,11 +2069,13 @@ pub(crate) mod tests {
             .await;
         assert_eq!(redeemed.unwrap(), Redemption::Lost);
         assert_eq!(db.member("bob").await.unwrap(), None);
+        assert!(arrivals_recorded(&db).await.is_empty());
 
         let redeemed = db
             .redeem_invite(&fresh, &newcomer(&MemberName::new("carol"), later))
             .await;
         assert_eq!(redeemed.unwrap(), Redemption::Redeemed);
+        assert_eq!(arrivals_recorded(&db).await, ["carol"]);
     }
 
     #[tokio::test]
@@ -2086,6 +2105,7 @@ pub(crate) mod tests {
             Some("Bob")
         );
         assert_eq!(invite.status(now), invite_rules::Status::Redeemed);
+        assert_eq!(arrivals_recorded(&db).await, ["Bob"]);
         db.release_claim(&claim).await.unwrap();
         assert_eq!(db.claim_invite("open", now + 1_000).await.unwrap(), None);
     }
@@ -2100,6 +2120,7 @@ pub(crate) mod tests {
             .await;
         assert_eq!(redeemed.unwrap(), Redemption::Lost);
         assert_eq!(db.member("bob").await.unwrap(), None);
+        assert!(arrivals_recorded(&db).await.is_empty());
     }
 
     #[tokio::test]
@@ -2112,6 +2133,37 @@ pub(crate) mod tests {
                 .is_err()
         );
         assert_eq!(db.invite("open").await.unwrap().unwrap().redeemed_at, None);
+        assert!(arrivals_recorded(&db).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn removing_a_newcomer_takes_their_arrival_with_them() {
+        let (db, _dir) = with_open_invite().await;
+        let claim = db.claim_invite("open", CREATED).await.unwrap().unwrap();
+        let bob = MemberName::new("bob");
+        db.redeem_invite(&claim, &newcomer(&bob, CREATED))
+            .await
+            .unwrap();
+
+        db.remove_member(&bob, CREATED + 60).await.unwrap();
+
+        assert!(arrivals_recorded(&db).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn members_from_before_arrivals_are_never_welcomed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261030120000,
+            "INSERT INTO members (account, email, joined_at) VALUES ('alice', 'alice@example.org', 0);",
+        )
+        .await;
+
+        let db = Db::migrate(&path).await.unwrap();
+
+        assert!(arrivals_recorded(&db).await.is_empty());
     }
 
     #[tokio::test]

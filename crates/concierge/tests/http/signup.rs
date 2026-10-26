@@ -87,6 +87,8 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     let home = body_text(site.get("/", Some(&cookie)).await).await;
     assert!(home.contains("Pull up a chair, Bob."), "{home}");
     assert!(!invite_is_open(&site).await);
+    let welcomed: String = site.query_scalar("SELECT account FROM arrivals").await;
+    assert_eq!(welcomed, "Bob");
 }
 
 /// Welcomes come after the signup, so neither form asks for more than
@@ -425,6 +427,11 @@ async fn an_invite_revoked_while_ergo_works_adds_no_member_and_says_so() {
     assert!(page.contains("setup didn&#39;t finish"), "{page}");
     assert!(page.contains("clear the nick for a new invite"), "{page}");
     assert_eq!(site.db.member("bob").await.unwrap(), None);
+    assert_eq!(arrivals(&site).await, 0);
+}
+
+async fn arrivals(site: &Site) -> i64 {
+    site.query_scalar("SELECT COUNT(*) FROM arrivals").await
 }
 
 #[tokio::test]

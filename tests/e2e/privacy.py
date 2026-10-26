@@ -42,6 +42,13 @@ with subtest("stored: concierge's database has the columns the page was written 
         " WHERE t.type = 'table' AND t.name NOT LIKE '\\_%' ESCAPE '\\' ORDER BY 1"
     ).split()
     assert columns == [
+        "arrivals.account",
+        "arrivals.announce_msgid",
+        "arrivals.announced_at",
+        "arrivals.arrived_at",
+        "arrivals.inviter_told_at",
+        "arrivals.nudged_at",
+        "arrivals.oriented_at",
         "bots.account",
         "bots.created_at",
         "bots.note",
@@ -141,7 +148,9 @@ with subtest("uploads: an image is deleted after 30 days, and leaves the disk"):
 
 with subtest("leaving: an admin deletes the account, its email leaves the disk, and IRC stops taking it"):
     assert " 903 " in irc(**grace)
+    assert concierge_sql("SELECT account FROM arrivals") == "grace\n"
     concierge_admin("member", "delete", "grace")
+    assert concierge_sql("SELECT count(*) FROM arrivals") == "0\n"
     found = files_containing(email)
     assert found == [], found
     credenza.succeed("systemctl start concierge-vacuum")

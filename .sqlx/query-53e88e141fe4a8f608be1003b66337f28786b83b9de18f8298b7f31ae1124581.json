@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO arrivals (account) VALUES (?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "53e88e141fe4a8f608be1003b66337f28786b83b9de18f8298b7f31ae1124581"
+}
