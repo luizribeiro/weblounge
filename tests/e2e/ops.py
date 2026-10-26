@@ -14,7 +14,7 @@ def lines_so_far() -> int:
     return len(ops_lines(**olive))
 
 
-def wait_for_line(pattern: str, since: int) -> list[str]:
+def wait_since(pattern: str, since: int) -> list[str]:
     """The lines in #ops since the since'th, once one matches pattern."""
     return wait_for_ops_line(pattern, **olive, since=since)
 
@@ -38,7 +38,7 @@ with subtest("once luiz is a member, bender sits in #ops"):
 with subtest("root posts to #ops with ops-notify"):
     since = lines_so_far()
     credenza.succeed("ops-notify 'looking into the slow joins'")
-    wait_for_line("looking into the slow joins", since)
+    wait_since("looking into the slow joins", since)
 
 with subtest("only the louro group reaches louro's socket"):
     credenza.succeed(louro_status_as_service("SupplementaryGroups=louro"))
@@ -54,13 +54,13 @@ with subtest("louro speaks in #ops alone"):
 with subtest("a deploy says what it deployed and restarted, and the restarts say nothing of their own"):
     since = lines_so_far()
     credenza.succeed("/run/booted-system/specialisation/deployed/bin/switch-to-configuration test")
-    lines = wait_for_line(r"deployed 0123456 — restarted: (.*, )?concierge(, .*)?", since)
+    lines = wait_since(r"deployed 0123456 — restarted: (.*, )?concierge(, .*)?", since)
     assert not any(line.startswith("concierge") for line in lines), lines
 
 with subtest("a crash and the restart after it say so, with the restart's count and where to look"):
     since = lines_so_far()
     credenza.succeed(f"kill -KILL {main_pid('concierge')}")
-    wait_for_line(r"concierge crashed and restarted \(restart #1\) — journalctl -u concierge", since)
+    wait_since(r"concierge crashed and restarted \(restart #1\) — journalctl -u concierge", since)
 
 with subtest("a service that gives up restarting says so, and says when it's back"):
     since = lines_so_far()
@@ -76,32 +76,32 @@ with subtest("a service that gives up restarting says so, and says when it's bac
         "systemctl kill -s KILL concierge-mailer",
     )
     credenza.wait_until_succeeds("systemctl is-failed concierge-mailer", timeout=60)
-    wait_for_line("concierge-mailer failed — gave up restarting", since)
+    wait_since("concierge-mailer failed — gave up restarting", since)
     credenza.succeed(
         f"rm -r {drop_in}",
         "systemctl daemon-reload",
         "systemctl reset-failed concierge-mailer",
         "systemctl start concierge-mailer",
     )
-    lines = wait_for_line("concierge-mailer is back", since)
+    lines = wait_since("concierge-mailer is back", since)
     assert lines == ["concierge-mailer failed — gave up restarting", "concierge-mailer is back"], lines
 
 with subtest("a clean shutdown and the boot after it say so, with the boot's length and kernel"):
     since = lines_so_far()
     credenza.shutdown()
     credenza.start()
-    lines = wait_for_line(booted, since)
+    lines = wait_since(booted, since)
     assert lines[0] == "credenza shutting down" and re.fullmatch(booted, lines[1]), lines
 
 with subtest("a boot after a crash says so"):
     credenza.crash()
     credenza.start(allow_reboot=True)
     # The crash may take Ergo's last lines of history with it, so this counts from the start.
-    wait_for_line(r"credenza booted after a crash or power loss \(kernel \d+\.\d+\S*\)", since=0)
+    wait_since(r"credenza booted after a crash or power loss \(kernel \d+\.\d+\S*\)", since=0)
 
 with subtest("a reboot says so, and the boot posts nothing of the services it starts"):
     since = lines_so_far()
     credenza.reboot()
-    lines = wait_for_line(booted, since)
+    lines = wait_since(booted, since)
     assert lines[0] == "credenza rebooting" and re.fullmatch(booted, lines[1]), lines
     assert len(lines) == 2, lines

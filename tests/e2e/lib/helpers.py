@@ -59,33 +59,54 @@ def wait_for_bender(timeout: int = 60) -> None:
         time.sleep(1)
 
 
-def ops_history(account: str, password: str) -> list[str] | None:
-    """What bender has said in #ops, oldest first, from the channel's history; None while IRC is down."""
-    commands = ["CAP REQ :batch message-tags draft/chathistory", "JOIN #ops", "CHATHISTORY LATEST #ops * 100"]
+def history(target: str, account: str, password: str, speaker: str | None = None) -> list[str] | None:
+    """What speaker, or anyone, said in target, a channel or the nick account talks to, oldest first,
+    from its history as account sees it; None while IRC is down."""
+    join = [f"JOIN {target}"] if target.startswith("#") else []
+    commands = ["CAP REQ :batch message-tags draft/chathistory", *join, f"CHATHISTORY LATEST {target} * 100"]
     status, session = client.execute(irc_command(*commands, account=account, password=password))
     if status != 0:
         return None
+    who = re.escape(speaker) if speaker else r"[^!\s]+"
+    to = "|".join(re.escape(name) for name in {target, account})
     lines: dict[str, str] = {}
-    for msgid, text in re.findall(r"^@\S*?\bmsgid=([^;\s]+)\S* :bender!\S+ PRIVMSG #ops :(.*)$", session, re.M):
+    for msgid, text in re.findall(rf"^@\S*?\bmsgid=([^;\s]+)\S* :{who}!\S+ PRIVMSG (?:{to}) :(.*)$", session, re.M):
         lines.setdefault(msgid, text)
     return list(lines.values())
 
 
-def ops_lines(account: str, password: str) -> list[str]:
-    lines = ops_history(account, password)
+def history_lines(target: str, account: str, password: str, speaker: str | None = None) -> list[str]:
+    lines = history(target, account, password, speaker)
     assert lines is not None, "IRC is down"
     return lines
 
 
-def wait_for_ops_line(pattern: str, account: str, password: str, since: int = 0, timeout: int = 400) -> list[str]:
-    """The lines in #ops from the since'th on, once one of them matches pattern, riding out a reboot."""
+def wait_for_line(
+    pattern: str,
+    target: str,
+    account: str,
+    password: str,
+    speaker: str | None = None,
+    since: int = 0,
+    timeout: int = 400,
+) -> list[str]:
+    """The lines in target from the since'th on, once one of them matches pattern, riding out a reboot."""
     deadline = time.monotonic() + timeout
     while True:
-        lines = (ops_history(account, password) or [])[since:]
+        lines = (history(target, account, password, speaker) or [])[since:]
         if any(re.fullmatch(pattern, line) for line in lines):
             return lines
-        assert time.monotonic() < deadline, f"nothing in #ops matches {pattern!r} after {timeout}s: {lines}"
+        assert time.monotonic() < deadline, f"nothing in {target} matches {pattern!r} after {timeout}s: {lines}"
         time.sleep(2)
+
+
+def ops_lines(account: str, password: str) -> list[str]:
+    """What bender has said in #ops, oldest first."""
+    return history_lines("#ops", account, password, speaker="bender")
+
+
+def wait_for_ops_line(pattern: str, account: str, password: str, since: int = 0, timeout: int = 400) -> list[str]:
+    return wait_for_line(pattern, "#ops", account, password, speaker="bender", since=since, timeout=timeout)
 
 
 def https(name: str, path: str = "/", *flags: str) -> str:
