@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE arrivals SET arrived_at = ? WHERE account = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "47b8ccd80a882f063d53a0bf53d2c5171191e37945f0a748aeeb3efecae6cd09"
+}

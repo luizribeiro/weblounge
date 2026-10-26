@@ -177,6 +177,24 @@ pub struct Session {
     pub expires_at: i64,
 }
 
+/// A newcomer's welcome so far, from [`Db::arrivals`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Arrival {
+    pub account: MemberName,
+    /// Who invited them, unless a root invite did or the inviter was
+    /// removed since.
+    pub inviter: Option<MemberName>,
+    pub joined_at: i64,
+    /// When they were first seen with a session attached.
+    pub arrived_at: Option<i64>,
+}
+
+/// A step of a newcomer's welcome, which [`Db::record`] notes the time of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Milestone {
+    Arrived,
+}
+
 /// What [`Db::remove_member`] did besides clearing the member's data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Removal {
@@ -1247,6 +1265,40 @@ impl Db {
         Ok(removed.rows_affected() == 1)
     }
 
+    /// The newcomers whose welcome is on record, in the order they joined.
+    pub async fn arrivals(&self) -> sqlx::Result<Vec<Arrival>> {
+        sqlx::query_as!(
+            Arrival,
+            r#"SELECT arrivals.account AS "account!: MemberName",
+                      CASE WHEN inviter.removed_at IS NULL THEN newcomer.invited_by END
+                          AS "inviter: MemberName",
+                      newcomer.joined_at, arrivals.arrived_at
+               FROM arrivals
+               JOIN members newcomer ON newcomer.account = arrivals.account
+               LEFT JOIN members inviter ON inviter.account = newcomer.invited_by
+               ORDER BY newcomer.joined_at, arrivals.account"#
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Notes when `account`'s welcome reached `milestone`.
+    pub async fn record(
+        &self,
+        account: &MemberName,
+        milestone: Milestone,
+        at: i64,
+    ) -> sqlx::Result<()> {
+        let query = match milestone {
+            Milestone::Arrived => sqlx::query!(
+                "UPDATE arrivals SET arrived_at = ? WHERE account = ?",
+                at,
+                account
+            ),
+        };
+        query.execute(&self.pool).await.map(drop)
+    }
+
     /// Members who haven't been removed.
     pub async fn member_count(&self) -> sqlx::Result<i64> {
         sqlx::query_scalar!(
@@ -2148,6 +2200,47 @@ pub(crate) mod tests {
         db.remove_member(&bob, CREATED + 60).await.unwrap();
 
         assert!(arrivals_recorded(&db).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn lists_arrivals_in_joining_order_with_their_live_inviters() {
+        let (db, _dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, invited_by, joined_at)
+             VALUES ('root', 'root@example.org', NULL, 0),
+                    ('alice', 'alice@example.org', 'root', 10),
+                    ('gone', 'gone@example.org', 'root', 10),
+                    ('erin', 'erin@example.org', 'alice', 30),
+                    ('dave', 'dave@example.org', 'gone', 20),
+                    ('carol', 'carol@example.org', NULL, 40);
+             INSERT INTO arrivals (account) VALUES ('erin'), ('dave'), ('carol');",
+        )
+        .await
+        .unwrap();
+        db.remove_member(&MemberName::new("gone"), 25)
+            .await
+            .unwrap();
+        db.record(&MemberName::new("erin"), Milestone::Arrived, 35)
+            .await
+            .unwrap();
+
+        let arrivals = db.arrivals().await.unwrap();
+
+        let arrival = |account: &str, inviter: Option<&str>, joined_at, arrived_at| Arrival {
+            account: MemberName::new(account),
+            inviter: inviter.map(MemberName::new),
+            joined_at,
+            arrived_at,
+        };
+        assert_eq!(
+            arrivals,
+            [
+                arrival("dave", None, 20, None),
+                arrival("erin", Some("alice"), 30, Some(35)),
+                arrival("carol", None, 40, None),
+            ]
+        );
     }
 
     #[tokio::test]

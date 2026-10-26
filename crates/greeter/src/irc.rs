@@ -1,12 +1,55 @@
 //! The greeter's connection to Ergo, as the house account: logged in with
 //! SASL, in bot mode and in #lounge, where it welcomes newcomers.
 
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 use anyhow::Context;
 use concierge::{config::IrcServer, house};
-use papo::{Client, Event, Events, Sasl};
+use papo::{Away, Client, Event, Events, Refusal, Sasl};
 use secret::SecretString;
 
 pub const LOUNGE: &str = "#lounge";
+
+/// What the greeter does on IRC, which tests fake.
+pub(crate) trait Irc {
+    /// Whether `nick` has a session attached: a client that exists and
+    /// isn't away. Ergo keeps the clients of always-on accounts without
+    /// sessions, even creating them as it starts, and auto-away marks
+    /// those away, so a client alone proves nothing.
+    async fn attached(&self, nick: &str) -> Result<bool, papo::Error>;
+}
+
+impl Irc for Client {
+    async fn attached(&self, nick: &str) -> Result<bool, papo::Error> {
+        match self.whois(nick).await {
+            Ok(whois) => Ok(!matches!(whois.away, Away::Away { .. })),
+            Err(error) if refused_as_absent(&error) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+/// Whether the server refused because nobody holds the nick.
+pub(crate) fn refused_as_absent(error: &papo::Error) -> bool {
+    matches!(error, papo::Error::Server(refused) if refused.refusal() == Refusal::NoSuchNick)
+}
+
+/// Whether the greeter is connected, as [`watch`] last heard.
+#[derive(Debug, Clone, Default)]
+pub struct Connection(Arc<AtomicBool>);
+
+impl Connection {
+    pub fn is_up(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    fn set(&self, up: bool) {
+        self.0.store(up, Ordering::Relaxed);
+    }
+}
 
 /// How the greeter connects. papo reconnects by itself, until a refusal
 /// it takes for permanent, such as a wrong password.
@@ -29,13 +72,19 @@ pub async fn connect(
         .with_context(|| format!("can't connect to {}:{}", server.host, server.port))
 }
 
-/// Logs the connection coming and going, and answers once papo stopped
-/// reconnecting, which systemd takes from there.
-pub async fn watch(mut events: Events) -> anyhow::Error {
+/// Keeps `connection` up to date and logs it coming and going, and
+/// answers once papo stopped reconnecting, which systemd takes from there.
+pub async fn watch(mut events: Events, connection: Connection) -> anyhow::Error {
     while let Some(event) = events.next().await {
         match event {
-            Event::Connected(_) => eprintln!("Connected to Ergo"),
-            Event::Disconnected(disconnected) => eprintln!("Disconnected: {disconnected}"),
+            Event::Connected(_) => {
+                connection.set(true);
+                eprintln!("Connected to Ergo");
+            }
+            Event::Disconnected(disconnected) => {
+                connection.set(false);
+                eprintln!("Disconnected: {disconnected}");
+            }
             _ => {}
         }
     }
@@ -112,6 +161,63 @@ pub(crate) mod tests {
             sent.push(wire.next_sent().await);
         }
         sent
+    }
+
+    /// Answers `request` with `replies`, in a labeled batch as Ergo does
+    /// when the request carries a label.
+    pub async fn answer(wire: &mut Wire, request: &str, replies: &[&str]) {
+        let label = request
+            .strip_prefix("@label=")
+            .and_then(|tagged| tagged.split([' ', ';']).next());
+        let Some(label) = label else {
+            for reply in replies {
+                wire.server(format!(":irc.test {reply}")).await;
+            }
+            return;
+        };
+        wire.server(format!(
+            "@label={label} :irc.test BATCH +reply labeled-response"
+        ))
+        .await;
+        for reply in replies {
+            wire.server(format!("@batch=reply :irc.test {reply}")).await;
+        }
+        wire.server(":irc.test BATCH -reply").await;
+    }
+
+    /// Whether the greeter takes erin for attached when Ergo answers its
+    /// WHOIS with `replies`.
+    async fn attached_when_whois_says(replies: &[&str]) -> bool {
+        let (client, _events, mut wire, _) = connected().await;
+        let asking = tokio::spawn(async move { client.attached("erin").await });
+        let whois = wire.next_sent().await;
+        assert_eq!(untagged(&whois), "WHOIS erin");
+        answer(&mut wire, &whois, replies).await;
+        asking.await.unwrap().unwrap()
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_client_that_isnt_away_is_attached() {
+        let whois = [
+            "311 concierge erin ~u weblounge * :erin",
+            "318 concierge erin :End of /WHOIS list",
+        ];
+        assert!(attached_when_whois_says(&whois).await);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_away_client_or_none_at_all_is_not() {
+        let away = [
+            "311 concierge erin ~u weblounge * :erin",
+            "301 concierge erin :Auto-away",
+            "318 concierge erin :End of /WHOIS list",
+        ];
+        assert!(!attached_when_whois_says(&away).await);
+        let absent = [
+            "401 concierge erin :No such nick",
+            "318 concierge erin :End of /WHOIS list",
+        ];
+        assert!(!attached_when_whois_says(&absent).await);
     }
 
     #[tokio::test(start_paused = true)]

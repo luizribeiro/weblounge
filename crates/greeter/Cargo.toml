@@ -14,5 +14,6 @@ tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
 base64 = "0.22.1"
+tempfile = "3.27.0"
 papo-testing = { git = "https://github.com/luizribeiro/papo", rev = "4275939b85bbd920ca0c565c6f9a31ad81ccba3b" }
 tokio = { version = "1.53.3", features = ["test-util"] }

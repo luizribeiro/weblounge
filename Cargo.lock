@@ -1130,6 +1130,7 @@ dependencies = [
  "papo",
  "papo-testing",
  "secret",
+ "tempfile",
  "tokio",
 ]
 
