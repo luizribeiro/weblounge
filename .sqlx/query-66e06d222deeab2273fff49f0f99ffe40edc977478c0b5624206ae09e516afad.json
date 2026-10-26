@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE arrivals SET nudged_at = ? WHERE account = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "66e06d222deeab2273fff49f0f99ffe40edc977478c0b5624206ae09e516afad"
+}

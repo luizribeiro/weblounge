@@ -74,42 +74,44 @@ impl<I: Irc> Greeter<I> {
     }
 
     async fn take(&self, step: Step, arrival: &Arrival, now: i64) -> anyhow::Result<()> {
-        match step {
+        let newcomer = &arrival.account;
+        let (to, said, milestone) = match step {
             Step::Arrive => {
-                self.db
-                    .record(&arrival.account, Milestone::Arrived, now)
-                    .await?;
+                self.db.record(newcomer, Milestone::Arrived, now).await?;
+                return Ok(());
             }
             Step::Welcome => {
-                let line = lines::welcome(&arrival.account, arrival.inviter.as_ref());
+                let line = lines::welcome(newcomer, arrival.inviter.as_ref());
                 let msgid = self.irc.say(irc::LOUNGE, &line).await?;
                 let announced = Milestone::Announced(msgid.as_deref());
-                self.db.record(&arrival.account, announced, now).await?;
+                self.db.record(newcomer, announced, now).await?;
+                return Ok(());
             }
-            Step::TellInviter => {
-                let Some(inviter) = &arrival.inviter else {
-                    return Ok(());
-                };
-                if self
-                    .tell(inviter, &lines::inviter_told(&arrival.account))
-                    .await?
-                {
-                    self.db
-                        .record(&arrival.account, Milestone::InviterTold, now)
-                        .await?;
-                }
-            }
-            Step::Orient => {
-                for line in lines::orientation(&arrival.account, &self.public_url) {
-                    if !self.tell(&arrival.account, &line).await? {
-                        return Ok(());
-                    }
-                }
-                self.db
-                    .record(&arrival.account, Milestone::Oriented, now)
-                    .await?;
+            Step::TellInviter => (
+                arrival.inviter.as_ref(),
+                vec![lines::inviter_told(newcomer)],
+                Milestone::InviterTold,
+            ),
+            Step::Orient => (
+                Some(newcomer),
+                lines::orientation(newcomer, &self.public_url).to_vec(),
+                Milestone::Oriented,
+            ),
+            Step::Nudge => (
+                arrival.inviter.as_ref(),
+                vec![lines::nudge(newcomer)],
+                Milestone::Nudged,
+            ),
+        };
+        let Some(to) = to else {
+            return Ok(());
+        };
+        for line in &said {
+            if !self.tell(to, line).await? {
+                return Ok(());
             }
         }
+        self.db.record(newcomer, milestone, now).await?;
         Ok(())
     }
 

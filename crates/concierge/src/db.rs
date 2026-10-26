@@ -203,6 +203,7 @@ pub enum Milestone<'a> {
     Announced(Option<&'a str>),
     InviterTold,
     Oriented,
+    Nudged,
 }
 
 /// What [`Db::remove_member`] did besides clearing the member's data.
@@ -1339,6 +1340,15 @@ impl Db {
                 .execute(pool)
                 .await
             }
+            Milestone::Nudged => {
+                sqlx::query!(
+                    "UPDATE arrivals SET nudged_at = ? WHERE account = ?",
+                    at,
+                    account
+                )
+                .execute(pool)
+                .await
+            }
         }
         .map(drop)
     }
@@ -2272,6 +2282,9 @@ pub(crate) mod tests {
             .unwrap();
         db.record(&erin, Milestone::InviterTold, 37).await.unwrap();
         db.record(&erin, Milestone::Oriented, 38).await.unwrap();
+        db.record(&MemberName::new("carol"), Milestone::Nudged, 50)
+            .await
+            .unwrap();
 
         let arrivals = db.arrivals().await.unwrap();
 
@@ -2296,7 +2309,10 @@ pub(crate) mod tests {
                     oriented_at: Some(38),
                     ..arrival("erin", Some("alice"), 30)
                 },
-                arrival("carol", None, 40),
+                Arrival {
+                    nudged_at: Some(50),
+                    ..arrival("carol", None, 40)
+                },
             ]
         );
         let msgid: Option<String> =

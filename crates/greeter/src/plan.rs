@@ -15,6 +15,8 @@ pub enum Step {
     TellInviter,
     /// Say hello to them by direct message, once they've been seen.
     Orient,
+    /// Tell their inviter that they haven't connected yet.
+    Nudge,
 }
 
 /// Whether the greeter needs to know if the newcomer is connected now.
@@ -51,6 +53,15 @@ pub fn due(arrival: &Arrival, attached: bool, now: i64) -> Vec<Step> {
         && welcome_rules::still_trying(arrived_at, now)
     {
         steps.push(Step::Orient);
+    }
+    let nudge_at = welcome_rules::nudge_at(arrival.joined_at);
+    if arrived_at.is_none()
+        && arrival.inviter.is_some()
+        && arrival.nudged_at.is_none()
+        && now >= nudge_at
+        && welcome_rules::still_trying(nudge_at, now)
+    {
+        steps.push(Step::Nudge);
     }
     steps
 }
@@ -195,10 +206,57 @@ pub(crate) mod tests {
         assert_eq!(due(&announced, false, JOINED + day), []);
     }
 
+    /// erin, welcomed by the fallback and announced to luiz, unseen since.
+    fn unseen() -> Arrival {
+        Arrival {
+            announced_at: Some(JOINED + FALLBACK),
+            inviter_told_at: Some(JOINED + FALLBACK),
+            ..erin()
+        }
+    }
+
+    #[test]
+    fn nudges_the_inviter_once_two_days_in_if_the_newcomer_never_came() {
+        let nudge_at = welcome_rules::nudge_at(JOINED);
+        assert_eq!(due(&unseen(), false, nudge_at - 1), []);
+        assert_eq!(due(&unseen(), false, nudge_at), [Step::Nudge]);
+        let nudged = Arrival {
+            nudged_at: Some(nudge_at),
+            ..unseen()
+        };
+        assert_eq!(due(&nudged, false, nudge_at + 5), []);
+    }
+
+    #[test]
+    fn nudges_nobody_about_a_newcomer_who_came_or_has_no_inviter() {
+        let nudge_at = welcome_rules::nudge_at(JOINED);
+        assert_eq!(due(&unseen(), true, nudge_at), [Step::Arrive, Step::Orient]);
+        let came = Arrival {
+            arrived_at: Some(JOINED + 1),
+            oriented_at: Some(JOINED + 1),
+            ..unseen()
+        };
+        assert_eq!(due(&came, false, nudge_at), []);
+        let root = Arrival {
+            inviter: None,
+            ..unseen()
+        };
+        assert_eq!(due(&root, false, nudge_at), []);
+    }
+
+    #[test]
+    fn gives_up_on_a_nudge_that_cant_get_through_for_a_day() {
+        let nudge_at = welcome_rules::nudge_at(JOINED);
+        let day = welcome_rules::RETRY_FOR;
+        assert_eq!(due(&unseen(), false, nudge_at + day - 1), [Step::Nudge]);
+        assert_eq!(due(&unseen(), false, nudge_at + day), []);
+    }
+
     #[test]
     fn never_tells_the_inviter_once_the_arrival_is_stale() {
         let late = Arrival {
             announced_at: Some(JOINED + STALE_AFTER - 1),
+            nudged_at: Some(JOINED + STALE_AFTER - 1),
             ..erin()
         };
         assert_eq!(due(&late, false, JOINED + STALE_AFTER), []);

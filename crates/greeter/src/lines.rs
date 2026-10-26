@@ -20,6 +20,15 @@ pub fn inviter_told(newcomer: &MemberName) -> String {
     )
 }
 
+/// The one direct message to the inviter of a newcomer who hasn't
+/// connected two days in.
+pub fn nudge(newcomer: &MemberName) -> String {
+    format!(
+        "{newcomer} hasn't connected since accepting your invite. \
+         A nudge from you might help."
+    )
+}
+
 /// The newcomer's one direct message, the first time they're seen
 /// connected, each line sent on its own.
 pub fn orientation(newcomer: &MemberName, public_url: &SiteOrigin) -> [String; 2] {

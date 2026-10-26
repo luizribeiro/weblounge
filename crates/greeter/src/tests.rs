@@ -288,6 +288,36 @@ async fn says_hello_to_a_newcomer_first_seen_after_the_fallback_welcome() {
     assert_eq!(fixture.irc().said_to("#lounge"), ["Welcome frank!"]);
 }
 
+const TWO_DAYS: i64 = 2 * 24 * 60 * 60;
+
+#[tokio::test]
+async fn nudges_the_inviter_once_when_the_newcomer_never_came() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.tick(JOINED + 600).await;
+
+    fixture.tick(JOINED + TWO_DAYS - 1).await;
+    fixture.tick(JOINED + TWO_DAYS).await;
+    fixture.tick(JOINED + TWO_DAYS + 5).await;
+
+    let nudge = "erin hasn't connected since accepting your invite. A nudge from you might help.";
+    assert_eq!(fixture.irc().said_to("luiz"), [TOLD_LUIZ, nudge]);
+    let nudged_at = fixture.arrival("erin").await.nudged_at;
+    assert_eq!(nudged_at, Some(JOINED + TWO_DAYS));
+}
+
+#[tokio::test]
+async fn nudges_nobody_once_the_newcomer_came() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.irc().attach("erin");
+    fixture.tick(JOINED + 5).await;
+
+    fixture.tick(JOINED + TWO_DAYS).await;
+
+    assert_eq!(fixture.irc().said_to("luiz"), [TOLD_LUIZ]);
+}
+
 #[tokio::test]
 async fn welcomes_a_root_invitee_ten_minutes_in_even_unseen() {
     let fixture = Fixture::start().await;
