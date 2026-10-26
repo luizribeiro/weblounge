@@ -75,7 +75,8 @@ with subtest("the greeter is in #lounge as concierge, a bot outside the members'
     # Not grep -q, which would close the pipe before irc-client is done.
     client.wait_until_succeeds(f"{whois} | grep ' 319 olive concierge :.*#lounge'", timeout=60)
     whois = irc("WHOIS concierge", **olive)
-    assert re.search(r":\S+ 311 olive concierge ~u weblounge/concierge \* ", whois), whois
+    user = r":\S+ 311 olive concierge ~u weblounge/concierge \* :weblounge's resident bot$"
+    assert re.search(user, whois, re.M), whois
     assert re.search(r":\S+ 335 olive concierge ", whois), whois
 
 with subtest("systemd knows every setting of the greeter's units"):

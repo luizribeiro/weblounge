@@ -12,6 +12,8 @@ use papo::{Away, Client, Event, Events, Refusal, Sasl};
 use secret::SecretString;
 
 pub const LOUNGE: &str = concierge::clients::CHANNEL;
+/// What WHOIS says the greeter is, beside its bot mode.
+const REALNAME: &str = "weblounge's resident bot";
 
 /// What the greeter does on IRC, which tests fake.
 pub(crate) trait Irc {
@@ -72,7 +74,7 @@ pub fn builder(server: &IrcServer, password: &SecretString) -> papo::Builder {
 fn as_the_house(builder: papo::Builder, password: &SecretString) -> papo::Builder {
     builder
         .nick(house::ACCOUNT)
-        .realname("weblounge's host")
+        .realname(REALNAME)
         .sasl(Sasl::plain(house::ACCOUNT, password.expose()))
         .bot(true)
         .autojoin([LOUNGE])
@@ -141,7 +143,8 @@ pub(crate) mod tests {
     async fn log_in(wire: &mut Wire) -> Vec<String> {
         assert_eq!(wire.next_sent().await, "CAP LS 302");
         assert_eq!(wire.next_sent().await, "NICK concierge");
-        assert!(wire.next_sent().await.starts_with("USER "));
+        let user = wire.next_sent().await;
+        assert!(user.ends_with(" :weblounge's resident bot"), "{user}");
         wire.server(
             ":irc.test CAP * LS :sasl=PLAIN echo-message labeled-response message-tags batch",
         )
