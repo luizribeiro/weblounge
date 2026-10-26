@@ -81,6 +81,23 @@ async fn privacy_says_how_long_messages_last_and_that_others_may_keep_copies() {
 }
 
 #[tokio::test]
+async fn privacy_says_who_a_welcome_names_and_how_long_its_record_stays() {
+    let page = body_text(Site::start().await.get("/privacy", None).await).await;
+    assert!(
+        page.contains(
+            "posts a welcome in #lounge naming you and whoever invited you, \
+             and tells them by direct message. \
+             If you haven't connected 2 days later, it tells them once more."
+        ),
+        "{page}"
+    );
+    assert!(
+        page.contains("We keep a record of when each of these happened for 2 weeks."),
+        "{page}"
+    );
+}
+
+#[tokio::test]
 async fn privacy_says_how_long_ergo_keeps_messages_as_its_setting_does() {
     let site = Site::start_with(|app| app.history_expiry = 10 * 24 * 60 * 60).await;
     let page = body_text(site.get("/privacy", None).await).await;

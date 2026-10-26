@@ -12,6 +12,8 @@
         <p>Members' IP addresses: not in the database, not in the logs. Failed sign-ins, nick lookups, email confirmations and password resets are counted per address, in memory, for {{ failed_sign_in_minutes }} minutes.</p>
         <h2>Messages</h2>
         <p>Channel messages and direct messages are kept on the server for {{ history_kept }}, so you can scroll back after a restart, and then deleted. You can delete a message you sent, if your app offers it. Remember that other people's apps may keep their own copy of what you send, for as long as they like.</p>
+        <h2>Welcomes</h2>
+        <p>When you accept an invite, the concierge, the network's host, posts a welcome in #lounge naming you and whoever invited you, and tells them by direct message. If you haven't connected {{ nudge_after }} later, it tells them once more. The first time you connect, it sends you a hello by direct message. We keep a record of when each of these happened for {{ welcome_kept }}.</p>
         <h2>Uploads</h2>
         <p>An image you upload, by pasting or attaching it in your app, is public to anyone with its link. The link is a random name too long to guess, and we list it nowhere but your Uploads tab. Where and when a photo was taken, the camera and anything else stored in the file are removed before it's stored, and so is the file's name. We keep who uploaded each image and when, and never where from.</p>
         <p>Uploads are deleted after {{ upload_kept }}, and you can delete them sooner on your Uploads tab. Remember that anyone who saw an image may keep their own copy.</p>
