@@ -44,16 +44,9 @@ in
     after = [ "concierge.service" "ergochat.service" ];
     # concierge-admin's command runs as concierge's own user, which can't
     # open the credential, so the password reaches it on standard input.
-    # Ergo may be too busy to answer early in a boot, and louro, which
-    # needs the account, would stay down; a few tries ride that out.
-    script = ''
-      for wait in 15 15 15 0; do
-        cat "$CREDENTIALS_DIRECTORY/${nick}-password" \
-          | ${lib.getExe config.weblounge.concierge.admin} bot ensure ${owner} ${nick} --password-file - \
-          && exit 0
-        sleep "$wait"
-      done
-      exit 1
+    script = config.weblounge.ergo.untilItAnswers ''
+      cat "$CREDENTIALS_DIRECTORY/${nick}-password" \
+        | ${lib.getExe config.weblounge.concierge.admin} bot ensure ${owner} ${nick} --password-file -
     '';
     serviceConfig = {
       Type = "oneshot";

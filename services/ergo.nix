@@ -41,6 +41,23 @@ in
     description = "Where clients on this machine reach Ergo over TLS, as host:port; the name resolves to loopback here.";
   };
 
+  options.weblounge.ergo.untilItAnswers = lib.mkOption {
+    type = lib.types.functionTo lib.types.str;
+    readOnly = true;
+    default = command: ''
+      for wait in 15 15 15 0; do
+        ${lib.removeSuffix "\n" command} && exit 0
+        sleep "$wait"
+      done
+      exit 1
+    '';
+    description = ''
+      A script that runs a command against Ergo a few times, until it works.
+      Ergo may be too busy to answer early in a boot, and a oneshot that
+      gives up at once takes down the services that need it.
+    '';
+  };
+
   options.weblounge.ergo.address = lib.mkOption {
     type = lib.types.str;
     readOnly = true;
