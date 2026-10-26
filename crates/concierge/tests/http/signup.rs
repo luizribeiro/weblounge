@@ -5,6 +5,7 @@ use std::{
 
 use axum::{Json, Router, http::header, routing::post};
 use ergo_api::fake::Failure;
+use regex::Regex;
 use serde_json::json;
 use tokio::net::TcpListener;
 
@@ -86,6 +87,31 @@ async fn redeeming_creates_the_account_and_the_member_and_signs_them_in() {
     let home = body_text(site.get("/", Some(&cookie)).await).await;
     assert!(home.contains("Pull up a chair, Bob."), "{home}");
     assert!(!invite_is_open(&site).await);
+}
+
+/// Welcomes come after the signup, so neither form asks for more than
+/// it did: the Invites tab's button posts nothing, and the invite page
+/// these five fields.
+#[tokio::test]
+async fn inviting_and_signing_up_need_no_new_fields() {
+    let site = Site::start().await;
+    site.add_verified_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+
+    let invited = site.post("/invites", &[], Some(&cookie)).await;
+
+    assert_eq!(invited.status(), 200);
+    let page = body_text(invited).await;
+    let link = Regex::new(r#"<code class="invite-link">[^<#]+#([^<]+)</code>"#).unwrap();
+    let code = &link.captures(&page).expect("an invite link")[1];
+    let fields = [
+        ("code", code),
+        ("nick", "Bob"),
+        ("email", "bob@example.org"),
+        ("password", NEW_PASSWORD),
+        ("confirmation", NEW_PASSWORD),
+    ];
+    assert_eq!(site.post(INVITE, &fields, None).await.status(), 200);
 }
 
 #[tokio::test]
