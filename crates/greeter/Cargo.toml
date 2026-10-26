@@ -1,0 +1,18 @@
+[package]
+name = "greeter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+common = { path = "../common" }
+concierge = { path = "../concierge" }
+papo = { git = "https://github.com/luizribeiro/papo", rev = "4275939b85bbd920ca0c565c6f9a31ad81ccba3b" }
+secret = { path = "../secret" }
+tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "time"] }
+
+[dev-dependencies]
+base64 = "0.22.1"
+papo-testing = { git = "https://github.com/luizribeiro/papo", rev = "4275939b85bbd920ca0c565c6f9a31ad81ccba3b" }
+tokio = { version = "1.53.3", features = ["test-util"] }

@@ -53,4 +53,5 @@ in
   };
   mailer = binary "mailer" { };
   scrubber = binary "scrubber" { };
+  greeter = binary "greeter" { };
 }

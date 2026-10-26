@@ -127,13 +127,7 @@ impl Config {
             webchat_url: origin("CONCIERGE_WEBCHAT_URL", webchat_url)?,
             files_url: origin("CONCIERGE_FILES_URL", require("CONCIERGE_FILES_URL")?)?,
             uploads: Store::from_vars(&var)?,
-            irc_server: IrcServer::parse(&irc_server).ok_or_else(|| {
-                invalid(
-                    "CONCIERGE_IRC_SERVER",
-                    irc_server.clone(),
-                    "expected a host:port",
-                )
-            })?,
+            irc_server: irc_server_in(irc_server)?,
             ergo_api: parse_http_url(&ergo_api).ok_or_else(|| {
                 invalid(
                     "CONCIERGE_ERGO_API",
@@ -252,8 +246,47 @@ impl RemindConfig {
     }
 }
 
+/// What the greeter needs: concierge's database, the IRC server on this
+/// machine, the house account's password and the members' site its lines
+/// link to. It talks to Ergo over IRC alone, so it has no API token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GreeterConfig {
+    pub database: PathBuf,
+    pub irc_server: IrcServer,
+    pub public_url: SiteOrigin,
+    pub credentials_dir: PathBuf,
+}
+
+impl GreeterConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let require = |name| required(&var, name);
+        Ok(Self {
+            database: database_in(Path::new(&require("STATE_DIRECTORY")?)),
+            irc_server: irc_server_in(require("CONCIERGE_IRC_SERVER")?)?,
+            public_url: origin("CONCIERGE_PUBLIC_URL", require("CONCIERGE_PUBLIC_URL")?)?,
+            credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
+        })
+    }
+
+    /// The house account's password, which its account unit set.
+    pub fn read_password(&self) -> anyhow::Result<SecretString> {
+        read_credential(&self.credentials_dir, GREETER_PASSWORD_CREDENTIAL)
+    }
+}
+
+pub const GREETER_PASSWORD_CREDENTIAL: &str = "concierge-greeter-password";
+
 fn database_in(state_dir: &Path) -> PathBuf {
     state_dir.join(DATABASE)
+}
+
+fn irc_server_in(address: String) -> Result<IrcServer, ConfigError> {
+    IrcServer::parse(&address)
+        .ok_or_else(|| invalid("CONCIERGE_IRC_SERVER", address, "expected a host:port"))
 }
 
 pub fn invite_url(invite_links: &str, code: &str) -> String {
@@ -657,6 +690,57 @@ mod tests {
         ] {
             assert_eq!(remind(Some(name)), Err(ConfigError::Missing(name)));
         }
+    }
+
+    #[test]
+    fn greeting_needs_the_database_irc_the_public_url_and_a_password() {
+        let vars = HashMap::from([
+            ("STATE_DIRECTORY", "/var/lib/concierge"),
+            ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
+            ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
+            (
+                "CREDENTIALS_DIRECTORY",
+                "/run/credentials/concierge-greeter.service",
+            ),
+        ]);
+        let greeter = |missing: Option<&str>| {
+            GreeterConfig::from_vars(|name| {
+                (Some(name) != missing)
+                    .then(|| vars.get(name).map(|value| (*value).to_owned()))
+                    .flatten()
+            })
+        };
+        assert_eq!(
+            greeter(None),
+            Ok(GreeterConfig {
+                database: "/var/lib/concierge/concierge.db".into(),
+                irc_server: IrcServer {
+                    host: "irc.weblounge.org".into(),
+                    port: 6697,
+                },
+                public_url: origin("https://members.weblounge.org"),
+                credentials_dir: "/run/credentials/concierge-greeter.service".into(),
+            })
+        );
+        for name in vars.keys() {
+            assert_eq!(greeter(Some(name)), Err(ConfigError::Missing(name)));
+        }
+    }
+
+    #[test]
+    fn reads_the_greeters_password() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = GreeterConfig {
+            database: "/var/lib/concierge/concierge.db".into(),
+            irc_server: IrcServer::parse("irc.weblounge.org:6697").unwrap(),
+            public_url: origin("https://members.weblounge.org"),
+            credentials_dir: dir.path().into(),
+        };
+        assert!(config.read_password().is_err());
+        let generated = "0f3a9c51d2e84b7f6a0c19e2d4b5a7c8";
+        let path = dir.path().join(GREETER_PASSWORD_CREDENTIAL);
+        std::fs::write(path, format!("{generated}\n")).unwrap();
+        assert_eq!(config.read_password().unwrap().expose(), generated);
     }
 
     #[test]
