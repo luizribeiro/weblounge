@@ -14,7 +14,10 @@ pub mod plan;
 
 use std::time::Duration;
 
-use concierge::db::{self, Arrival, Db, Milestone};
+use concierge::{
+    db::{self, Arrival, Db, Milestone},
+    name::MemberName,
+};
 use papo::Client;
 
 use crate::{
@@ -71,8 +74,32 @@ impl<I: Irc> Greeter<I> {
                 let announced = Milestone::Announced(msgid.as_deref());
                 self.db.record(&arrival.account, announced, now).await?;
             }
+            Step::TellInviter => {
+                let Some(inviter) = &arrival.inviter else {
+                    return Ok(());
+                };
+                if self
+                    .tell(inviter, &lines::inviter_told(&arrival.account))
+                    .await?
+                {
+                    self.db
+                        .record(&arrival.account, Milestone::InviterTold, now)
+                        .await?;
+                }
+            }
         }
         Ok(())
+    }
+
+    /// Sends `nick` a direct message, answering whether it went out. A
+    /// nick nobody holds, such as a member's with always-on off who isn't
+    /// connected, is tried again on later ticks until the plan gives up.
+    async fn tell(&self, nick: &MemberName, text: &str) -> anyhow::Result<bool> {
+        match self.irc.say(nick.as_str(), text).await {
+            Ok(_) => Ok(true),
+            Err(error) if irc::refused_as_absent(&error) => Ok(false),
+            Err(error) => Err(error.into()),
+        }
     }
 }
 

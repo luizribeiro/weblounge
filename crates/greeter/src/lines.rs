@@ -12,6 +12,14 @@ pub fn welcome(newcomer: &MemberName, inviter: Option<&MemberName>) -> String {
     }
 }
 
+/// The direct message to the inviter, once their invitee was welcomed.
+pub fn inviter_told(newcomer: &MemberName) -> String {
+    format!(
+        "{newcomer} accepted your invite and was welcomed in #lounge. \
+         Say hi when you get a chance."
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

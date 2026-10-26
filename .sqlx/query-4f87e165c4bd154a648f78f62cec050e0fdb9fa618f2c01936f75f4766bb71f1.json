@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE arrivals SET inviter_told_at = ? WHERE account = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4f87e165c4bd154a648f78f62cec050e0fdb9fa618f2c01936f75f4766bb71f1"
+}

@@ -201,6 +201,7 @@ pub enum Milestone<'a> {
     /// The welcome went out, as the message with this id, if the server
     /// gave one.
     Announced(Option<&'a str>),
+    InviterTold,
 }
 
 /// What [`Db::remove_member`] did besides clearing the member's data.
@@ -1319,6 +1320,15 @@ impl Db {
                 .execute(pool)
                 .await
             }
+            Milestone::InviterTold => {
+                sqlx::query!(
+                    "UPDATE arrivals SET inviter_told_at = ? WHERE account = ?",
+                    at,
+                    account
+                )
+                .execute(pool)
+                .await
+            }
         }
         .map(drop)
     }
@@ -2250,6 +2260,7 @@ pub(crate) mod tests {
         db.record(&erin, Milestone::Announced(Some("msg-1")), 36)
             .await
             .unwrap();
+        db.record(&erin, Milestone::InviterTold, 37).await.unwrap();
 
         let arrivals = db.arrivals().await.unwrap();
 
@@ -2270,6 +2281,7 @@ pub(crate) mod tests {
                 Arrival {
                     arrived_at: Some(35),
                     announced_at: Some(36),
+                    inviter_told_at: Some(37),
                     ..arrival("erin", Some("alice"), 30)
                 },
                 arrival("carol", None, 40),

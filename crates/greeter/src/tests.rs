@@ -20,6 +20,8 @@ struct FakeIrc {
     attached: Mutex<HashSet<String>>,
     asked: Mutex<Vec<String>>,
     said: Mutex<Vec<(String, String)>>,
+    /// Nicks nobody holds, whom messages can't reach.
+    absent: Mutex<HashSet<String>>,
     /// Whether sending times out, as it does while Ergo is down.
     timing_out: Mutex<bool>,
 }
@@ -41,6 +43,15 @@ impl FakeIrc {
     fn time_out(&self, timing_out: bool) {
         *self.timing_out.lock().unwrap() = timing_out;
     }
+
+    fn set_absent(&self, nick: &str, absent: bool) {
+        let mut nicks = self.absent.lock().unwrap();
+        if absent {
+            nicks.insert(nick.to_owned());
+        } else {
+            nicks.remove(nick);
+        }
+    }
 }
 
 impl Irc for FakeIrc {
@@ -52,6 +63,12 @@ impl Irc for FakeIrc {
     async fn say(&self, target: &str, text: &str) -> Result<Option<String>, papo::Error> {
         if *self.timing_out.lock().unwrap() {
             return Err(papo::Error::Timeout);
+        }
+        if self.absent.lock().unwrap().contains(target) {
+            let params = vec!["concierge".into(), target.into(), "No such nick".into()];
+            return Err(papo::Error::Server(papo::ServerError::from_numeric(
+                401, params,
+            )));
         }
         let mut said = self.said.lock().unwrap();
         said.push((target.to_owned(), text.to_owned()));
@@ -179,8 +196,11 @@ async fn asks_about_every_newcomer_not_seen_yet_and_nobody_else() {
     assert_eq!(fixture.irc().asked(), ["erin", "frank"]);
 }
 
+const TOLD_LUIZ: &str =
+    "erin accepted your invite and was welcomed in #lounge. Say hi when you get a chance.";
+
 #[tokio::test]
-async fn welcomes_a_newcomer_at_first_sight_naming_their_inviter() {
+async fn welcomes_a_newcomer_at_first_sight_then_tells_their_inviter() {
     let fixture = Fixture::start().await;
     fixture.join("erin", Some("luiz"), JOINED).await;
     fixture.irc().attach("erin");
@@ -188,9 +208,49 @@ async fn welcomes_a_newcomer_at_first_sight_naming_their_inviter() {
     fixture.tick(JOINED + 5).await;
     fixture.tick(JOINED + 10).await;
 
-    let welcome = line("#lounge", "Welcome erin, invited by luiz!");
-    assert_eq!(fixture.irc().said(), [welcome]);
-    assert_eq!(fixture.arrival("erin").await.announced_at, Some(JOINED + 5));
+    assert_eq!(
+        fixture.irc().said(),
+        [
+            line("#lounge", "Welcome erin, invited by luiz!"),
+            line("luiz", TOLD_LUIZ),
+        ]
+    );
+    let arrival = fixture.arrival("erin").await;
+    assert_eq!(arrival.announced_at, Some(JOINED + 5));
+    assert_eq!(arrival.inviter_told_at, Some(JOINED + 5));
+}
+
+#[tokio::test]
+async fn names_and_tells_no_inviter_removed_since() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    let luiz = MemberName::new("luiz");
+    fixture.db().remove_member(&luiz, JOINED + 1).await.unwrap();
+    fixture.irc().attach("erin");
+
+    fixture.tick(JOINED + 5).await;
+
+    assert_eq!(fixture.irc().said(), [line("#lounge", "Welcome erin!")]);
+}
+
+#[tokio::test]
+async fn tells_an_inviter_who_was_unreachable_once_they_are_back() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.irc().attach("erin");
+    fixture.irc().set_absent("luiz", true);
+
+    fixture.tick(JOINED + 5).await;
+    assert_eq!(fixture.irc().said().len(), 1);
+    assert_eq!(fixture.arrival("erin").await.inviter_told_at, None);
+    fixture.irc().set_absent("luiz", false);
+    fixture.tick(JOINED + 60).await;
+
+    assert_eq!(fixture.irc().said()[1], line("luiz", TOLD_LUIZ));
+    assert_eq!(
+        fixture.arrival("erin").await.inviter_told_at,
+        Some(JOINED + 60)
+    );
 }
 
 #[tokio::test]
@@ -229,7 +289,7 @@ async fn a_welcome_that_didnt_go_out_goes_out_on_a_later_tick() {
     fixture.irc().time_out(false);
     fixture.tick(JOINED + 10).await;
 
-    assert_eq!(fixture.irc().said().len(), 1);
+    assert_eq!(fixture.irc().said().len(), 2);
     assert_eq!(
         fixture.arrival("erin").await.announced_at,
         Some(JOINED + 10)
