@@ -1294,6 +1294,19 @@ impl Db {
         .await
     }
 
+    /// Deletes the arrivals of newcomers who joined at or before
+    /// `joined_by`, answering how many.
+    pub async fn forget_arrivals(&self, joined_by: i64) -> sqlx::Result<u64> {
+        let deleted = sqlx::query!(
+            "DELETE FROM arrivals WHERE account IN
+                 (SELECT account FROM members WHERE joined_at <= ?)",
+            joined_by
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(deleted.rows_affected())
+    }
+
     /// Notes when `account`'s welcome reached `milestone`.
     pub async fn record(
         &self,
@@ -2321,6 +2334,24 @@ pub(crate) mod tests {
                 .await
                 .unwrap();
         assert_eq!(msgid.as_deref(), Some("msg-1"));
+    }
+
+    #[tokio::test]
+    async fn forgets_the_arrivals_of_newcomers_who_joined_by_a_time() {
+        let (db, _dir) = temp_db().await;
+        execute(
+            &db,
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('dave', 'dave@example.org', 20), ('erin', 'erin@example.org', 30);
+             INSERT INTO arrivals (account) VALUES ('dave'), ('erin');",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(db.forget_arrivals(20).await.unwrap(), 1);
+
+        assert_eq!(arrivals_recorded(&db).await, ["erin"]);
+        assert!(db.member("dave").await.unwrap().is_some());
     }
 
     #[tokio::test]

@@ -18,6 +18,7 @@ use concierge::{
     db::{self, Arrival, Db, Milestone},
     name::MemberName,
     origin::SiteOrigin,
+    welcome_rules,
 };
 use papo::Client;
 
@@ -63,6 +64,8 @@ struct Greeter<I> {
 
 impl<I: Irc> Greeter<I> {
     async fn tick(&self, now: i64) -> anyhow::Result<()> {
+        let forgotten_by = welcome_rules::forgotten_by(now);
+        self.db.forget_arrivals(forgotten_by).await?;
         for arrival in self.db.arrivals().await? {
             let attached = plan::needs_presence(&arrival)
                 && self.irc.attached(arrival.account.as_str()).await?;

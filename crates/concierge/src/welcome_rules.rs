@@ -45,10 +45,10 @@ pub fn nudge_at(joined_at: i64) -> i64 {
     joined_at + NUDGE_AFTER
 }
 
-/// Whether the record of a newcomer who joined at `joined_at` is past
-/// keeping.
-pub fn expired(joined_at: i64, now: i64) -> bool {
-    now >= joined_at + KEPT
+/// The records of newcomers who joined at or before this are past keeping
+/// at `now`.
+pub fn forgotten_by(now: i64) -> i64 {
+    now - KEPT
 }
 
 #[cfg(test)]
@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn the_record_is_kept_two_weeks() {
-        assert!(!expired(JOINED, JOINED + 14 * DAY - 1));
-        assert!(expired(JOINED, JOINED + 14 * DAY));
+        assert_eq!(forgotten_by(JOINED + 14 * DAY - 1), JOINED - 1);
+        assert_eq!(forgotten_by(JOINED + 14 * DAY), JOINED);
     }
 }

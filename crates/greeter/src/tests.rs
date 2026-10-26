@@ -363,6 +363,21 @@ async fn a_welcome_that_didnt_go_out_goes_out_on_a_later_tick() {
 }
 
 #[tokio::test]
+async fn forgets_a_newcomer_two_weeks_after_they_joined() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.join("frank", None, JOINED + 1).await;
+    let two_weeks = 14 * 24 * 60 * 60;
+
+    fixture.tick(JOINED + two_weeks).await;
+
+    let arrivals = fixture.db().arrivals().await.unwrap();
+    let left: Vec<_> = arrivals.iter().map(|a| a.account.as_str()).collect();
+    assert_eq!(left, ["frank"]);
+    assert_eq!(fixture.irc().asked(), ["frank"]);
+}
+
+#[tokio::test]
 async fn a_restart_repeats_nothing() {
     let fixture = Fixture::start().await;
     fixture.join("erin", Some("luiz"), JOINED).await;
