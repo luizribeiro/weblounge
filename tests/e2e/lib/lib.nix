@@ -50,6 +50,9 @@ pkgs.testers.runNixOSTest {
         ../../../modules/vm-secrets.nix
         (mail.credenza or { })
         (test.credenza or { })
+        # add_member signs everyone up through an invite, so the greeter
+        # would welcome every test's members; welcome.nix turns it on.
+        { weblounge.greeter.enable = lib.mkDefault false; }
       ];
       environment.systemPackages = [ pkgs.curl ircClient ];
       # The static-address subtest needs a NIC carrying the VPS's real MAC.

@@ -134,6 +134,25 @@ marks it as a migration, and running it again changes nothing. Bots stay
 out of #lounge, which everyone auto-joins, through its one ban
 `+b *!*@weblounge/bot/*`, which luiz sets as the channel's founder.
 
+## The greeter
+
+`concierge`, the network's host, is an account of the network's own,
+neither a member nor a bot: nobody may take the name, and `member
+reconcile` expects it. `crates/greeter` connects as it, in bot mode,
+from `concierge!~u@weblounge/concierge`, outside the bots' ban, so it
+sits in #lounge. Every redeemed invite records an arrival, and every
+few seconds the greeter WHOISes the newcomers it hasn't seen connected
+yet, welcomes each in #lounge at first sight or ten minutes in, DMs
+their inviter, says hello to them once they're seen, and nudges the
+inviter of one who hasn't connected two days in. `welcome_rules.rs`
+holds the timings; each step is recorded once Ergo echoed it, and the
+records go two weeks after joining.
+
+It parses what the network sends it, so it holds concierge's database
+and its account's password alone. `concierge-greeter-account.service`,
+which holds Ergo's API token, puts the generated password back before
+every start. VM tests turn the greeter off, but for `welcome.py`.
+
 ## Uploads
 
 Members paste or attach images in IRC clients, which upload them to the

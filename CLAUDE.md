@@ -13,7 +13,7 @@ workflow and layout.
   `<host>-vm` package automatically; don't wire them up by hand.
 - Behaviour changes to a host should come with a subtest in `tests/e2e/`,
   in the file for that area (`host`, `landing`, `ergo`, `concierge`,
-  `security`). Every `tests/e2e/*.py` is a VM test and `tests/*.nix` a
+  `security`, `welcome`). Every `tests/e2e/*.py` is a VM test and `tests/*.nix` a
   flake check, automatically. A VM test imports what the driver and
   `tests/e2e/lib/helpers.py` give it under `if TYPE_CHECKING:`, for ruff
   and ty; a `<name>.nix` beside it adds browsers or node config. Eval

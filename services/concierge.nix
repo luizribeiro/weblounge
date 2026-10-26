@@ -100,6 +100,13 @@ in
     description = "The outbox's database, and the settings of a unit that opens it once it's migrated.";
   };
 
+  options.weblounge.concierge.database = lib.mkOption {
+    type = lib.types.attrsOf lib.types.anything;
+    readOnly = true;
+    default.unit = migrated // { serviceConfig = stateAccess; };
+    description = "The settings of a unit that opens concierge's database once it's migrated, as concierge.";
+  };
+
   options.weblounge.concierge.listen = lib.mkOption {
     type = lib.types.str;
     default = "127.0.0.1:8080";
