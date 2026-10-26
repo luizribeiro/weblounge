@@ -1,0 +1,25 @@
+diff --git a/components/app.js b/components/app.js
+--- a/components/app.js
++++ b/components/app.js
+@@ -307,6 +307,9 @@
+ 		if (typeof config.server.nick === "string") {
+ 			connectParams.nick = config.server.nick;
+ 		}
++		if (typeof config.server.realname === "string") {
++			connectParams.realname = config.server.realname;
++		}
+ 		if (typeof config.server.autoconnect === "boolean") {
+ 			connectParams.autoconnect = config.server.autoconnect;
+ 		}
+diff --git a/doc/config-file.md b/doc/config-file.md
+--- a/doc/config-file.md
++++ b/doc/config-file.md
+@@ -31,6 +31,8 @@
+   EXTERNAL, `oauth2` to use SASL OAUTHBEARER. Defaults to `optional`.
+ - `nick` (string): default nickname. If it contains a `*` character, it will be
+   replaced with a random string.
++- `realname` (string): real name to send to the server. Defaults to the
++  nickname.
+ - `autoconnect` (boolean): don't display the login UI, immediately connect to
+   the server
+ - `ping` (number): interval in seconds to send PING commands. Set to 0 to

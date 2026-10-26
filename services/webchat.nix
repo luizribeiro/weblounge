@@ -12,6 +12,7 @@ let
     server = {
       url = socket;
       autojoin = "#lounge";
+      realname = "weblounge webchat";
       auth = "oauth2";
       autoconnect = true;
     };

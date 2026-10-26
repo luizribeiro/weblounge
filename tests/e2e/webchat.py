@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
 ada: Account = {"account": "ada", "password": "the-analytical-engine"}
+hedy: Account = {"account": "hedy", "password": "frequency-hopping-spread"}
 graces_browser = Browser("grace")
 gamja_connects = f"connect-src 'self' wss://irc.weblounge.org/socket https://{members} https://{files_host}/upload;"
 
@@ -71,6 +72,7 @@ with subtest("irc.weblounge.org serves gamja, set up to sign members in through 
         "server": {
             "url": "wss://irc.weblounge.org/socket",
             "autojoin": "#lounge",
+            "realname": "weblounge webchat",
             "auth": "oauth2",
             "autoconnect": True,
         },
@@ -152,6 +154,12 @@ with subtest("a token for a member without an Ergo account creates none"):
 with subtest("in a browser, a signed-in member opens irc.weblounge.org and lands in #lounge"):
     page = client.succeed(f"webchat-browser {grace['account']} {shlex.quote(grace['password'])} 2>&1")
     assert "#lounge" in page, page
+
+with subtest("a member who first connects from the web client has the real name 'weblounge webchat' in WHOIS"):
+    add_member(**hedy)
+    client.succeed(f"webchat-browser {hedy['account']} {shlex.quote(hedy['password'])}")
+    whois = irc(f"WHOIS {hedy['account']}", **grace)
+    assert re.search(r" 311 grace hedy \S+ \S+ \* :weblounge webchat$", whois, re.M), whois
 
 with subtest("in a browser, pasting an image or picking one with gamja's upload button puts its link in the composer"):
     paste = ["webchat-upload-browser", grace["account"], grace["password"], f"{fixtures}/photo.png"]

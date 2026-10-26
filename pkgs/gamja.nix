@@ -32,6 +32,10 @@ gamja.overrideAttrs (finalAttrs: old: {
     # Members asked to change the text's size and typeface; gamja's settings
     # have neither. Written to be offered upstream.
     ./gamja-font-settings.patch
+    # gamja sends the nick as the real name; a fixed one from config.json
+    # tells the network a connection is the web client's. Written to be
+    # offered upstream.
+    ./gamja-realname.patch
   ];
 
   postInstall = (old.postInstall or "") + ''
