@@ -13,11 +13,15 @@ use super::*;
 
 const JOINED: i64 = 1_760_000_000;
 
-/// Ergo as the greeter sees it: who has a session attached.
+/// Ergo as the greeter sees it: who has a session attached, and what the
+/// greeter said where.
 #[derive(Default)]
 struct FakeIrc {
     attached: Mutex<HashSet<String>>,
     asked: Mutex<Vec<String>>,
+    said: Mutex<Vec<(String, String)>>,
+    /// Whether sending times out, as it does while Ergo is down.
+    timing_out: Mutex<bool>,
 }
 
 impl FakeIrc {
@@ -28,6 +32,15 @@ impl FakeIrc {
     fn asked(&self) -> Vec<String> {
         self.asked.lock().unwrap().clone()
     }
+
+    /// What the greeter said, as (target, text), oldest first.
+    fn said(&self) -> Vec<(String, String)> {
+        self.said.lock().unwrap().clone()
+    }
+
+    fn time_out(&self, timing_out: bool) {
+        *self.timing_out.lock().unwrap() = timing_out;
+    }
 }
 
 impl Irc for FakeIrc {
@@ -35,6 +48,20 @@ impl Irc for FakeIrc {
         self.asked.lock().unwrap().push(nick.to_owned());
         Ok(self.attached.lock().unwrap().contains(nick))
     }
+
+    async fn say(&self, target: &str, text: &str) -> Result<Option<String>, papo::Error> {
+        if *self.timing_out.lock().unwrap() {
+            return Err(papo::Error::Timeout);
+        }
+        let mut said = self.said.lock().unwrap();
+        said.push((target.to_owned(), text.to_owned()));
+        Ok(Some(format!("msg-{}", said.len())))
+    }
+}
+
+/// A line said in `target`.
+fn line(target: &str, text: &str) -> (String, String) {
+    (target.to_owned(), text.to_owned())
 }
 
 struct Fixture {
@@ -104,6 +131,17 @@ impl Fixture {
         self.greeter.tick(now).await.unwrap();
     }
 
+    /// The greeter after a restart: the same database, a new connection.
+    fn restart(self) -> Self {
+        Self {
+            greeter: Greeter {
+                db: self.greeter.db,
+                irc: FakeIrc::default(),
+            },
+            _dir: self._dir,
+        }
+    }
+
     async fn arrival(&self, account: &str) -> Arrival {
         let arrivals = self.db().arrivals().await.unwrap();
         let account = MemberName::new(account);
@@ -139,4 +177,75 @@ async fn asks_about_every_newcomer_not_seen_yet_and_nobody_else() {
     fixture.tick(JOINED + 5).await;
 
     assert_eq!(fixture.irc().asked(), ["erin", "frank"]);
+}
+
+#[tokio::test]
+async fn welcomes_a_newcomer_at_first_sight_naming_their_inviter() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.irc().attach("erin");
+
+    fixture.tick(JOINED + 5).await;
+    fixture.tick(JOINED + 10).await;
+
+    let welcome = line("#lounge", "Welcome erin, invited by luiz!");
+    assert_eq!(fixture.irc().said(), [welcome]);
+    assert_eq!(fixture.arrival("erin").await.announced_at, Some(JOINED + 5));
+}
+
+#[tokio::test]
+async fn welcomes_a_root_invitee_ten_minutes_in_even_unseen() {
+    let fixture = Fixture::start().await;
+    fixture.join("frank", None, JOINED).await;
+
+    fixture.tick(JOINED + 599).await;
+    assert_eq!(fixture.irc().said(), []);
+    fixture.tick(JOINED + 600).await;
+
+    assert_eq!(fixture.irc().said(), [line("#lounge", "Welcome frank!")]);
+}
+
+#[tokio::test]
+async fn skips_the_welcome_of_an_arrival_two_days_old() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.irc().attach("erin");
+
+    fixture.tick(JOINED + 2 * 24 * 60 * 60).await;
+
+    assert_eq!(fixture.irc().said(), []);
+    assert_eq!(fixture.arrival("erin").await.announced_at, None);
+}
+
+#[tokio::test]
+async fn a_welcome_that_didnt_go_out_goes_out_on_a_later_tick() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.irc().attach("erin");
+    fixture.irc().time_out(true);
+
+    assert!(fixture.greeter.tick(JOINED + 5).await.is_err());
+    assert_eq!(fixture.arrival("erin").await.announced_at, None);
+    fixture.irc().time_out(false);
+    fixture.tick(JOINED + 10).await;
+
+    assert_eq!(fixture.irc().said().len(), 1);
+    assert_eq!(
+        fixture.arrival("erin").await.announced_at,
+        Some(JOINED + 10)
+    );
+}
+
+#[tokio::test]
+async fn a_restart_repeats_nothing() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", Some("luiz"), JOINED).await;
+    fixture.irc().attach("erin");
+    fixture.tick(JOINED + 5).await;
+
+    let fixture = fixture.restart();
+    fixture.tick(JOINED + 700).await;
+
+    assert_eq!(fixture.irc().said(), []);
+    assert_eq!(fixture.irc().asked(), Vec::<String>::new());
 }

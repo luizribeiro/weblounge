@@ -187,12 +187,20 @@ pub struct Arrival {
     pub joined_at: i64,
     /// When they were first seen with a session attached.
     pub arrived_at: Option<i64>,
+    /// When their welcome went out in #lounge.
+    pub announced_at: Option<i64>,
+    pub inviter_told_at: Option<i64>,
+    pub nudged_at: Option<i64>,
+    pub oriented_at: Option<i64>,
 }
 
 /// A step of a newcomer's welcome, which [`Db::record`] notes the time of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Milestone {
+pub enum Milestone<'a> {
     Arrived,
+    /// The welcome went out, as the message with this id, if the server
+    /// gave one.
+    Announced(Option<&'a str>),
 }
 
 /// What [`Db::remove_member`] did besides clearing the member's data.
@@ -1272,7 +1280,8 @@ impl Db {
             r#"SELECT arrivals.account AS "account!: MemberName",
                       CASE WHEN inviter.removed_at IS NULL THEN newcomer.invited_by END
                           AS "inviter: MemberName",
-                      newcomer.joined_at, arrivals.arrived_at
+                      newcomer.joined_at, arrivals.arrived_at, arrivals.announced_at,
+                      arrivals.inviter_told_at, arrivals.nudged_at, arrivals.oriented_at
                FROM arrivals
                JOIN members newcomer ON newcomer.account = arrivals.account
                LEFT JOIN members inviter ON inviter.account = newcomer.invited_by
@@ -1286,17 +1295,32 @@ impl Db {
     pub async fn record(
         &self,
         account: &MemberName,
-        milestone: Milestone,
+        milestone: Milestone<'_>,
         at: i64,
     ) -> sqlx::Result<()> {
-        let query = match milestone {
-            Milestone::Arrived => sqlx::query!(
-                "UPDATE arrivals SET arrived_at = ? WHERE account = ?",
-                at,
-                account
-            ),
-        };
-        query.execute(&self.pool).await.map(drop)
+        let pool = &self.pool;
+        match milestone {
+            Milestone::Arrived => {
+                sqlx::query!(
+                    "UPDATE arrivals SET arrived_at = ? WHERE account = ?",
+                    at,
+                    account
+                )
+                .execute(pool)
+                .await
+            }
+            Milestone::Announced(msgid) => {
+                sqlx::query!(
+                    "UPDATE arrivals SET announced_at = ?, announce_msgid = ? WHERE account = ?",
+                    at,
+                    msgid,
+                    account
+                )
+                .execute(pool)
+                .await
+            }
+        }
+        .map(drop)
     }
 
     /// Members who haven't been removed.
@@ -2221,26 +2245,42 @@ pub(crate) mod tests {
         db.remove_member(&MemberName::new("gone"), 25)
             .await
             .unwrap();
-        db.record(&MemberName::new("erin"), Milestone::Arrived, 35)
+        let erin = MemberName::new("erin");
+        db.record(&erin, Milestone::Arrived, 35).await.unwrap();
+        db.record(&erin, Milestone::Announced(Some("msg-1")), 36)
             .await
             .unwrap();
 
         let arrivals = db.arrivals().await.unwrap();
 
-        let arrival = |account: &str, inviter: Option<&str>, joined_at, arrived_at| Arrival {
+        let arrival = |account: &str, inviter: Option<&str>, joined_at| Arrival {
             account: MemberName::new(account),
             inviter: inviter.map(MemberName::new),
             joined_at,
-            arrived_at,
+            arrived_at: None,
+            announced_at: None,
+            inviter_told_at: None,
+            nudged_at: None,
+            oriented_at: None,
         };
         assert_eq!(
             arrivals,
             [
-                arrival("dave", None, 20, None),
-                arrival("erin", Some("alice"), 30, Some(35)),
-                arrival("carol", None, 40, None),
+                arrival("dave", None, 20),
+                Arrival {
+                    arrived_at: Some(35),
+                    announced_at: Some(36),
+                    ..arrival("erin", Some("alice"), 30)
+                },
+                arrival("carol", None, 40),
             ]
         );
+        let msgid: Option<String> =
+            sqlx::query_scalar("SELECT announce_msgid FROM arrivals WHERE account = 'erin'")
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(msgid.as_deref(), Some("msg-1"));
     }
 
     #[tokio::test]

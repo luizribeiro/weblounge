@@ -9,6 +9,7 @@
 //! where the last run left off.
 
 pub mod irc;
+pub mod lines;
 pub mod plan;
 
 use std::time::Duration;
@@ -63,6 +64,12 @@ impl<I: Irc> Greeter<I> {
                 self.db
                     .record(&arrival.account, Milestone::Arrived, now)
                     .await?;
+            }
+            Step::Welcome => {
+                let line = lines::welcome(&arrival.account, arrival.inviter.as_ref());
+                let msgid = self.irc.say(irc::LOUNGE, &line).await?;
+                let announced = Milestone::Announced(msgid.as_deref());
+                self.db.record(&arrival.account, announced, now).await?;
             }
         }
         Ok(())

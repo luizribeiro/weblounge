@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE arrivals SET announced_at = ?, announce_msgid = ? WHERE account = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "70ee5726bc6cd2e002b663685f5e78368db1fcb9bd2a54c04761bacbd55e895b"
+}

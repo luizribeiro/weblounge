@@ -20,9 +20,18 @@ pub(crate) trait Irc {
     /// sessions, even creating them as it starts, and auto-away marks
     /// those away, so a client alone proves nothing.
     async fn attached(&self, nick: &str) -> Result<bool, papo::Error>;
+
+    /// Sends `text` to `target`, a channel or a nick, answering once the
+    /// server echoed it back, with the id it gave the message.
+    async fn say(&self, target: &str, text: &str) -> Result<Option<String>, papo::Error>;
 }
 
 impl Irc for Client {
+    async fn say(&self, target: &str, text: &str) -> Result<Option<String>, papo::Error> {
+        let sent = self.privmsg(target, text).await?;
+        Ok(sent.msgid.map(|msgid| msgid.to_string()))
+    }
+
     async fn attached(&self, nick: &str) -> Result<bool, papo::Error> {
         match self.whois(nick).await {
             Ok(whois) => Ok(!matches!(whois.away, Away::Away { .. })),
@@ -218,6 +227,25 @@ pub(crate) mod tests {
             "318 concierge erin :End of /WHOIS list",
         ];
         assert!(!attached_when_whois_says(&absent).await);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn saying_something_waits_for_the_echo_and_keeps_its_msgid() {
+        let (client, _events, mut wire, _) = connected().await;
+        let saying = tokio::spawn(async move { client.say("#lounge", "Welcome erin!").await });
+        let privmsg = wire.next_sent().await;
+        assert_eq!(untagged(&privmsg), "PRIVMSG #lounge :Welcome erin!");
+        let label = privmsg.strip_prefix("@label=").unwrap().split(' ').next();
+        wire.server(format!(
+            "@label={};msgid=8VX4P6dUQ44L :concierge!~u@weblounge/concierge {}",
+            label.unwrap(),
+            untagged(&privmsg)
+        ))
+        .await;
+        assert_eq!(
+            saying.await.unwrap().unwrap().as_deref(),
+            Some("8VX4P6dUQ44L")
+        );
     }
 
     #[tokio::test(start_paused = true)]

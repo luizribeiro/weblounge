@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT arrivals.account AS \"account!: MemberName\",\n                      CASE WHEN inviter.removed_at IS NULL THEN newcomer.invited_by END\n                          AS \"inviter: MemberName\",\n                      newcomer.joined_at, arrivals.arrived_at, arrivals.announced_at,\n                      arrivals.inviter_told_at, arrivals.nudged_at, arrivals.oriented_at\n               FROM arrivals\n               JOIN members newcomer ON newcomer.account = arrivals.account\n               LEFT JOIN members inviter ON inviter.account = newcomer.invited_by\n               ORDER BY newcomer.joined_at, arrivals.account",
+  "describe": {
+    "columns": [
+      {
+        "name": "account!: MemberName",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "inviter: MemberName",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "joined_at",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "arrived_at",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "announced_at",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "inviter_told_at",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "nudged_at",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "oriented_at",
+        "ordinal": 7,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "1a4a2d5363cc264fb8bada896f60d44407afd2ef15ace71cb26ac05bc041ad97"
+}
