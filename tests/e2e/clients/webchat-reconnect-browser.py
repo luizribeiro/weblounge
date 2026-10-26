@@ -10,13 +10,11 @@ connected less than 10 seconds ago, which leaves time to say the first."""
 
 import json
 import re
-import subprocess
 import sys
 import time
 
-from browser import TIMEOUT_MS, signed_in
+from browser import TIMEOUT_MS, WEBCHAT, say, signed_in
 
-WEBCHAT = "https://irc.weblounge.org"
 BEFORE_BREAK = "said-before-the-break"
 DURING_BREAK = "said-during-the-break"
 LINE = "said-while-catching-up"
@@ -63,11 +61,6 @@ def wait_until(page, condition, what):
         if time.monotonic() > deadline:
             raise TimeoutError(f"gave up waiting for {what}")
         page.wait_for_timeout(100)
-
-
-def say(account, password, line):
-    command = ["irc-client", "credenza", f"--account={account}", f"--password={password}", f"PRIVMSG #lounge :{line}"]
-    subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
 
 
 def main():

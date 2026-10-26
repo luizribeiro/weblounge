@@ -9,9 +9,8 @@ import sys
 
 from playwright.sync_api import expect
 
-from browser import WIDTHS, signed_in
+from browser import WIDTHS, open_chat, signed_in
 
-WEBCHAT = "https://irc.weblounge.org"
 LINK = re.compile(r"^https://files\.weblounge\.org/\S+$")
 
 PASTE = """([name, type, data]) => {
@@ -29,9 +28,7 @@ def main():
     data = base64.b64encode(open(image, "rb").read()).decode()
     links = {}
     with signed_in(nick, password) as page:
-        page.goto(WEBCHAT)
-        page.wait_for_url(f"{WEBCHAT}/")
-        page.get_by_text("#lounge").first.wait_for()
+        open_chat(page)
         composer = page.locator("#composer input[name=text]")
         for name, width in WIDTHS.items():
             page.set_viewport_size({"width": width, "height": 800})

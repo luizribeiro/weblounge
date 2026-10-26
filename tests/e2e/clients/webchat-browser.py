@@ -3,17 +3,13 @@ gamja to show #lounge."""
 
 import sys
 
-from browser import signed_in
-
-WEBCHAT = "https://irc.weblounge.org"
+from browser import open_chat, signed_in
 
 
 def main():
     nick, password = sys.argv[1:]
     with signed_in(nick, password) as page:
-        page.goto(WEBCHAT)
-        page.wait_for_url(f"{WEBCHAT}/")
-        page.get_by_text("#lounge").first.wait_for()
+        open_chat(page)
         page.get_by_text(nick).first.wait_for()
         print(page.inner_text("body"))
 

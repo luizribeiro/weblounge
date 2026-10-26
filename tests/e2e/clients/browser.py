@@ -2,11 +2,13 @@
 Playwright scripts. Fails on any console error, which is where CSP
 violations go."""
 
+import subprocess
 from contextlib import contextmanager
 
 from playwright.sync_api import expect, sync_playwright
 
 MEMBERS = "https://members.weblounge.org"
+WEBCHAT = "https://irc.weblounge.org"
 TIMEOUT_MS = 30_000
 WIDTHS = {"phone": 375, "desktop": 1280}
 SCREENS = "/tmp/screens"
@@ -14,6 +16,29 @@ SCREENS = "/tmp/screens"
 
 def fits(page):
     return page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def open_chat(page):
+    """Opens gamja and waits for it to land in #lounge."""
+    page.goto(WEBCHAT)
+    page.wait_for_url(f"{WEBCHAT}/")
+    page.get_by_text("#lounge").first.wait_for()
+
+
+def say(account, password, line):
+    """Has ACCOUNT say LINE in #lounge, from a connection of its own."""
+    command = ["irc-client", "credenza", f"--account={account}", f"--password={password}", f"PRIVMSG #lounge :{line}"]
+    subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
+
+
+def open_settings(page):
+    """Opens gamja's Settings, from the server buffer, and returns its form."""
+    expander = page.locator("#buffer-list > .expander")
+    if expander.is_visible():
+        expander.click()
+    page.locator("#buffer-list li.type-server a").click()
+    page.get_by_role("button", name="Settings").click()
+    return page.locator(".dialog form")
 
 
 @contextmanager

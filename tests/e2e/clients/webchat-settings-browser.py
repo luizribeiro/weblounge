@@ -8,9 +8,8 @@ import json
 import os
 import sys
 
-from browser import SCREENS, WIDTHS, fits, signed_in
+from browser import SCREENS, WIDTHS, fits, open_chat, open_settings, signed_in
 
-WEBCHAT = "https://irc.weblounge.org"
 LINE = "Is this easier to read?"
 
 FONT = """() => {
@@ -18,21 +17,6 @@ FONT = """() => {
     const body = getComputedStyle(document.body);
     return { root: root.fontSize, size: body.fontSize, family: body.fontFamily };
 }"""
-
-
-def open_chat(page):
-    page.goto(WEBCHAT)
-    page.wait_for_url(f"{WEBCHAT}/")
-    page.get_by_text("#lounge").first.wait_for()
-
-
-def open_settings(page):
-    expander = page.locator("#buffer-list > .expander")
-    if expander.is_visible():
-        expander.click()
-    page.locator("#buffer-list li.type-server a").click()
-    page.get_by_role("button", name="Settings").click()
-    return page.locator(".dialog form")
 
 
 def controls(page, settings):
