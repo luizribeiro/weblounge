@@ -85,9 +85,11 @@ async fn privacy_says_who_a_welcome_names_and_how_long_its_record_stays() {
     let page = body_text(Site::start().await.get("/privacy", None).await).await;
     assert!(
         page.contains(
-            "posts a welcome in #lounge naming you and whoever invited you, \
-             and tells them by direct message. \
-             If you haven't connected 2 days later, it tells them once more."
+            "The first time you connect after accepting an invite, the concierge, \
+             the network's resident bot, posts a welcome in #lounge naming you and \
+             whoever invited you, tells them by direct message, and sends you a hello \
+             by direct message. If you haven't connected 2 days after accepting, \
+             it tells whoever invited you, once."
         ),
         "{page}"
     );

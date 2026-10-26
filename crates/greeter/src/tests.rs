@@ -215,7 +215,7 @@ async fn asks_about_every_newcomer_not_seen_yet_and_nobody_else() {
 }
 
 const TOLD_LUIZ: &str =
-    "erin accepted your invite and was welcomed in #lounge. Say hi when you get a chance.";
+    "erin just connected for the first time and was welcomed in #lounge. Say hi!";
 
 #[tokio::test]
 async fn welcomes_a_newcomer_at_first_sight_then_tells_their_inviter() {
@@ -278,42 +278,41 @@ async fn tells_an_inviter_who_was_unreachable_once_they_are_back() {
     );
 }
 
-#[tokio::test]
-async fn says_hello_to_a_newcomer_first_seen_after_the_fallback_welcome() {
-    let fixture = Fixture::start().await;
-    fixture.join("frank", "luiz", JOINED).await;
-    fixture.tick(JOINED + 600).await;
-    assert_eq!(fixture.irc().said_to("frank"), Vec::<String>::new());
-
-    fixture.irc().attach("frank");
-    fixture.tick(JOINED + 3 * 24 * 60 * 60).await;
-    fixture.tick(JOINED + 3 * 24 * 60 * 60 + 5).await;
-
-    let hello = fixture.irc().said_to("frank");
-    assert_eq!(hello[0], "Hi frank, I'm the concierge, weblounge's host.");
-    assert_eq!(hello.len(), 2);
-    assert_eq!(
-        fixture.irc().said_to("#lounge"),
-        ["Welcome frank, invited by luiz!"]
-    );
-}
-
 const TWO_DAYS: i64 = 2 * 24 * 60 * 60;
+const NUDGE: &str =
+    "erin hasn't connected since accepting your invite. A nudge from you might help.";
 
 #[tokio::test]
-async fn nudges_the_inviter_once_when_the_newcomer_never_came() {
+async fn says_nothing_while_the_newcomer_stays_away_but_the_nudge() {
     let fixture = Fixture::start().await;
     fixture.join("erin", "luiz", JOINED).await;
-    fixture.tick(JOINED + 600).await;
 
+    fixture.tick(JOINED + 600).await;
     fixture.tick(JOINED + TWO_DAYS - 1).await;
+    assert_eq!(fixture.irc().said(), []);
     fixture.tick(JOINED + TWO_DAYS).await;
     fixture.tick(JOINED + TWO_DAYS + 5).await;
 
-    let nudge = "erin hasn't connected since accepting your invite. A nudge from you might help.";
-    assert_eq!(fixture.irc().said_to("luiz"), [TOLD_LUIZ, nudge]);
+    assert_eq!(fixture.irc().said(), [line("luiz", NUDGE)]);
     let nudged_at = fixture.arrival("erin").await.nudged_at;
     assert_eq!(nudged_at, Some(JOINED + TWO_DAYS));
+}
+
+#[tokio::test]
+async fn welcomes_a_newcomer_who_first_connects_after_the_nudge() {
+    let fixture = Fixture::start().await;
+    fixture.join("erin", "luiz", JOINED).await;
+    fixture.tick(JOINED + TWO_DAYS).await;
+
+    fixture.irc().attach("erin");
+    fixture.tick(JOINED + 5 * TWO_DAYS).await;
+
+    assert_eq!(fixture.irc().said_to("luiz"), [NUDGE, TOLD_LUIZ]);
+    assert_eq!(
+        fixture.irc().said_to("#lounge"),
+        ["Welcome erin, invited by luiz!"]
+    );
+    assert_eq!(fixture.irc().said_to("erin").len(), 2);
 }
 
 #[tokio::test]
@@ -326,34 +325,6 @@ async fn nudges_nobody_once_the_newcomer_came() {
     fixture.tick(JOINED + TWO_DAYS).await;
 
     assert_eq!(fixture.irc().said_to("luiz"), [TOLD_LUIZ]);
-}
-
-#[tokio::test]
-async fn welcomes_a_newcomer_ten_minutes_in_even_unseen() {
-    let fixture = Fixture::start().await;
-    fixture.join("frank", "luiz", JOINED).await;
-
-    fixture.tick(JOINED + 599).await;
-    assert_eq!(fixture.irc().said(), []);
-    fixture.tick(JOINED + 600).await;
-
-    assert_eq!(
-        fixture.irc().said_to("#lounge"),
-        ["Welcome frank, invited by luiz!"]
-    );
-}
-
-#[tokio::test]
-async fn skips_the_welcome_of_an_arrival_two_days_old() {
-    let fixture = Fixture::start().await;
-    fixture.join("erin", "luiz", JOINED).await;
-    fixture.irc().attach("erin");
-
-    fixture.tick(JOINED + 2 * 24 * 60 * 60).await;
-
-    assert_eq!(fixture.irc().said_to("#lounge"), Vec::<String>::new());
-    assert_eq!(fixture.irc().said_to("luiz"), Vec::<String>::new());
-    assert_eq!(fixture.arrival("erin").await.announced_at, None);
 }
 
 #[tokio::test]

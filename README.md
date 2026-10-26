@@ -140,13 +140,14 @@ out of #lounge, which everyone auto-joins, through its one ban
 neither a member nor a bot: nobody may take the name, and `member
 reconcile` expects it. `crates/greeter` connects as it, in bot mode,
 from `concierge!~u@weblounge/concierge`, outside the bots' ban, so it
-sits in #lounge. Every redeemed invite records an arrival, and every
-few seconds the greeter WHOISes the newcomers it hasn't seen connected
-yet, welcomes each in #lounge at first sight or ten minutes in, DMs
-their inviter, says hello to them once they're seen, and nudges the
-inviter of one who hasn't connected two days in. `welcome_rules.rs`
-holds the timings; each step is recorded once Ergo echoed it, and the
-records go two weeks after joining.
+sits in #lounge. Every invite a member made records an arrival when
+it's redeemed (root invites, which bootstrap the network, don't), and
+every few seconds the greeter WHOISes the newcomers it hasn't seen
+connected yet. At first sight it welcomes them in #lounge, DMs their
+inviter and says hello to them; it nudges the inviter of one who
+hasn't connected two days in. `welcome_rules.rs` holds the timings;
+each step is recorded once Ergo echoed it, and the records go two
+weeks after joining, along with those of a removed member's invitees.
 
 It parses what the network sends it, so it holds concierge's database
 and its account's password alone. `concierge-greeter-account.service`,

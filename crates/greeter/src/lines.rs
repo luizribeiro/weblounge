@@ -10,10 +10,7 @@ pub fn welcome(newcomer: &MemberName, inviter: &MemberName) -> String {
 
 /// The direct message to the inviter, once their invitee was welcomed.
 pub fn inviter_told(newcomer: &MemberName) -> String {
-    format!(
-        "{newcomer} accepted your invite and was welcomed in #lounge. \
-         Say hi when you get a chance."
-    )
+    format!("{newcomer} just connected for the first time and was welcomed in #lounge. Say hi!")
 }
 
 /// The one direct message to the inviter of a newcomer who hasn't

@@ -39,13 +39,16 @@ def lounge() -> list[str]:
 
 
 def told_luiz() -> list[str]:
-    """What the concierge told luiz about the people he invited, oldest first."""
-    lines = history_lines("concierge", **luiz, speaker="concierge")
-    return [line for line in lines if "your invite" in line]
+    """What the concierge told luiz, oldest first."""
+    return history_lines("concierge", **luiz, speaker="concierge")
 
 
 def told(account: str) -> str:
-    return f"{account} accepted your invite and was welcomed in #lounge. Say hi when you get a chance."
+    return f"{account} just connected for the first time and was welcomed in #lounge. Say hi!"
+
+
+def nudge(account: str) -> str:
+    return f"{account} hasn't connected since accepting your invite. A nudge from you might help."
 
 
 def invited_by_luiz(account: str, password: str) -> None:
@@ -91,15 +94,20 @@ with subtest("a root invite, which bootstraps the network, gets no welcome"):
     add_member(**luiz, admin=True)
     assert concierge_sql("SELECT count(*) FROM arrivals") == "0\n"
 
-with subtest("an offline inviter hears once the welcome is in #lounge, before the newcomer ever connects"):
+erin: Account = {"account": "erin", "password": "erin-takes-her-time"}
+
+with subtest("nobody is welcomed while away, and the inviter of someone not seen two days in is nudged once"):
     confirm_email("luiz")
     assert luizs_browser.sign_in(**luiz).startswith("303 ")
-    invited_by_luiz("erin", "erin-reads-the-scrollback")
-    joined_minutes_ago("erin", 11)
-    wait_for_step("erin", "inviter_told_at")
-    assert lounge()[-1] == "Welcome erin, invited by luiz!", lounge()
-    assert told_luiz() == [told("erin")], told_luiz()
-    assert concierge_sql("SELECT arrived_at IS NULL FROM arrivals WHERE account = 'erin'") == "1\n"
+    # Once he's connected, Ergo keeps luiz's always-on client, which takes
+    # DMs while he's away.
+    irc(**luiz)
+    invited_by_luiz(**erin)
+    joined_minutes_ago("erin", 2 * 24 * 60 + 1)
+    wait_for_step("erin", "nudged_at")
+    time.sleep(two_ticks)
+    assert told_luiz() == [nudge("erin")], told_luiz()
+    assert lounge() == [], lounge()
 
 with subtest("a newcomer is welcomed as they first connect, and gets one hello"):
     frank: Account = {"account": "frank", "password": "frank-joins-right-away"}
@@ -124,16 +132,13 @@ with subtest("a restart repeats nothing, and someone who connected while it was 
     credenza.succeed("systemctl start concierge-greeter")
     wait_for_step("grace", "oriented_at")
     assert lounge() == [*welcomes, "Welcome grace, invited by luiz!"], lounge()
-    assert told_luiz() == [told("erin"), told("frank"), told("grace")], told_luiz()
+    assert told_luiz() == [nudge("erin"), told("frank"), told("grace")], told_luiz()
 
-with subtest("an arrival two days old is never welcomed, and its inviter is nudged once"):
-    invited_by_luiz("henry", "henry-never-shows-up")
-    joined_minutes_ago("henry", 2 * 24 * 60 + 1)
-    wait_for_step("henry", "nudged_at")
-    time.sleep(two_ticks)
-    nudge = "henry hasn't connected since accepting your invite. A nudge from you might help."
-    assert told_luiz() == [told("erin"), told("frank"), told("grace"), nudge], told_luiz()
-    assert concierge_sql("SELECT announced_at IS NULL FROM arrivals WHERE account = 'henry'") == "1\n"
+with subtest("a newcomer who first connects days in, after the nudge, is welcomed all the same"):
+    irc(**erin, linger=str(two_ticks))
+    wait_for_step("erin", "oriented_at")
+    assert lounge()[-1] == "Welcome erin, invited by luiz!", lounge()
+    assert told_luiz()[-1] == told("erin"), told_luiz()
 
 with subtest("someone removed before their welcome is never welcomed"):
     invited_by_luiz("ivy", "ivy-leaves-at-once")
