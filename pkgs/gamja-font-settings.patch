@@ -1,0 +1,141 @@
+diff --git a/components/app.js b/components/app.js
+--- a/components/app.js
++++ b/components/app.js
+@@ -20,7 +20,7 @@
+ import Dialog from "./dialog.js";
+ import { html, Component, createRef } from "../lib/index.js";
+ import { strip as stripANSI } from "../lib/ansi.js";
+-import { SERVER_BUFFER, BufferType, ReceiptType, ServerStatus, Unread, BufferEventsDisplayMode, State, getServerName, receiptFromMessage, isReceiptBefore, isMessageBeforeReceipt, SettingsContext } from "../state.js";
++import { SERVER_BUFFER, BufferType, ReceiptType, ServerStatus, Unread, BufferEventsDisplayMode, FontFamily, State, getServerName, receiptFromMessage, isReceiptBefore, isMessageBeforeReceipt, SettingsContext } from "../state.js";
+ import commands from "../commands.js";
+ import { setup as setupKeybindings } from "../keybindings.js";
+ import * as store from "../store.js";
+@@ -184,6 +184,12 @@
+ 
+ let lastErrorID = 0;
+ 
++function applyFontSettings(settings) {
++	let style = document.documentElement.style;
++	style.setProperty("--font-size", settings.fontSize);
++	style.setProperty("--font-family", FontFamily[settings.fontFamily] || "");
++}
++
+ export default class App extends Component {
+ 	state = {
+ 		...State.create(),
+@@ -266,6 +272,7 @@
+ 			...this.state.settings,
+ 			...store.settings.load(),
+ 		};
++		applyFontSettings(this.state.settings);
+ 
+ 		this.bufferStore = new store.Buffer();
+ 
+@@ -2079,6 +2086,7 @@
+ 
+ 	handleSettingsChange(settings) {
+ 		store.settings.put(settings);
++		applyFontSettings(settings);
+ 		this.setState({ settings });
+ 	}
+ 
+diff --git a/components/settings-form.js b/components/settings-form.js
+--- a/components/settings-form.js
++++ b/components/settings-form.js
+@@ -8,6 +8,8 @@
+ 
+ 		this.state.secondsInTimestamps = props.settings.secondsInTimestamps;
+ 		this.state.bufferEvents = props.settings.bufferEvents;
++		this.state.fontSize = props.settings.fontSize;
++		this.state.fontFamily = props.settings.fontFamily;
+ 
+ 		this.handleInput = this.handleInput.bind(this);
+ 		this.handleSubmit = this.handleSubmit.bind(this);
+@@ -98,6 +100,28 @@
+ 				</label>
+ 				<br/><br/>
+ 
++				<label>
++					Font size
++					<select name="fontSize" value=${this.state.fontSize}>
++						<option value="">Default</option>
++						<option value="14px">14px</option>
++						<option value="16px">16px</option>
++						<option value="18px">18px</option>
++						<option value="20px">20px</option>
++					</select>
++				</label>
++				<br/><br/>
++
++				<label>
++					Font
++					<select name="fontFamily" value=${this.state.fontFamily}>
++						<option value="monospace">Monospace</option>
++						<option value="sans-serif">Sans-serif</option>
++						<option value="serif">Serif</option>
++					</select>
++				</label>
++				<br/><br/>
++
+ 				${protocolHandler}
+ 
+ 				<button type="button" class="danger" onClick=${() => this.props.onDisconnect()}>
+diff --git a/state.js b/state.js
+--- a/state.js
++++ b/state.js
+@@ -41,6 +41,12 @@
+ 	HIDE: "hide",
+ };
+ 
++export const FontFamily = {
++	monospace: "monospace",
++	"sans-serif": "system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
++	serif: "serif",
++};
++
+ export const SettingsContext = createContext("settings");
+ 
+ export function getBufferURL(buf, bouncerNetwork = null) {
+@@ -257,6 +263,8 @@
+ 			settings: {
+ 				secondsInTimestamps: true,
+ 				bufferEvents: BufferEventsDisplayMode.FOLD,
++				fontSize: "",
++				fontFamily: "monospace",
+ 			},
+ 		};
+ 	},
+diff --git a/style.css b/style.css
+--- a/style.css
++++ b/style.css
+@@ -49,6 +49,7 @@
+ 
+ html {
+ 	scrollbar-color: #8e8e8e transparent;
++	font-size: var(--font-size, medium);
+ }
+ 
+ html, body {
+@@ -62,7 +63,7 @@
+ 	display: grid;
+ 	grid-template-rows: auto 1fr max-content;
+ 	grid-template-columns: max-content 1fr max-content;
+-	font-family: monospace;
++	font-family: var(--font-family, monospace);
+ }
+ 
+ noscript {
+@@ -413,6 +414,13 @@
+ 	font-family: inherit;
+ 	font-size: inherit;
+ }
++form select {
++	box-sizing: border-box;
++	width: 100%;
++	min-height: 44px;
++	font-family: inherit;
++	font-size: max(1em, 16px);
++}
+ form label input[type="checkbox"], form label input[type="radio"] {
+ 	margin-right: 0.5em;
+ }

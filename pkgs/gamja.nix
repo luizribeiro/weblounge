@@ -29,6 +29,9 @@ gamja.overrideAttrs (finalAttrs: old: {
     # upstream, implemented differently, in
     # https://codeberg.org/emersion/gamja/pulls/236
     ./gamja-dedup-msgid.patch
+    # Members asked to change the text's size and typeface; gamja's settings
+    # have neither. Written to be offered upstream.
+    ./gamja-font-settings.patch
   ];
 
   postInstall = (old.postInstall or "") + ''

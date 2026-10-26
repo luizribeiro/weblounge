@@ -162,6 +162,25 @@ with subtest("in a browser, pasting an image or picking one with gamja's upload 
         assert re.fullmatch(rf"https://{files_host}/[A-Za-z0-9_-]{{22}}\.png", link), (way, link)
         assert get_file(link)["status"] == 200, link
 
+with subtest("in a browser, a member picks gamja's font size and font in Settings, and they stay after a reload"):
+    settings = ["webchat-settings-browser", grace["account"], grace["password"]]
+    report = json.loads(client.succeed(shlex.join(settings)))
+    assert report["default"] == {"root": "16px", "size": "13px", "family": "monospace"}, report
+    assert report["phone default"]["selects"]["fontSize"]["value"] == "", report
+    assert report["changed"]["root"] == report["changed"]["size"] == "18px", report
+    assert report["changed"]["family"].startswith("system-ui,"), report
+    assert report["reloaded"] == report["changed"], report
+    for width in ["phone", "desktop"]:
+        assert report[width]["fits"], (width, report)
+        selects = report[width]["selects"]
+        assert {name: select["value"] for name, select in selects.items()} == {
+            "fontSize": "18px",
+            "fontFamily": "sans-serif",
+        }, (width, report)
+        for select in selects.values():
+            assert select["height"] >= 44 and float(select["font_size"].removesuffix("px")) >= 16, (width, report)
+    client.copy_from_vm("/tmp/screens")
+
 with subtest("gamja shows each line once when one arrives while it catches up after a reconnect"):
     add_member(**ada)
     browser = ["webchat-reconnect-browser", grace["account"], grace["password"], ada["account"], ada["password"]]
