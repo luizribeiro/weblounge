@@ -11,10 +11,12 @@
 pub mod irc;
 pub mod lines;
 pub mod plan;
+pub mod weekly;
 
 use std::time::Duration;
 
 use concierge::{
+    config::GreeterConfig,
     db::{self, Arrival, Db, Milestone},
     name::MemberName,
     origin::SiteOrigin,
@@ -30,19 +32,19 @@ use crate::{
 /// How often the greeter looks for steps due.
 const TICK: Duration = Duration::from_secs(5);
 
-/// Greets newcomers over `client`, for as long as the process runs,
-/// skipping ticks while `connection` is down. Its lines link to
-/// `public_url`, the members' site.
+/// Greets newcomers over `client`, as `config` says, for as long as the
+/// process runs, skipping ticks while `connection` is down.
 pub async fn run(
+    config: GreeterConfig,
     db: Db,
     client: Client,
     connection: Connection,
-    public_url: SiteOrigin,
 ) -> anyhow::Error {
     let greeter = Greeter {
         db,
         irc: client,
-        public_url,
+        public_url: config.public_url,
+        weekly_host: config.weekly_host,
     };
     let mut ticks = tokio::time::interval(TICK);
     loop {
@@ -59,7 +61,9 @@ pub async fn run(
 struct Greeter<I> {
     db: Db,
     irc: I,
+    /// The members' site, which its lines link to.
     public_url: SiteOrigin,
+    weekly_host: Option<MemberName>,
 }
 
 impl<I: Irc> Greeter<I> {
@@ -72,6 +76,19 @@ impl<I: Irc> Greeter<I> {
             for step in plan::due(&arrival, attached, now) {
                 self.take(step, &arrival, now).await?;
             }
+        }
+        self.remind_weekly(now).await
+    }
+
+    /// Reminds the weekly host to start the week's thread, once a week.
+    async fn remind_weekly(&self, now: i64) -> anyhow::Result<()> {
+        let (Some(host), Some(week)) = (&self.weekly_host, weekly::due(now)) else {
+            return Ok(());
+        };
+        if !self.db.weekly_reminder_sent(&week).await?
+            && self.tell(host, &weekly::reminder(&week)).await?
+        {
+            self.db.record_weekly_reminder(&week, now).await?;
         }
         Ok(())
     }

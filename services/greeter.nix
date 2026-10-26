@@ -6,6 +6,7 @@
 { config, lib, pkgs, ... }:
 
 let
+  cfg = config.weblounge.greeter;
   account = "concierge-greeter-account";
   password = "concierge-greeter-password";
   ca = config.weblounge.selfSignedCa;
@@ -21,7 +22,13 @@ in
     description = "Whether the greeter runs. VM tests but its own turn it off, so their members aren't welcomed.";
   };
 
-  config = lib.mkIf config.weblounge.greeter.enable {
+  options.weblounge.greeter.weeklyHost = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = "luiz";
+    description = "The member the greeter reminds on Mondays to start the week's thread in #lounge, if any.";
+  };
+
+  config = lib.mkIf cfg.enable {
     weblounge.secrets.${password} = {
       ephemeral = true;
       loadedBy = [ account "concierge-greeter" ];
@@ -56,7 +63,8 @@ in
         environment = {
           CONCIERGE_IRC_SERVER = config.weblounge.ergo.localAddress;
           CONCIERGE_PUBLIC_URL = config.weblounge.concierge.publicUrl;
-        } // lib.optionalAttrs (ca != null) { SSL_CERT_FILE = "%d/ca"; };
+        } // lib.optionalAttrs (ca != null) { SSL_CERT_FILE = "%d/ca"; }
+        // lib.optionalAttrs (cfg.weeklyHost != null) { CONCIERGE_GREETER_WEEKLY_HOST = cfg.weeklyHost; };
         serviceConfig = sandbox // loopbackOnly // {
           ExecStart = lib.getExe pkgs.weblounge.greeter;
           Restart = "always";

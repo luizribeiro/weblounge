@@ -105,6 +105,8 @@ with subtest("stored: concierge's database has the columns the page was written 
         "verification_codes.email",
         "verification_codes.expires_at",
         "verification_codes.replaced_at",
+        "weekly_reminders.sent_at",
+        "weekly_reminders.week",
     ], columns
 
 with subtest("stored: a member's email stays with concierge, out of Ergo's database, and leaves the outbox once sent"):

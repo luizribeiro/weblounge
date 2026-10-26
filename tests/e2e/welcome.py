@@ -144,3 +144,15 @@ with subtest("someone removed before their welcome is never welcomed"):
     assert concierge_sql("SELECT count(*) FROM arrivals WHERE account = 'ivy'") == "0\n"
     time.sleep(two_ticks)
     assert not any("ivy" in line for line in lounge()), lounge()
+
+# It moves credenza's clock days on, so it goes last.
+with subtest("on Monday at 10:00 in California, luiz is reminded once to start the week's thread"):
+    california = "TZDIR=/etc/zoneinfo TZ=America/Los_Angeles"
+    monday = credenza.succeed(f"{california} date -d 'next monday 10:00' +%s").strip()
+    credenza.succeed(f"date -s @{monday}")
+    wait_for_concierge_sql("SELECT count(*) FROM weekly_reminders", "1")
+    time.sleep(two_ticks)
+    lines = history_lines("concierge", **luiz, speaker="concierge")
+    reminders = [line for line in lines if line.startswith("It's Monday: ")]
+    assert len(reminders) == 1, lines
+    assert "time for this week's thread in #lounge. A prompt you could use: " in reminders[0], reminders

@@ -115,6 +115,7 @@ impl Fixture {
                 db,
                 irc: FakeIrc::default(),
                 public_url: SiteOrigin::parse("https://members.weblounge.org").unwrap(),
+                weekly_host: Some(MemberName::new("luiz")),
             },
             _dir: dir,
         }
@@ -375,6 +376,69 @@ async fn forgets_a_newcomer_two_weeks_after_they_joined() {
     let left: Vec<_> = arrivals.iter().map(|a| a.account.as_str()).collect();
     assert_eq!(left, ["frank"]);
     assert_eq!(fixture.irc().asked(), ["frank"]);
+}
+
+/// Monday 2026-10-26, 10:00 in California.
+const MONDAY_AT_TEN: i64 = 1_793_034_000;
+
+#[tokio::test]
+async fn reminds_luiz_once_on_monday_morning_to_post_the_weekly_thread() {
+    let fixture = Fixture::start().await;
+
+    fixture.tick(MONDAY_AT_TEN - 5).await;
+    fixture.tick(MONDAY_AT_TEN).await;
+    let fixture = fixture.restart();
+    fixture.tick(MONDAY_AT_TEN + 60 * 60).await;
+
+    assert_eq!(fixture.irc().said(), []);
+    assert!(
+        fixture
+            .db()
+            .weekly_reminder_sent("2026-10-26")
+            .await
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn the_reminder_carries_a_prompt() {
+    let fixture = Fixture::start().await;
+
+    fixture.tick(MONDAY_AT_TEN).await;
+
+    let [reminder] = &fixture.irc().said_to("luiz")[..] else {
+        panic!("one reminder: {:?}", fixture.irc().said());
+    };
+    assert_eq!(reminder, &weekly::reminder("2026-10-26"));
+}
+
+#[tokio::test]
+async fn a_reminder_luiz_cant_get_is_tried_until_he_can() {
+    let fixture = Fixture::start().await;
+    fixture.irc().set_absent("luiz", true);
+    fixture.tick(MONDAY_AT_TEN).await;
+    assert!(
+        !fixture
+            .db()
+            .weekly_reminder_sent("2026-10-26")
+            .await
+            .unwrap()
+    );
+
+    fixture.irc().set_absent("luiz", false);
+    fixture.tick(MONDAY_AT_TEN + 60).await;
+
+    assert_eq!(fixture.irc().said_to("luiz").len(), 1);
+}
+
+#[tokio::test]
+async fn reminds_nobody_without_a_weekly_host() {
+    let mut fixture = Fixture::start().await;
+    fixture.greeter.weekly_host = None;
+
+    fixture.tick(MONDAY_AT_TEN).await;
+
+    assert_eq!(fixture.irc().said(), []);
 }
 
 #[tokio::test]

@@ -1366,6 +1366,27 @@ impl Db {
         .map(drop)
     }
 
+    /// Whether the reminder of the week named `week` went out.
+    pub async fn weekly_reminder_sent(&self, week: &str) -> sqlx::Result<bool> {
+        sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM weekly_reminders WHERE week = ?) AS "sent!: bool""#,
+            week
+        )
+        .fetch_one(&self.pool)
+        .await
+    }
+
+    pub async fn record_weekly_reminder(&self, week: &str, at: i64) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT INTO weekly_reminders (week, sent_at) VALUES (?, ?)",
+            week,
+            at
+        )
+        .execute(&self.pool)
+        .await
+        .map(drop)
+    }
+
     /// Members who haven't been removed.
     pub async fn member_count(&self) -> sqlx::Result<i64> {
         sqlx::query_scalar!(
@@ -2352,6 +2373,19 @@ pub(crate) mod tests {
 
         assert_eq!(arrivals_recorded(&db).await, ["erin"]);
         assert!(db.member("dave").await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn remembers_which_weeks_were_reminded() {
+        let (db, _dir) = temp_db().await;
+        assert!(!db.weekly_reminder_sent("2026-10-26").await.unwrap());
+
+        db.record_weekly_reminder("2026-10-26", 1_793_034_000)
+            .await
+            .unwrap();
+
+        assert!(db.weekly_reminder_sent("2026-10-26").await.unwrap());
+        assert!(!db.weekly_reminder_sent("2026-11-02").await.unwrap());
     }
 
     #[tokio::test]

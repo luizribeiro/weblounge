@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO weekly_reminders (week, sent_at) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "75699dee645cc82d80901b313c63e15d1aa56f018eea30a0916fb8ad00646613"
+}

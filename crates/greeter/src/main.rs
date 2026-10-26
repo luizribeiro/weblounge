@@ -11,6 +11,6 @@ async fn main() -> anyhow::Result<()> {
     let connection = Connection::default();
     Err(tokio::select! {
         error = irc::watch(events, connection.clone()) => error,
-        error = greeter::run(db, client, connection, config.public_url) => error,
+        error = greeter::run(config, db, client, connection) => error,
     })
 }

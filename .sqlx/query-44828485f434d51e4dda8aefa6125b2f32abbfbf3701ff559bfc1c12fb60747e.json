@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (SELECT 1 FROM weekly_reminders WHERE week = ?) AS \"sent!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "sent!: bool",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "44828485f434d51e4dda8aefa6125b2f32abbfbf3701ff559bfc1c12fb60747e"
+}

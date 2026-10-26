@@ -8,6 +8,7 @@ publish = false
 anyhow = "1.0.104"
 common = { path = "../common" }
 concierge = { path = "../concierge" }
+jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-bundle-always"] }
 papo = { git = "https://github.com/luizribeiro/papo", rev = "4275939b85bbd920ca0c565c6f9a31ad81ccba3b" }
 secret = { path = "../secret" }
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "time"] }

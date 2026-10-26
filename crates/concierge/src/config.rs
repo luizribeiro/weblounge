@@ -10,6 +10,7 @@ use secret::SecretString;
 pub use crate::routes::presence::Presence;
 use crate::{
     history,
+    name::MemberName,
     origin::{self, FilesOrigin, Origin, SiteOrigin, WebchatOrigin},
     uploads::Store,
 };
@@ -243,6 +244,8 @@ pub struct GreeterConfig {
     pub irc_server: IrcServer,
     pub public_url: SiteOrigin,
     pub credentials_dir: PathBuf,
+    /// Who gets the Monday reminder to post the week's thread, if anyone.
+    pub weekly_host: Option<MemberName>,
 }
 
 impl GreeterConfig {
@@ -257,6 +260,7 @@ impl GreeterConfig {
             irc_server: irc_server_in(require("CONCIERGE_IRC_SERVER")?)?,
             public_url: origin("CONCIERGE_PUBLIC_URL", require("CONCIERGE_PUBLIC_URL")?)?,
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
+            weekly_host: var("CONCIERGE_GREETER_WEEKLY_HOST").map(MemberName::new),
         })
     }
 
@@ -758,11 +762,25 @@ mod tests {
                 },
                 public_url: origin("https://members.weblounge.org"),
                 credentials_dir: "/run/credentials/concierge-greeter.service".into(),
+                weekly_host: None,
             })
         );
         for name in vars.keys() {
             assert_eq!(greeter(Some(name)), Err(ConfigError::Missing(name)));
         }
+    }
+
+    #[test]
+    fn the_greeter_reminds_the_weekly_host_it_is_given() {
+        let config = GreeterConfig::from_vars(|name| match name {
+            "STATE_DIRECTORY" => Some("/var/lib/concierge".into()),
+            "CONCIERGE_IRC_SERVER" => Some("irc.weblounge.org:6697".into()),
+            "CONCIERGE_PUBLIC_URL" => Some("https://members.weblounge.org".into()),
+            "CREDENTIALS_DIRECTORY" => Some("/run/credentials/concierge-greeter.service".into()),
+            "CONCIERGE_GREETER_WEEKLY_HOST" => Some("luiz".into()),
+            _ => None,
+        });
+        assert_eq!(config.unwrap().weekly_host, Some(MemberName::new("luiz")));
     }
 
     #[test]
@@ -802,6 +820,7 @@ mod tests {
             irc_server: IrcServer::parse("irc.weblounge.org:6697").unwrap(),
             public_url: origin("https://members.weblounge.org"),
             credentials_dir: dir.path().into(),
+            weekly_host: None,
         };
         assert!(config.read_password().is_err());
         let generated = "0f3a9c51d2e84b7f6a0c19e2d4b5a7c8";
