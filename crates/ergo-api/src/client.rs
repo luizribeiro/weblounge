@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{Error, ErrorCode, Result};
 
+/// Ergo's API stops answering a call after its 10s write timeout, though
+/// it carries the call out, so waiting longer gains nothing.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A request to one of Ergo's API endpoints.

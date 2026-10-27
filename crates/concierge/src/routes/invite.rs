@@ -2,7 +2,7 @@
 //! it carries into an Ergo account and a member. Links carry the code in
 //! their fragment, which no server sees; the form posts it.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use askama::Template;
 use axum::{
@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::Response,
 };
-use ergo_api::{Passphrase, Registration};
+use ergo_api::{AccountName, Passphrase, Registration};
 use secret::SecretString;
 use serde::Deserialize;
 
@@ -162,13 +162,13 @@ pub async fn redeem(
         }
         Err(error) => return internal_error("Claiming an invite", error),
     };
-    match create_account(&app, &claim, &account, now).await {
-        Ok(()) => {}
+    let name = match create_account(&app, &claim, &account, now).await {
+        Ok(name) => name,
         Err(Failure::Taken) => return refuse(taken()),
         Err(Failure::Unreachable) => return unreachable(&app, &visitor),
         Err(Failure::Unfinished) => return unfinished(&app, &visitor),
-    }
-    let name = &account.name;
+    };
+    let name = &name;
     let mailed = verify::mail_link(&app, name, Recipient::NewAddress).await == Mailed::Sent;
     let mailed_to = mailed.then_some(account.email.as_str());
     let cookie = match auth::start_session(&app, &visitor, name).await {
@@ -190,29 +190,32 @@ enum Failure {
     Unfinished,
 }
 
+/// How many times, [`RECHECK_INTERVAL`] apart, signup asks Ergo whether
+/// a registration it got no answer to created the account. Each ask can
+/// take Ergo's 10s, as checking a password is as slow as setting one, so
+/// with the registration's own 10s these keep a signup within the 60s
+/// nginx waits for an answer.
+const LOST_REPLY_CHECKS: usize = 3;
+const RECHECK_INTERVAL: Duration = Duration::from_secs(2);
+
 /// Creates the Ergo account, then the member who redeemed `claim`,
 /// releasing the claim if that fails in a way the invite survives.
+/// Answers the member's name as Ergo spells it.
 async fn create_account(
     app: &App,
     claim: &Claim,
     account: &NewAccount,
     now: i64,
-) -> Result<(), Failure> {
-    let registered = app.ergo.register(&account.name, &account.password).await;
-    match registered {
-        Ok(Registration::Created) => {}
-        Ok(Registration::NameTaken) => {
+) -> Result<MemberName, Failure> {
+    let name = match register(app, account).await {
+        Ok(name) => name,
+        Err(failure) => {
             release(app, claim).await;
-            return Err(Failure::Taken);
+            return Err(failure);
         }
-        Err(error) => {
-            eprintln!("Creating an Ergo account failed: {error}");
-            release(app, claim).await;
-            return Err(Failure::Unreachable);
-        }
-    }
+    };
     let member = NewMember {
-        account: &account.name,
+        account: &name,
         email: &account.email,
         news_opt_in: account.news,
         invited_by: claim.created_by.as_ref(),
@@ -220,7 +223,7 @@ async fn create_account(
         is_admin: claim.makes_admin,
     };
     match app.db.redeem_invite(claim, &member).await {
-        Ok(Redemption::Redeemed) => Ok(()),
+        Ok(Redemption::Redeemed) => Ok(name),
         Ok(Redemption::Lost) => {
             eprintln!(
                 "Ergo account {} was created, but its invite was revoked or taken over \
@@ -239,6 +242,82 @@ async fn create_account(
             Err(Failure::Unfinished)
         }
     }
+}
+
+/// Registers `account`'s Ergo account, answering its name. When Ergo
+/// doesn't answer, it may have registered it all the same, so this looks.
+async fn register(app: &App, account: &NewAccount) -> Result<MemberName, Failure> {
+    match app.ergo.register(&account.name, &account.password).await {
+        Ok(Registration::Created) => Ok(account.name.clone()),
+        Ok(Registration::NameTaken) => Err(Failure::Taken),
+        Err(error) if error.unanswered() => {
+            eprintln!(
+                "Ergo didn't answer creating account {}: {error}",
+                account.name
+            );
+            unclaimed_account(app, account, LOST_REPLY_CHECKS)
+                .await?
+                .ok_or(Failure::Unreachable)
+        }
+        Err(error) => {
+            eprintln!("Creating an Ergo account failed: {error}");
+            Err(Failure::Unreachable)
+        }
+    }
+}
+
+/// The name of the Ergo account under `account`'s name, if `account`'s
+/// password opens it; [`Failure::Taken`] if a member or a bot holds the
+/// name. Asks Ergo up to `checks` times while it doesn't answer or has
+/// no such account, as a registration may still be finishing.
+async fn unclaimed_account(
+    app: &App,
+    account: &NewAccount,
+    checks: usize,
+) -> Result<Option<MemberName>, Failure> {
+    match name_held(app, &account.name).await {
+        Ok(false) => {}
+        Ok(true) => return Err(Failure::Taken),
+        Err(error) => {
+            eprintln!("Looking up a name failed: {error}");
+            return Err(Failure::Unreachable);
+        }
+    }
+    match opened_account(app, account, checks).await {
+        Ok(opened) => Ok(opened
+            .map(|opened| MemberName::new(opened.as_str()))
+            .filter(|opened| *opened == account.name)),
+        Err(error) => {
+            eprintln!(
+                "Checking account {}'s password failed: {error}",
+                account.name
+            );
+            Err(Failure::Unreachable)
+        }
+    }
+}
+
+/// The account `account`'s name and password open, asking Ergo up to
+/// `checks` times, [`RECHECK_INTERVAL`] apart, until one does.
+async fn opened_account(
+    app: &App,
+    account: &NewAccount,
+    checks: usize,
+) -> ergo_api::Result<Option<AccountName>> {
+    let mut opened = Ok(None);
+    for check in 0..checks {
+        if check > 0 {
+            tokio::time::sleep(RECHECK_INTERVAL).await;
+        }
+        opened = app
+            .ergo
+            .check_auth(&account.name, account.password.expose())
+            .await;
+        if matches!(opened, Ok(Some(_))) {
+            break;
+        }
+    }
+    opened
 }
 
 /// Whether a member or a bot holds `name`, so no newcomer may take it.
@@ -355,7 +434,7 @@ fn unreachable(app: &App, visitor: &Visitor) -> Response {
         visitor,
         StatusCode::SERVICE_UNAVAILABLE,
         "Couldn't reach the chat server.",
-        &["Nothing was created and your invite still works. Try again in a minute."],
+        &["Your invite still works. Try again in a minute."],
     )
 }
 

@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use axum::{Json, Router, http::header, routing::post};
+use axum::{Json, Router, http::header, response::Response, routing::post};
 use ergo_api::fake::Failure;
 use regex::Regex;
 use serde_json::json;
@@ -365,7 +365,7 @@ async fn when_ergo_fails_nothing_is_created_and_the_invite_still_works() {
         page.contains("Couldn&#39;t reach the chat server."),
         "{page}"
     );
-    assert!(page.contains("your invite still works"), "{page}");
+    assert!(page.contains("Your invite still works."), "{page}");
     assert_eq!(site.db.member("bob").await.unwrap(), None);
     assert_eq!(site.post(INVITE, &bob(), None).await.status(), 200);
 }
@@ -377,6 +377,52 @@ async fn when_ergo_is_unreachable_the_invite_still_works() {
     site.add_invite(CODE, None).await;
     assert_eq!(site.post(INVITE, &bob(), None).await.status(), 503);
     assert!(invite_is_open(&site).await);
+}
+
+async fn assert_bob_joined(site: &Site, response: Response) {
+    assert_eq!(response.status(), 200);
+    assert!(session_cookie(&response).is_some());
+    assert!(body_text(response).await.contains("You're in, Bob."));
+    let member = site.db.member("bob").await.unwrap().unwrap();
+    assert_eq!(member.account.as_str(), "Bob");
+    assert!(!invite_is_open(site).await);
+}
+
+#[tokio::test]
+async fn when_ergos_answer_is_lost_but_it_created_the_account_bob_joins() {
+    let site = with_invite_from_alice().await;
+    site.ergo.fail_next(Failure::LostReply);
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_bob_joined(&site, response).await;
+}
+
+#[tokio::test]
+async fn ergo_is_asked_again_while_it_does_not_answer_whether_it_created_the_account() {
+    let site = with_invite_from_alice().await;
+    site.ergo.fail_next(Failure::LostReply);
+    site.ergo.fail_next(Failure::Dropped);
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_bob_joined(&site, response).await;
+}
+
+#[tokio::test]
+async fn when_ergos_answer_is_lost_and_it_created_nothing_the_invite_still_works() {
+    let site = with_invite_from_alice().await;
+    site.ergo.fail_next(Failure::Dropped);
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_eq!(response.status(), 503);
+    let page = body_text(response).await;
+    assert!(page.contains("Your invite still works."), "{page}");
+    assert_eq!(site.db.member("bob").await.unwrap(), None);
+    assert!(site.ergo.client().info("bob").await.unwrap().is_none());
+    assert!(invite_is_open(&site).await);
+    assert_bob_joined(&site, site.post(INVITE, &bob(), None).await).await;
 }
 
 #[tokio::test]
