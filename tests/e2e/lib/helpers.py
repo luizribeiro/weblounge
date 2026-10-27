@@ -109,14 +109,25 @@ def wait_for_ops_line(pattern: str, account: str, password: str, since: int = 0,
     return wait_for_line(pattern, "#ops", account, password, speaker="bender", since=since, timeout=timeout)
 
 
-def https(name: str, path: str = "/", *flags: str) -> str:
+def https_command(name: str, path: str = "/", *flags: str) -> str:
     address = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
-    return client.succeed(
-        shlex.join(["curl", "-sk", "--resolve", f"{name}:443:{address}", *flags, f"https://{name}{path}"])
-    )
+    return shlex.join(["curl", "-sk", "--resolve", f"{name}:443:{address}", *flags, f"https://{name}{path}"])
+
+
+def https(name: str, path: str = "/", *flags: str) -> str:
+    return client.succeed(https_command(name, path, *flags))
 
 
 members = "members.weblounge.org"
+
+
+def wait_for_members(timeout: int = 300) -> None:
+    """Waits until concierge answers through nginx, and Ergo's API, which signing up calls, listens.
+    Their units are active before they listen."""
+    client.wait_until_succeeds(https_command(members, "/signin", "-f", "-o", "/dev/null"), timeout=timeout)
+    credenza.wait_for_open_port(8089, timeout=timeout)
+
+
 files_host = "files.weblounge.org"
 outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
 # The scrubber's test images, on the client.
@@ -312,6 +323,7 @@ def get_file(link: str) -> Answer:
 
 def add_member(account: str, password: str, admin: bool = False) -> None:
     """Signs `account` up through a root invite, the way every member joins."""
+    wait_for_members()
     link = concierge_admin("invite", "create", "--root", *(["--admin"] if admin else []))
     signed_up = Browser(f"signup-{account}").sign_up(link, account, password)
     assert signed_up == "200 ", signed_up
