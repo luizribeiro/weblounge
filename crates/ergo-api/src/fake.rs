@@ -2,17 +2,20 @@
 
 use std::{
     collections::{BTreeMap, VecDeque},
+    io,
     sync::{Arc, Mutex, MutexGuard},
 };
 
 use axum::{
     Json, Router,
+    body::{Body, Bytes},
     extract::{Request, State},
     http::{StatusCode, header::AUTHORIZATION},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::post,
 };
+use futures_util::stream;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -37,6 +40,11 @@ pub enum Failure {
     Unauthorized,
     /// Refuse with `UNKNOWN_ERROR`, as Ergo does when its database fails.
     UnknownError,
+    /// Carry the call out but break the connection instead of answering,
+    /// as Ergo does when the call outlasts its API's write timeout.
+    LostReply,
+    /// Break the connection without carrying the call out.
+    Dropped,
 }
 
 /// An HTTP server on loopback that answers like Ergo's API, keeping accounts
@@ -153,8 +161,20 @@ async fn gatekeeper(State(state): State<Shared>, request: Request, next: Next) -
     match failure {
         Some(Failure::Unauthorized) => unauthorized(),
         Some(Failure::UnknownError) => refused(ErrorCode::UnknownError, Some("simulated failure")),
+        Some(Failure::LostReply) => {
+            next.run(request).await;
+            broken_connection()
+        }
+        Some(Failure::Dropped) => broken_connection(),
         None => next.run(request).await,
     }
+}
+
+/// A response whose body fails, which makes the server drop the
+/// connection mid-answer.
+fn broken_connection() -> Response {
+    let failing = stream::once(async { Err::<Bytes, _>(io::Error::other("connection lost")) });
+    Response::new(Body::from_stream(failing))
 }
 
 fn unauthorized() -> Response {
@@ -435,6 +455,33 @@ mod tests {
         client.set_vhost("louro", "").await.unwrap();
         assert_eq!(ergo.vhost("louro"), None);
         assert_eq!(ergo.vhost("carol"), None);
+    }
+
+    #[tokio::test]
+    async fn a_lost_reply_breaks_the_connection_after_the_call_took_effect() {
+        let ergo = FakeErgo::start().await;
+        let client = ergo.client();
+        let passphrase = "correct-horse".parse().unwrap();
+        ergo.fail_next(Failure::LostReply);
+
+        let error = client.register("olive", &passphrase).await.unwrap_err();
+
+        assert!(matches!(error, Error::Transport(_)), "{error:?}");
+        let account = client.check_auth("olive", "correct-horse").await.unwrap();
+        assert_eq!(account, Some("olive".into()));
+    }
+
+    #[tokio::test]
+    async fn a_dropped_call_breaks_the_connection_and_takes_no_effect() {
+        let ergo = FakeErgo::start().await;
+        let client = ergo.client();
+        let passphrase = "correct-horse".parse().unwrap();
+        ergo.fail_next(Failure::Dropped);
+
+        let error = client.register("olive", &passphrase).await.unwrap_err();
+
+        assert!(matches!(error, Error::Transport(_)), "{error:?}");
+        assert_eq!(client.info("olive").await.unwrap(), None);
     }
 
     #[tokio::test]
