@@ -35,6 +35,12 @@ impl Error {
             _ => None,
         }
     }
+
+    /// Whether the connection failed once made, so Ergo may have carried
+    /// the request out though no answer came back.
+    pub fn unanswered(&self) -> bool {
+        matches!(self, Self::Transport(error) if !error.is_connect())
+    }
 }
 
 fn describe_refusal(code: Option<&ErrorCode>, message: Option<&str>) -> String {

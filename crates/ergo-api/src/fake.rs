@@ -417,8 +417,10 @@ mod tests {
 
         let error = client.status().await.unwrap_err();
         assert_eq!(error.code(), Some(&ErrorCode::UnknownError));
+        assert!(!error.unanswered());
         let error = client.status().await.unwrap_err();
         assert!(matches!(error, Error::Unauthorized(_)), "{error:?}");
+        assert!(!error.unanswered());
         client.status().await.unwrap();
     }
 
@@ -466,7 +468,7 @@ mod tests {
 
         let error = client.register("olive", &passphrase).await.unwrap_err();
 
-        assert!(matches!(error, Error::Transport(_)), "{error:?}");
+        assert!(error.unanswered(), "{error:?}");
         let account = client.check_auth("olive", "correct-horse").await.unwrap();
         assert_eq!(account, Some("olive".into()));
     }
@@ -480,7 +482,7 @@ mod tests {
 
         let error = client.register("olive", &passphrase).await.unwrap_err();
 
-        assert!(matches!(error, Error::Transport(_)), "{error:?}");
+        assert!(error.unanswered(), "{error:?}");
         assert_eq!(client.info("olive").await.unwrap(), None);
     }
 
@@ -490,6 +492,9 @@ mod tests {
         let client = ergo.client();
         ergo.stop().await;
         let error = client.status().await.unwrap_err();
-        assert!(matches!(error, Error::Transport(_)), "{error:?}");
+        assert!(
+            matches!(error, Error::Transport(_)) && !error.unanswered(),
+            "{error:?}"
+        );
     }
 }
