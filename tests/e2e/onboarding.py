@@ -17,12 +17,14 @@ if TYPE_CHECKING:
         mails_to,
         members,
         outcome,
+        register,
         wait_for_mail,
         wait_for_members,
     )
 
 erin: Account = {"account": "erin", "password": "lantern-orchard-71"}
 frank: Account = {"account": "frank", "password": "copper-meadow-94"}
+gina: Account = {"account": "gina", "password": "harbor-lantern-36"}
 erins_browser = Browser("erin")
 erins_email = "erin@example.org"
 verification_subject = "Confirm your email for weblounge.org"
@@ -138,10 +140,20 @@ with subtest("member reset-password locks the old password out of IRC and ends t
     assert erins_browser.get("/", *outcome) == f"303 https://{members}/signin"
     assert " 903 " in irc(account="erin", password=new_password)
 
+with subtest("an account Ergo made for a signup that never finished goes to whoever signs up with its password"):
+    register(**gina)
+    ginas_link = concierge_admin("invite", "create", "--root").strip()
+    ginas_browser = Browser("gina")
+    guessed = ginas_browser.sign_up(ginas_link, "gina", "harbor-guess-63", flags=["-w", "\n%{http_code}"])
+    assert guessed.endswith("\n422") and "gina is taken." in guessed, guessed
+    assert ginas_browser.sign_up(ginas_link, **gina) == "200 "
+    assert concierge_sql("SELECT account FROM members WHERE account = 'gina'").strip() == "gina"
+    assert "Pull up a chair, gina." in ginas_browser.get("/", "-f")
+
 with subtest("the passwords and link codes never reach the journal, nor nginx's log the verification code"):
     credenza.succeed("journalctl --sync")
-    codes = [invite_code(link), invite_code(franks_link), invite_code(first_link), verify_code]
-    for secret in [erin["password"], frank["password"], new_password, *codes]:
+    codes = [invite_code(link), invite_code(franks_link), invite_code(first_link), invite_code(ginas_link), verify_code]
+    for secret in [erin["password"], frank["password"], gina["password"], new_password, *codes]:
         credenza.fail(f"journalctl | grep -qF {secret}")
     for code in [invite_code(first_link), verify_code]:
         credenza.fail(f"grep -qF {code} /var/log/nginx/access.log")

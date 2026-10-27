@@ -6,12 +6,14 @@ use std::{
 use axum::{Json, Router, http::header, response::Response, routing::post};
 use ergo_api::fake::Failure;
 use regex::Regex;
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
-use concierge::{email::Email, name::MemberName, verification_mail};
+use concierge::{email::Email, name::MemberName, rate_limit, verification_mail};
 
-use crate::{HISTORY_EXPIRY, Site, body_text, execute, session_cookie, verification_link};
+use crate::{
+    HISTORY_EXPIRY, PASSWORD, Site, body_text, execute, session_cookie, verification_link,
+};
 
 const CODE: &str = "q7Hx2mZp9vLcT4wRfBa-_w";
 const INVITE: &str = "/invite";
@@ -444,15 +446,27 @@ async fn two_redemptions_of_one_invite_cannot_both_succeed() {
 /// A site whose Ergo creates every account, after running `sql` on the
 /// site's database.
 async fn with_ergo_that_runs(sql: &'static str) -> Site {
+    with_ergo(sql, json!({"success": true}), "Bob").await
+}
+
+/// A site whose Ergo runs `sql` on the site's database as it registers an
+/// account, then answers `registration`, and opens any account with any
+/// password, answering that it's `spelled` so.
+async fn with_ergo(sql: &'static str, registration: Value, spelled: &'static str) -> Site {
     let database = Arc::new(OnceLock::<PathBuf>::new());
     let running = database.clone();
-    let ergo = Router::new().route(
-        "/v1/ns/saregister",
-        post(move || async move {
-            execute(running.get().unwrap(), sql).await;
-            Json(json!({"success": true}))
-        }),
-    );
+    let ergo = Router::new()
+        .route(
+            "/v1/ns/saregister",
+            post(move || async move {
+                execute(running.get().unwrap(), sql).await;
+                Json(registration)
+            }),
+        )
+        .route(
+            "/v1/check_auth",
+            post(move || async move { Json(json!({"success": true, "accountName": spelled})) }),
+        );
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, ergo).await });
@@ -475,6 +489,87 @@ async fn an_invite_revoked_while_ergo_works_adds_no_member_and_says_so() {
     assert!(page.contains("clear the nick for a new invite"), "{page}");
     assert_eq!(site.db.member("bob").await.unwrap(), None);
     assert_eq!(arrivals(&site).await, 0);
+}
+
+fn name_taken() -> Value {
+    json!({"success": false, "errorCode": "ACCOUNT_EXISTS"})
+}
+
+#[tokio::test]
+async fn a_signup_whose_answer_from_ergo_was_lost_finishes_when_tried_again() {
+    let site = with_invite_from_alice().await;
+    site.ergo.fail_next(Failure::LostReply);
+    for _ in 0..3 {
+        site.ergo.fail_next(Failure::Dropped);
+    }
+    assert_eq!(site.post(INVITE, &bob(), None).await.status(), 503);
+    assert!(invite_is_open(&site).await);
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_bob_joined(&site, response).await;
+}
+
+#[tokio::test]
+async fn an_account_ergo_has_without_a_member_is_theirs_whose_password_opens_it() {
+    let site = with_invite_from_alice().await;
+    site.register("bob").await;
+
+    let response = site
+        .post(INVITE, &signup("Bob", PASSWORD, PASSWORD), None)
+        .await;
+
+    assert_eq!(response.status(), 200);
+    let member = site.db.member("bob").await.unwrap().unwrap();
+    assert_eq!(member.account.as_str(), "bob");
+    assert!(!invite_is_open(&site).await);
+}
+
+#[tokio::test]
+async fn guessing_an_unclaimed_accounts_password_is_limited_as_signing_in_is() {
+    let site = with_invite_from_alice().await;
+    site.register("bob").await;
+    for _ in 0..rate_limit::PER_ACCOUNT {
+        assert_eq!(site.post(INVITE, &bob(), None).await.status(), 422);
+    }
+
+    let response = site
+        .post(INVITE, &signup("Bob", PASSWORD, PASSWORD), None)
+        .await;
+
+    assert_eq!(response.status(), 422);
+    assert!(body_text(response).await.contains("Bob is taken."));
+    assert_eq!(site.db.member("bob").await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_name_a_member_or_bot_took_while_ergo_worked_stays_theirs() {
+    let member =
+        "INSERT INTO members (account, email, joined_at) VALUES ('bob', 'b@example.org', 0)";
+    let bot =
+        "INSERT INTO members (account, email, joined_at) VALUES ('carol', 'c@example.org', 0);
+               INSERT INTO bots (account, owner, created_at) VALUES ('bob', 'carol', 0)";
+    for sql in [member, bot] {
+        let site = with_ergo(sql, name_taken(), "Bob").await;
+
+        let response = site.post(INVITE, &bob(), None).await;
+
+        assert_eq!(response.status(), 422, "{sql}");
+        assert!(body_text(response).await.contains("Bob is taken."));
+        assert!(invite_is_open(&site).await);
+    }
+}
+
+#[tokio::test]
+async fn a_password_that_opens_another_account_under_the_name_takes_nothing() {
+    let site = with_ergo("SELECT 1", name_taken(), "carol").await;
+
+    let response = site.post(INVITE, &bob(), None).await;
+
+    assert_eq!(response.status(), 422);
+    assert!(body_text(response).await.contains("Bob is taken."));
+    assert_eq!(site.db.member_count().await.unwrap(), 0);
+    assert!(invite_is_open(&site).await);
 }
 
 async fn arrivals(site: &Site) -> i64 {

@@ -162,7 +162,7 @@ pub async fn redeem(
         }
         Err(error) => return internal_error("Claiming an invite", error),
     };
-    let name = match create_account(&app, &claim, &account, now).await {
+    let name = match create_account(&app, &claim, &account, &address, now).await {
         Ok(name) => name,
         Err(Failure::Taken) => return refuse(taken()),
         Err(Failure::Unreachable) => return unreachable(&app, &visitor),
@@ -205,9 +205,10 @@ async fn create_account(
     app: &App,
     claim: &Claim,
     account: &NewAccount,
+    address: &ClientAddress,
     now: i64,
 ) -> Result<MemberName, Failure> {
-    let name = match register(app, account).await {
+    let name = match register(app, account, address).await {
         Ok(name) => name,
         Err(failure) => {
             release(app, claim).await;
@@ -246,10 +247,17 @@ async fn create_account(
 
 /// Registers `account`'s Ergo account, answering its name. When Ergo
 /// doesn't answer, it may have registered it all the same, so this looks.
-async fn register(app: &App, account: &NewAccount) -> Result<MemberName, Failure> {
+/// An account Ergo has already is theirs if it's unclaimed and their
+/// password opens it: an earlier signup of theirs made it, but recorded
+/// no member.
+async fn register(
+    app: &App,
+    account: &NewAccount,
+    address: &ClientAddress,
+) -> Result<MemberName, Failure> {
     match app.ergo.register(&account.name, &account.password).await {
         Ok(Registration::Created) => Ok(account.name.clone()),
-        Ok(Registration::NameTaken) => Err(Failure::Taken),
+        Ok(Registration::NameTaken) => earlier_signup(app, account, address).await,
         Err(error) if error.unanswered() => {
             eprintln!(
                 "Ergo didn't answer creating account {}: {error}",
@@ -262,6 +270,30 @@ async fn register(app: &App, account: &NewAccount) -> Result<MemberName, Failure
         Err(error) => {
             eprintln!("Creating an Ergo account failed: {error}");
             Err(Failure::Unreachable)
+        }
+    }
+}
+
+/// The unclaimed account an earlier signup of `account`'s made, held to
+/// the same limits as signing in, as this tries a password too.
+async fn earlier_signup(
+    app: &App,
+    account: &NewAccount,
+    address: &ClientAddress,
+) -> Result<MemberName, Failure> {
+    let name = account.name.as_str();
+    let now = Instant::now();
+    if !app.limiter.allows(name, address.0, now) {
+        return Err(Failure::Taken);
+    }
+    match unclaimed_account(app, account, 1).await? {
+        Some(unclaimed) => {
+            app.limiter.record_success(name);
+            Ok(unclaimed)
+        }
+        None => {
+            app.limiter.record_failure(name, address.0, now);
+            Err(Failure::Taken)
         }
     }
 }
