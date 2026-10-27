@@ -135,9 +135,9 @@ pub async fn redeem(
         nick_error: Some(format!("{} is taken.", account.name)),
         ..form_for(&signup)
     };
-    match bots::name_claim(&app.db, account.name.as_str(), None, app.history_expiry).await {
-        Ok(NameClaim::Free | NameClaim::Reuses(_)) => {}
-        Ok(NameClaim::Held) => return refuse(taken()),
+    match name_held(&app, &account.name).await {
+        Ok(false) => {}
+        Ok(true) => return refuse(taken()),
         Err(error) => return internal_error("Looking up a name", error),
     }
     let email_taken = app.db.email_taken(&account.email, &account.name);
@@ -239,6 +239,12 @@ async fn create_account(
             Err(Failure::Unfinished)
         }
     }
+}
+
+/// Whether a member or a bot holds `name`, so no newcomer may take it.
+async fn name_held(app: &App, name: &MemberName) -> sqlx::Result<bool> {
+    let claim = bots::name_claim(&app.db, name.as_str(), None, app.history_expiry).await?;
+    Ok(claim == NameClaim::Held)
 }
 
 /// Checks `signup` against every rule, including that its invite is open.
