@@ -388,6 +388,7 @@ async fn assert_bob_joined(site: &Site, response: Response) {
     let member = site.db.member("bob").await.unwrap().unwrap();
     assert_eq!(member.account.as_str(), "Bob");
     assert!(!invite_is_open(site).await);
+    assert_eq!(arrivals(site).await, 1);
 }
 
 #[tokio::test]
@@ -424,6 +425,7 @@ async fn when_ergos_answer_is_lost_and_it_created_nothing_the_invite_still_works
     assert_eq!(site.db.member("bob").await.unwrap(), None);
     assert!(site.ergo.client().info("bob").await.unwrap().is_none());
     assert!(invite_is_open(&site).await);
+    assert_eq!(arrivals(&site).await, 0);
     assert_bob_joined(&site, site.post(INVITE, &bob(), None).await).await;
 }
 
@@ -504,6 +506,7 @@ async fn a_signup_whose_answer_from_ergo_was_lost_finishes_when_tried_again() {
     }
     assert_eq!(site.post(INVITE, &bob(), None).await.status(), 503);
     assert!(invite_is_open(&site).await);
+    assert_eq!(arrivals(&site).await, 0);
 
     let response = site.post(INVITE, &bob(), None).await;
 
@@ -523,6 +526,7 @@ async fn an_account_ergo_has_without_a_member_is_theirs_whose_password_opens_it(
     let member = site.db.member("bob").await.unwrap().unwrap();
     assert_eq!(member.account.as_str(), "bob");
     assert!(!invite_is_open(&site).await);
+    assert_eq!(arrivals(&site).await, 1);
 }
 
 #[tokio::test]
@@ -540,6 +544,7 @@ async fn guessing_an_unclaimed_accounts_password_is_limited_as_signing_in_is() {
     assert_eq!(response.status(), 422);
     assert!(body_text(response).await.contains("Bob is taken."));
     assert_eq!(site.db.member("bob").await.unwrap(), None);
+    assert_eq!(arrivals(&site).await, 0);
 }
 
 #[tokio::test]
