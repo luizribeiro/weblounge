@@ -22,16 +22,14 @@ if TYPE_CHECKING:
         upload,
         wait_for_empty_outbox,
         wait_for_mail,
+        wait_for_members,
     )
 
 grace: Account = {"account": "grace", "password": "willow-harbor-58"}
 graces_browser = Browser("grace")
 email = "grace@example.org"
 
-credenza.wait_for_unit("concierge.service")
-credenza.wait_for_open_port(8080)
-credenza.wait_for_unit("ergochat.service")
-credenza.wait_for_open_port(8089)
+wait_for_members()
 mail.wait_for_unit("mailpit-test.service")
 assert graces_browser.sign_up(concierge_admin("invite", "create", "--root"), **grace) == "200 "
 

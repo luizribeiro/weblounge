@@ -18,6 +18,7 @@ if TYPE_CHECKING:
         members,
         outcome,
         wait_for_mail,
+        wait_for_members,
     )
 
 erin: Account = {"account": "erin", "password": "lantern-orchard-71"}
@@ -31,11 +32,7 @@ def email_verified_at(account: str) -> str:
     return concierge_sql(f"SELECT email_verified_at FROM members WHERE account = '{account}'").strip()
 
 
-credenza.wait_for_unit("nginx.service")
-credenza.wait_for_unit("concierge.service")
-credenza.wait_for_open_port(8080)
-credenza.wait_for_unit("ergochat.service")
-credenza.wait_for_open_port(8089)
+wait_for_members()
 mail.wait_for_unit("mailpit-test.service")
 
 with subtest("an admin mints a root invite on join.weblounge.org and the invitee opens it over HTTPS"):

@@ -22,12 +22,11 @@ if TYPE_CHECKING:
         members,
         not_found_page,
         outcome,
+        wait_for_members,
     )
 
 with subtest("members.weblounge.org serves concierge's sign-in page in the shared styles"):
-    credenza.wait_for_unit("nginx.service")
-    credenza.wait_for_unit("concierge.service")
-    credenza.wait_for_open_port(8080)
+    wait_for_members()
     page = https("members.weblounge.org", "/signin", "-f")
     assert "Sign in." in page, page
     stylesheet = re.search(r'href="(/assets/members-[A-Z0-9]+\.css)"', page)

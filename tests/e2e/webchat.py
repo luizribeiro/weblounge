@@ -35,12 +35,6 @@ graces_browser = Browser("grace")
 gamja_connects = f"connect-src 'self' wss://irc.weblounge.org/socket https://{members} https://{files_host}/upload;"
 
 
-credenza.wait_for_unit("nginx.service")
-credenza.wait_for_unit("concierge.service")
-credenza.wait_for_open_port(8080)
-credenza.wait_for_unit("ergochat.service")
-credenza.wait_for_open_port(8089)
-
 add_member(**grace)
 assert graces_browser.sign_in(**grace) == f"303 https://{members}/"
 

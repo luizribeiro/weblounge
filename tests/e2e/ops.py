@@ -29,7 +29,6 @@ def louro_status_as_service(*properties: str) -> str:
 
 
 with subtest("once luiz is a member, bender sits in #ops"):
-    credenza.wait_for_unit("concierge.service")
     add_member("luiz", "plain-old-vanilla")
     credenza.succeed("systemctl restart bender-account.service louro.service")
     register(**olive)
