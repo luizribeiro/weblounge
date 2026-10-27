@@ -10,13 +10,14 @@ let
     host = config.networking.hostName;
   };
   opsEvent = lib.getExe opsEvents;
+  queue = "/run/ops-events/queue";
 
   keyServices = [ "ergochat" "concierge" "nginx" "concierge-mailer" ];
   certificateUnits = lib.concatMap
     (cert: [ "acme-${cert}" "acme-order-renew-${cert}" ])
     (lib.attrNames config.security.acme.certs);
 
-  reportsFailure.onFailure = [ "ops-notify@failed:%N.service" ];
+  reportsFailure.onFailure = [ "ops-failed@%N.service" ];
   # Without an order, so it looks for a deploy while the switch that
   # (re)started the service still runs. Not in serviceConfig, which
   # concierge-admin and the mailer's check copy.
@@ -42,7 +43,16 @@ in
   systemd.tmpfiles.rules = [
     "d /run/ops-events 0755 root root -"
     "d /run/ops-events/failed 0755 root root -"
+    "d /run/ops-events/switches 0755 root root -"
+    # The hooks queue events as root; ops-post takes them off.
+    "d ${queue} 0770 root ${config.services.louro.group} -"
   ];
+
+  # Again whenever ops-post stops with events left.
+  systemd.paths.ops-post = {
+    wantedBy = [ "paths.target" ];
+    pathConfig.DirectoryNotEmpty = queue;
+  };
 
   system.preSwitchChecks.ops-events = ''${opsEvent} switch "$1" "$2" || true'';
 
@@ -60,17 +70,25 @@ in
         };
       };
 
-      # One line, ops-notify@<event>[:<unit>], each its own run.
-      "ops-notify@" = {
-        description = "Post %i to #ops";
-        # A deploy that changes it leaves the one waiting to post alone.
+      "ops-failed@" = {
+        description = "Tell #ops %i failed, unless a restart follows";
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${opsEvent} failed %i";
+        };
+      };
+
+      # One run at a time, so the lines go out in the order queued.
+      ops-post = {
+        description = "Post the host's queued events to #ops";
+        # A deploy that changes it leaves the run waiting to post alone.
         restartIfChanged = false;
         serviceConfig = poster // {
           # Simple, so the boot it waits on can finish.
           Type = "simple";
-          ExecCondition = "+${opsEvent} record %i";
-          ExecStart = "-${opsEvent} post %i";
-          TimeoutStartSec = "15min";
+          ExecStart = "${opsEvent} drain";
+          ReadWritePaths = [ queue ];
         };
       };
 

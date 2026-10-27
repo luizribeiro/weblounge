@@ -6,7 +6,6 @@ let
   systemctl = pkgs.writeShellScriptBin "systemctl" ''
     stub=$OPS_ROOT/stub
     case "$*" in
-      "start --no-block "*) echo "$*" >>"$stub/calls" ;;
       is-system-running) cat "$stub/system-state" ;;
       "is-system-running --wait") ;;
       "-q is-active "*) [ -e "$stub/active/$3" ] ;;

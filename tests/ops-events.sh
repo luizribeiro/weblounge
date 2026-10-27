@@ -7,7 +7,7 @@ failures=0
 setup() {
   OPS_ROOT=$(mktemp -d)
   export OPS_ROOT
-  mkdir -p "$OPS_ROOT"/{stub/active,run/ops-events/failed,run/nixos,var/lib/ops-events,proc,systems}
+  mkdir -p "$OPS_ROOT"/{stub/active,run/ops-events/{failed,queue,switches},run/nixos,var/lib/ops-events,proc,systems}
   echo running >"$OPS_ROOT/stub/system-state"
   : >"$OPS_ROOT/proc/locks"
   touch "$OPS_ROOT/run/nixos/switch-to-configuration.lock"
@@ -37,12 +37,28 @@ hold_switch_lock() {
   printf '1: FLOCK  ADVISORY  WRITE 4242 %02x:%02x:%d 0 EOF\n' "$major" "$minor" "$inode" >"$OPS_ROOT/proc/locks"
 }
 
+release_switch_lock() {
+  : >"$OPS_ROOT/proc/locks"
+}
+
 stub() {
   echo "$2" >"$OPS_ROOT/stub/$1"
 }
 
-calls() {
-  cat "$OPS_ROOT/stub/calls" 2>/dev/null || true
+# The events waiting for ops-post, oldest first.
+queued() {
+  local entry
+  for entry in "$OPS_ROOT/run/ops-events/queue"/*; do
+    if [ -e "$entry" ]; then cat "$entry"; fi
+  done
+}
+
+clear_queue() {
+  rm -f "$OPS_ROOT/run/ops-events/queue"/*
+}
+
+sent() {
+  cat "$OPS_ROOT/stub/sent" 2>/dev/null || true
 }
 
 expect() {
@@ -71,7 +87,7 @@ setup
 stub system-state starting
 touch "$OPS_ROOT/run/ops-events/failed/concierge"
 ops-event started concierge
-expect "starts during a boot post nothing" "" "$(calls)"
+expect "starts during a boot post nothing" "" "$(queued)"
 expect "a boot clears failures" "" "$(ls "$OPS_ROOT/run/ops-events/failed")"
 
 setup
@@ -86,58 +102,60 @@ ops-event started concierge
 ops-event started ergochat
 ops-event started nginx
 expect "a start after a failure is a recovery, an automatic one a crash, others a start" \
-  "start --no-block ops-notify@back:concierge.service
-start --no-block ops-notify@crashed:ergochat.service
-start --no-block ops-notify@started:nginx.service" "$(calls)"
+  "back:concierge
+crashed:ergochat
+started:nginx" "$(queued)"
 expect "a recovery clears the failure" "" "$(ls "$OPS_ROOT/run/ops-events/failed")"
-rm "$OPS_ROOT/stub/calls"
+clear_queue
 stub nginx.ActiveState failed
 ops-event started nginx
-expect "a start that fails is left to the failure's line" "" "$(calls)"
+expect "a start that fails is left to the failure's line" "" "$(queued)"
 
 setup
 stub concierge.ActiveState activating
-expect "a failure a restart follows is left to the restart's line" "1" "$(ops-event record failed:concierge || echo $?)"
+ops-event failed concierge
+expect "a failure a restart follows is left to the restart's line" "" "$(queued)$(ls "$OPS_ROOT/run/ops-events/failed")"
 stub concierge.ActiveState failed
-ops-event record failed:concierge
+ops-event failed concierge
 expect "a unit left failed is remembered" "concierge" "$(ls "$OPS_ROOT/run/ops-events/failed")"
-ops-event record booted
-expect "other events need no record" "concierge" "$(ls "$OPS_ROOT/run/ops-events/failed")"
+expect "and its failure queued" "failed:concierge" "$(queued)"
 
 setup
 system new 0123456789abcdef0123456789abcdef01234567
-switch_to new
-expect "a deploy names the revision, short" "deployed 0123456" "$(ops-event line deployed)"
-printf '%s\n' concierge ergochat concierge >"$OPS_ROOT/run/ops-events/restarted"
+ops-event switch "$OPS_ROOT/systems/new" test
+expect "a deploy names the revision, short" "deployed 0123456" "$(ops-event line deployed:1)"
+printf '%s\n' concierge ergochat concierge >"$OPS_ROOT/run/ops-events/switches/1/restarted"
 expect "a deploy lists what it restarted, once each" \
-  "deployed 0123456 (on trial) — restarted: concierge, ergochat" "$(ops-event line trial)"
+  "deployed 0123456 (on trial) — restarted: concierge, ergochat" "$(ops-event line trial:1)"
+switch_to new
 system dirty 0123456789abcdef0123456789abcdef01234567-dirty
+ops-event switch "$OPS_ROOT/systems/dirty" test
+expect "a dirty tree says so, and a switch lists only its own restarts" \
+  "rolled back to dirty tree on 0123456" "$(ops-event line rolled-back:2)"
 switch_to dirty
-expect "a dirty tree says so" \
-  "rolled back to dirty tree on 0123456 — restarted: concierge, ergochat" "$(ops-event line rolled-back)"
-switch_to old
-expect "a system without a revision says so" "kept an unknown revision" "$(ops-event line kept)"
+ops-event switch "$OPS_ROOT/systems/old" test
+expect "a system without a revision says so" "kept an unknown revision" "$(ops-event line kept:3)"
 
 setup
 old=$(readlink -f "$OPS_ROOT/run/current-system")
 system new 0123456789abcdef0123456789abcdef01234567
 new=$OPS_ROOT/systems/new
-echo stale >"$OPS_ROOT/run/ops-events/restarted"
 touch "$OPS_ROOT/stub/active/weblounge-rollback.timer"
 ops-event switch "$new" test
-expect "a switch while a push's rollback is armed is a trial" "start --no-block ops-notify@trial.service" "$(calls)"
+expect "a switch while a push's rollback is armed is a trial" "trial:1" "$(queued)"
 expect "a trial remembers the system it may go back to" "$old" "$(cat "$OPS_ROOT/run/ops-events/trial")"
-expect "a switch forgets the last one's restarts" "" "$(cat "$OPS_ROOT/run/ops-events/restarted")"
 switch_to new
-rm "$OPS_ROOT/stub/calls" "$OPS_ROOT/stub/active/weblounge-rollback.timer"
+clear_queue
+rm "$OPS_ROOT/stub/active/weblounge-rollback.timer"
 ops-event switch "$new" boot
-expect "making the trial's system the boot default keeps it" "start --no-block ops-notify@kept.service" "$(calls)"
-rm "$OPS_ROOT/stub/calls"
+expect "making the trial's system the boot default keeps it" "kept:2" "$(queued)"
+clear_queue
 ops-event switch "$new" boot
 ops-event switch "$new" test
-expect "booting or activating the running system again says nothing" "" "$(calls)"
+expect "booting or activating the running system again says nothing" "" "$(queued)"
 ops-event switch "$old" switch
-expect "a switch with no trial is a plain deploy" "start --no-block ops-notify@deployed.service" "$(calls)"
+expect "a switch with no trial is a plain deploy" "deployed:3" "$(queued)"
+expect "a switch forgets the records of switches whose lines went out" "3" "$(ls "$OPS_ROOT/run/ops-events/switches")"
 
 setup
 old=$(readlink -f "$OPS_ROOT/run/current-system")
@@ -145,34 +163,70 @@ system new ""
 touch "$OPS_ROOT/stub/active/weblounge-rollback.timer"
 ops-event switch "$OPS_ROOT/systems/new" test
 switch_to new
-rm "$OPS_ROOT/stub/calls"
+clear_queue
 ops-event switch "$old" test
-expect "a switch back to the trial's old system is a rollback" "start --no-block ops-notify@rolled-back.service" "$(calls)"
+expect "a switch back to the trial's old system is a rollback" "rolled-back:2" "$(queued)"
 expect "a rollback ends the trial" "no" "$([ -e "$OPS_ROOT/run/ops-events/trial" ] && echo yes || echo no)"
 
 setup
+system new ""
+ops-event switch "$OPS_ROOT/systems/new" test
 stub concierge.NRestarts 0
 hold_switch_lock
 touch "$OPS_ROOT/run/ops-events/failed/concierge"
 ops-event started concierge
 ops-event started nginx
-expect "starts during a deploy post nothing themselves" "" "$(calls)"
-expect "starts during a deploy go in its line" "concierge nginx" "$(xargs <"$OPS_ROOT/run/ops-events/restarted")"
+expect "starts during a deploy post nothing themselves" "deployed:1" "$(queued)"
+expect "starts during a deploy go in its line" "concierge nginx" "$(xargs <"$OPS_ROOT/run/ops-events/switches/1/restarted")"
 expect "a deploy that restarts a failed unit clears its failure" "" "$(ls "$OPS_ROOT/run/ops-events/failed")"
+
+setup
+stub louro-status '{"connected": true, "nick": "bender", "channels": ["#ops"]}'
+old=$(readlink -f "$OPS_ROOT/run/current-system")
+system new 0123456789abcdef0123456789abcdef01234567
+touch "$OPS_ROOT/stub/active/weblounge-rollback.timer"
+hold_switch_lock
+ops-event switch "$OPS_ROOT/systems/new" test
+switch_to new
+ops-event started concierge
+ops-event switch "$old" test
+switch_to old
+ops-event started nginx
+expect "a switch's line is done once a later switch holds the lock, and names its own system and restarts" \
+  "deployed 0123456 (on trial) — restarted: concierge" "$(ops-event line trial:1)"
+release_switch_lock
+ops-event drain
+expect "the queue goes out oldest first, each switch with what it restarted" \
+  "deployed 0123456 (on trial) — restarted: concierge
+rolled back to an unknown revision — restarted: nginx" "$(sent)"
+expect "and goes out once" "" "$(queued)"
+
+setup
+rm -f "$OPS_ROOT/stub/louro-status"
+stub nginx.ActiveState active
+stub nginx.NRestarts 0
+ops-event started nginx
+OPS_NOTIFY_PATIENCE=0 ops-event drain 2>/dev/null
+expect "a line louro can't take is dropped" "" "$(queued)$(sent)"
+stub louro-status '{"connected": true, "nick": "bender", "channels": ["#ops"]}'
+echo "exploded:x" >"$OPS_ROOT/run/ops-events/queue/0000000001"
+echo "started:nginx" >"$OPS_ROOT/run/ops-events/queue/0000000002"
+ops-event drain 2>/dev/null
+expect "and the ones behind a line that fails still go out" "nginx started" "$(sent)"
 
 setup
 stub system-state starting
 ops-event boot
-expect "a first boot is a clean one" "start --no-block ops-notify@booted.service" "$(calls)"
-rm "$OPS_ROOT/stub/calls"
+expect "a first boot is a clean one" "booted" "$(queued)"
+clear_queue
 ops-event boot
-expect "a boot that finds the last one never shut down followed a crash" \
-  "start --no-block ops-notify@crash-booted.service" "$(calls)"
-rm "$OPS_ROOT/stub/calls" "$OPS_ROOT/var/lib/ops-events/up"
+expect "a boot that finds the last one never shut down followed a crash" "crash-booted" "$(queued)"
+clear_queue
+rm "$OPS_ROOT/var/lib/ops-events/up"
 stub system-state running
 ops-event boot
 expect "a start outside a boot posts nothing, but marks the host up" "yes" \
-  "$(calls)$([ -e "$OPS_ROOT/var/lib/ops-events/up" ] && echo yes)"
+  "$(queued)$([ -e "$OPS_ROOT/var/lib/ops-events/up" ] && echo yes)"
 stub .FinishTimestampMonotonic 23400000
 expect "a boot's line gives its length and kernel" \
   "credenza booted after 23s (kernel $(uname -r))" "$(ops-event line booted)"
@@ -187,7 +241,7 @@ stub jobs ""
 ops-event shutdown
 expect "a reboot and a power-off say so, a stop by hand nothing" \
   "credenza rebooting
-credenza shutting down" "$(cat "$OPS_ROOT/stub/sent")"
+credenza shutting down" "$(sent)"
 touch "$OPS_ROOT/var/lib/ops-events/up"
 ops-event down
 expect "a clean shutdown clears the marker" "no" "$([ -e "$OPS_ROOT/var/lib/ops-events/up" ] && echo yes || echo no)"
@@ -197,10 +251,10 @@ expect "ops-notify needs a line" "2" "$(ops-notify 2>/dev/null || echo $?)"
 expect "ops-notify gives up while louro isn't running" "1" "$(OPS_NOTIFY_PATIENCE=0 ops-notify hello 2>/dev/null || echo $?)"
 stub louro-status '{"connected": true, "nick": "bender", "channels": ["#bots"]}'
 expect "ops-notify gives up while louro isn't in #ops" "1" "$(OPS_NOTIFY_PATIENCE=0 ops-notify hello 2>/dev/null || echo $?)"
-expect "and sends nothing meanwhile" "" "$(cat "$OPS_ROOT/stub/sent" 2>/dev/null || true)"
+expect "and sends nothing meanwhile" "" "$(sent)"
 stub louro-status '{"connected": true, "nick": "bender", "channels": ["#ops", "#bots"]}'
 ops-notify credenza booted after 23s
-expect "ops-notify sends once louro is in #ops" "credenza booted after 23s" "$(cat "$OPS_ROOT/stub/sent")"
+expect "ops-notify sends once louro is in #ops" "credenza booted after 23s" "$(sent)"
 stub send-status 2
 expect "ops-notify doesn't retry a line louro refuses" "2" "$(OPS_NOTIFY_PATIENCE=60 ops-notify hello 2>/dev/null || echo $?)"
 

@@ -8,6 +8,7 @@
 , gnused
 , jq
 , systemd
+, util-linux
 , louro
 , host
 , socket
@@ -23,7 +24,7 @@ let
 
   ops-event = writeShellApplication {
     name = "ops-event";
-    runtimeInputs = [ coreutils gawk gnugrep gnused systemd ops-notify ];
+    runtimeInputs = [ coreutils gawk gnugrep gnused systemd util-linux ops-notify ];
     runtimeEnv.OPS_HOST = host;
     text = builtins.readFile ./ops-event.sh;
   };

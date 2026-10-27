@@ -85,6 +85,16 @@ with subtest("a service that gives up restarting says so, and says when it's bac
     lines = wait_since("concierge-mailer is back", since)
     assert lines == ["concierge-mailer failed — gave up restarting", "concierge-mailer is back"], lines
 
+with subtest("lines held while louro is away go out in the order their events happened"):
+    since = lines_so_far()
+    credenza.succeed("systemctl stop louro.service")
+    for unit in ["nginx", "concierge-mailer"]:
+        credenza.succeed(f"systemctl restart {unit}")
+        credenza.wait_until_succeeds(f"grep -qx started:{unit} /run/ops-events/queue/*", timeout=60)
+    credenza.succeed("systemctl start louro.service")
+    lines = wait_since("concierge-mailer started", since)
+    assert lines == ["nginx started", "concierge-mailer started"], lines
+
 with subtest("a clean shutdown and the boot after it say so, with the boot's length and kernel"):
     since = lines_so_far()
     credenza.shutdown()

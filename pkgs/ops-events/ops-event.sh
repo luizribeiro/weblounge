@@ -1,22 +1,34 @@
 # shellcheck shell=bash
-# Usage: ops-event started UNIT | record INSTANCE | switch TOPLEVEL ACTION
-#                  | boot | shutdown | down | post INSTANCE
-# The host's major events, as lines in #ops. The hooks (started, switch,
-# boot, down, and record, which ops-notify@ runs first) run as root:
-# they keep the little state there is and start ops-notify@<event>[:unit],
-# whose sandboxed post writes the line and hands it to ops-notify. No unit
-# starts while the host goes down, so shutdown posts its line itself.
+# Usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION
+#                  | boot | shutdown | down | drain | line INSTANCE
+# The host's major events, as lines in #ops. The hooks (started, failed,
+# switch, boot and down) run as root: they keep the little state there is
+# and queue each event as <event>[:<unit or switch>]. drain, ops-post's
+# one sandboxed run at a time, writes the queued events' lines and hands
+# them to ops-notify oldest first, so #ops hears them in the order they
+# happened. No unit starts while the host goes down, so shutdown posts
+# its line itself.
 
 root=${OPS_ROOT:-}
 state=$root/run/ops-events
+queue=$state/queue
+switches=$state/switches
 persistent=$root/var/lib/ops-events
 switch_lock=$root/run/nixos/switch-to-configuration.lock
 current_system=$root/run/current-system
 # The trial's timer, as scripts/push names it.
 rollback_timer=weblounge-rollback.timer
 
+# Entries are numbered under a lock, so the queue's order is the events'.
 notify() {
-  systemctl start --no-block "ops-notify@$1.service"
+  local lock seq
+  exec {lock}>>"$state/queue.lock"
+  flock "$lock"
+  seq=$(($(cat "$state/queued" 2>/dev/null || echo 0) + 1))
+  echo "$seq" >"$state/queued"
+  echo "$1" >"$state/entry"
+  mv "$state/entry" "$queue/$(printf '%010d' "$seq")"
+  exec {lock}>&-
 }
 
 # switch-to-configuration holds its lock, an flock, from start to end.
@@ -47,11 +59,17 @@ wait_until_up() {
   return 1
 }
 
+# The switch running now, which the units it restarts are listed in.
+current_switch() {
+  cat "$state/switch" 2>/dev/null || true
+}
+
 started() {
-  local unit=$1
+  local unit=$1 restarted
   if switching; then
     rm -f "$state/failed/$unit"
-    echo "$unit" >>"$state/restarted"
+    restarted=$switches/$(current_switch)/restarted
+    if [ -e "$restarted" ]; then echo "$unit" >>"$restarted"; fi
   elif booting; then
     rm -f "$state/failed/$unit"
   elif ! wait_until_up "$unit"; then
@@ -68,14 +86,33 @@ started() {
 
 # OnFailure= fires on every crash a restart follows too; only a unit
 # left failed has given up.
-record() {
-  case $1 in
-    failed:*)
-      local unit=${1#failed:}
-      [ "$(systemctl show -P ActiveState "$unit")" = failed ] || exit 1
-      touch "$state/failed/$unit"
-      ;;
-  esac
+failed() {
+  local unit=$1
+  [ "$(systemctl show -P ActiveState "$unit")" = failed ] || return 0
+  touch "$state/failed/$unit"
+  notify "failed:$unit"
+}
+
+# Whose lines have gone out, so nothing reads them again.
+forget_posted_switches() {
+  local dir
+  for dir in "$switches"/*; do
+    [ -d "$dir" ] || continue
+    grep -qsx -- "[a-z-]*:${dir##*/}" "$queue"/* || rm -r "$dir"
+  done
+}
+
+# A numbered record of the switch to toplevel, which its line describes
+# however late it's written: the units it restarts go in it.
+record_switch() {
+  local toplevel=$1 id
+  forget_posted_switches
+  id=$(($(current_switch) + 1))
+  mkdir -p "$switches/$id"
+  echo "$toplevel" >"$switches/$id/system"
+  : >"$switches/$id/restarted"
+  echo "$id" >"$state/switch"
+  echo "$id"
 }
 
 # Runs before switch-to-configuration does anything, as a pre-switch check.
@@ -85,22 +122,21 @@ switch() {
   case $action in
     switch | test)
       [ "$toplevel" != "$current" ] || return 0
-      : >"$state/restarted"
       if [ "$(cat "$state/trial" 2>/dev/null)" = "$toplevel" ]; then
         rm -f "$state/trial"
-        notify rolled-back
+        notify "rolled-back:$(record_switch "$toplevel")"
       elif systemctl -q is-active "$rollback_timer"; then
         echo "$current" >"$state/trial"
-        notify trial
+        notify "trial:$(record_switch "$toplevel")"
       else
         rm -f "$state/trial"
-        notify deployed
+        notify "deployed:$(record_switch "$toplevel")"
       fi
       ;;
     boot)
       if [ "$toplevel" = "$current" ] && [ -e "$state/trial" ]; then
         rm -f "$state/trial"
-        notify kept
+        notify "kept:$(record_switch "$toplevel")"
       fi
       ;;
   esac
@@ -151,15 +187,16 @@ revision_of() {
 
 restarted() {
   local units
-  [ -s "$state/restarted" ] || return 0
-  units=$(awk '!seen[$0]++' "$state/restarted" | paste -sd, | sed 's/,/, /g')
+  [ -s "$switches/$1/restarted" ] || return 0
+  units=$(awk '!seen[$0]++' "$switches/$1/restarted" | paste -sd, | sed 's/,/, /g')
   [ -z "$units" ] || echo " — restarted: $units"
 }
 
+# Until the switch is done: no switch holds the lock, or a later one does.
 wait_for_switch() {
   local tries
   for ((tries = 0; tries < 600; tries++)); do
-    switching || return 0
+    if ! switching || [ "$(current_switch)" != "$1" ]; then return 0; fi
     sleep 1
   done
 }
@@ -185,17 +222,17 @@ line() {
         echo "$unit failed — gave up restarting"
       fi
       ;;
-    deployed | trial | rolled-back)
-      wait_for_switch
-      local system
-      system=$(revision_of "$current_system")
+    deployed | trial | rolled-back | kept)
+      local id=$unit system
+      wait_for_switch "$id"
+      system=$(revision_of "$(cat "$switches/$id/system")")
       case $event in
-        deployed) echo "deployed $system$(restarted)" ;;
-        trial) echo "deployed $system (on trial)$(restarted)" ;;
-        rolled-back) echo "rolled back to $system$(restarted)" ;;
+        deployed) echo "deployed $system$(restarted "$id")" ;;
+        trial) echo "deployed $system (on trial)$(restarted "$id")" ;;
+        rolled-back) echo "rolled back to $system$(restarted "$id")" ;;
+        kept) echo "kept $system" ;;
       esac
       ;;
-    kept) echo "kept $(revision_of "$current_system")" ;;
     booted) echo "$OPS_HOST booted after $(boot_seconds)s (kernel $(uname -r))" ;;
     crash-booted) echo "$OPS_HOST booted after a crash or power loss (kernel $(uname -r))" ;;
     rebooting) echo "$OPS_HOST rebooting" ;;
@@ -209,7 +246,7 @@ line() {
 
 post() {
   local line
-  line=$(line "$1")
+  line=$(line "$1") || return
   case $1 in
     # The host is going down, and won't wait long.
     rebooting | shutting-down) OPS_NOTIFY_PATIENCE=15 ops-notify "$line" ;;
@@ -219,13 +256,22 @@ post() {
   esac
 }
 
+# A line ops-notify gives up on is dropped, so those behind it go out.
+drain() {
+  local entries
+  while entries=("$queue"/*) && [ -e "${entries[0]}" ]; do
+    post "$(cat "${entries[0]}")" || true
+    rm -f "${entries[0]}"
+  done
+}
+
 umask 022
 command=${1:-}
 shift || true
 case $command in
-  started | record | switch | boot | shutdown | down | post | line) "$command" "$@" ;;
+  started | failed | switch | boot | shutdown | down | drain | line) "$command" "$@" ;;
   *)
-    echo "usage: ops-event started UNIT | record INSTANCE | switch TOPLEVEL ACTION | boot | shutdown | down | post INSTANCE" >&2
+    echo "usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION | boot | shutdown | down | drain | line INSTANCE" >&2
     exit 2
     ;;
 esac
