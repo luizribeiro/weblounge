@@ -174,15 +174,20 @@ down() {
   persist
 }
 
+raw_revision_of() {
+  "$1/sw/bin/nixos-version" --configuration-revision 2>/dev/null || echo unknown
+}
+
+describe_revision() {
+  case $1 in
+    unknown) echo "an unknown revision" ;;
+    *-dirty) echo "dirty tree on ${1:0:7}" ;;
+    *) echo "${1:0:7}" ;;
+  esac
+}
+
 revision_of() {
-  local rev
-  if ! rev=$("$1/sw/bin/nixos-version" --configuration-revision 2>/dev/null); then
-    echo "an unknown revision"
-  elif [[ $rev == *-dirty ]]; then
-    echo "dirty tree on ${rev:0:7}"
-  else
-    echo "${rev:0:7}"
-  fi
+  describe_revision "$(raw_revision_of "$1")"
 }
 
 restarted() {
