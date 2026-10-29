@@ -101,6 +101,14 @@ members' site lands in #lounge without typing anything:
 
 In the VM it's at https://irc.weblounge.localhost:10443.
 
+`https://beta.weblounge.org` serves the web client that will replace
+gamja, [weblounge-client](https://github.com/luizribeiro/weblounge-client),
+built by its own flake, the `weblounge-client` input. It signs members in
+the same way, as concierge's second OAuth client, `weblounge-client`,
+reads its settings from the `/config.json` `services/beta-client.nix`
+generates, and connects to `wss://beta.weblounge.org/socket`. Members
+are still sent to gamja.
+
 ## Bots
 
 A bot is an Ergo account a member owns. Ergo can't tell it from anyone

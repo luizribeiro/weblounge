@@ -14,6 +14,7 @@ if TYPE_CHECKING:
         access_token,
         add_member,
         authorize,
+        beta_client,
         concierge_admin,
         concierge_sql,
         ergo_api,
@@ -111,6 +112,64 @@ with subtest("Ergo refuses WebSockets from pages on other origins"):
     ]
     status = https("irc.weblounge.org", "/socket", *upgrade, "-H", "Origin: https://evil.example")
     assert status == "403", status
+
+beta = "beta.weblounge.org"
+beta_connects = f"connect-src 'self' wss://{beta}/socket https://{members} https://{files_host}/upload;"
+
+
+def beta_headers(path: str) -> str:
+    return https(beta, path, "-fI").lower()
+
+
+with subtest("beta.weblounge.org serves the beta web client, set up to sign members in through concierge"):
+    page = https(beta, "/", "-f")
+    assert "<title>weblounge</title>" in page, page
+    config = json.loads(https(beta, "/config.json", "-f"))
+    assert config == {
+        "mode": "hosted",
+        "network": {"name": "weblounge", "endpoint": f"wss://{beta}/socket", "autojoin": ["#lounge"]},
+        "oauth": {"issuer": f"https://{members}", "client_id": "weblounge-client", "redirect_uri": f"https://{beta}/"},
+    }, config
+
+with subtest("the beta client's hashed assets keep a year, and the rest revalidates"):
+    [script] = re.findall(r'src="(/assets/[^"]+\.js)"', page)
+    assets = beta_headers(script)
+    assert "cache-control: public, max-age=31536000, immutable" in assets, assets
+    assert beta_connects in assets, assets
+    for path in ["/", "/config.json", "/engine_bg.wasm", "/fonts/inter-latin.woff2"]:
+        headers = beta_headers(path)
+        assert "cache-control: no-cache" in headers, (path, headers)
+        assert beta_connects in headers, (path, headers)
+    assert "content-type: application/wasm" in beta_headers("/engine_bg.wasm")
+    not_found_page(beta, "/no-such-page")
+
+with subtest("the beta client's CSP lets it run its wasm in a worker and reach Ergo, concierge and uploads"):
+    [policy] = re.findall(r"^content-security-policy: (.*)$", beta_headers("/"), re.M)
+    assert beta_connects in policy, policy
+    for directive in [
+        "script-src 'self' 'wasm-unsafe-eval'",
+        "worker-src 'self'",
+        "font-src 'self'",
+        "default-src 'none'",
+        "frame-ancestors 'none'",
+    ]:
+        assert directive in policy, (directive, policy)
+
+with subtest("concierge signs members in to the beta client, whose token logs in over beta's WebSocket"):
+    metadata = https(members, "/.well-known/oauth-authorization-server", "-fI", "-H", f"Origin: https://{beta}")
+    assert f"access-control-allow-origin: https://{beta}" in metadata.lower(), metadata
+    verifier, challenge = pkce()
+    code = authorize(graces_browser, challenge, client=beta_client)
+    status, answer = exchange(code, verifier, client=beta_client)
+    assert status == "200" and answer["token_type"] == "Bearer", (status, answer)
+    session = irc(token=answer["access_token"], websocket=beta)
+    assert " 903 " in session, session
+    assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
+
+with subtest("a code for gamja buys the beta client nothing"):
+    verifier, challenge = pkce()
+    status, answer = exchange(authorize(graces_browser, challenge), verifier, client=beta_client)
+    assert (status, answer) == ("400", {"error": "invalid_grant"}), (status, answer)
 
 with subtest("a garbage token is refused"):
     reply = client.fail(irc_command(token="q7Hx2mZp9vLcT4wRfBa-_wq7Hx2mZp9vLcT4wRfBa-_") + " 2>&1")

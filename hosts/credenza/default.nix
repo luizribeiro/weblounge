@@ -7,6 +7,7 @@
     ../../services/ergo.nix
     ../../services/concierge.nix
     ../../services/webchat.nix
+    ../../services/beta-client.nix
     ../../services/bender.nix
     ../../services/greeter.nix
     ../../services/ops-events.nix

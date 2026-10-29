@@ -248,34 +248,44 @@ class Browser:
 webchat = "https://irc.weblounge.org"
 
 
-def authorize(browser, challenge, state="a-random-state"):
-    """What gamja does on load: answers the code concierge sends back."""
+class WebClient(TypedDict):
+    id: str
+    origin: str
+
+
+gamja: WebClient = {"id": "gamja", "origin": webchat}
+beta_client: WebClient = {"id": "weblounge-client", "origin": "https://beta.weblounge.org"}
+
+
+def authorize(browser, challenge, state="a-random-state", client: WebClient = gamja):
+    """What a web client does on load: answers the code concierge sends back."""
     query = urlencode(
         {
             "response_type": "code",
-            "client_id": "gamja",
-            "redirect_uri": f"{webchat}/",
+            "client_id": client["id"],
+            "redirect_uri": f"{client['origin']}/",
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
         }
     )
     redirect = browser.get(f"/oauth/authorize?{query}", *outcome).split(" ", 1)[1]
-    assert redirect.startswith(f"{webchat}/?"), redirect
+    assert redirect.startswith(f"{client['origin']}/?"), redirect
     params = parse_qs(urlsplit(redirect).query)
     assert params["state"] == [state], redirect
     return params["code"][0]
 
 
-def exchange(code, verifier, origin=webchat):
+def exchange(code, verifier, client: WebClient = gamja):
     fields = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": f"{webchat}/",
-        "client_id": "gamja",
+        "redirect_uri": f"{client['origin']}/",
+        "client_id": client["id"],
         "code_verifier": verifier,
     }
     flags = [arg for field in fields.items() for arg in ["--data-urlencode", "=".join(field)]]
+    origin = client["origin"]
     response = https(members, "/oauth/token", "-H", f"Origin: {origin}", "-w", "\n%{http_code}", *flags)
     body, status = response.rsplit("\n", 1)
     return status, json.loads(body)
