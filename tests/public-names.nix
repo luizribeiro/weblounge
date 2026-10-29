@@ -19,6 +19,7 @@ in
     expected = {
       virtualHosts = {
         "weblounge.org" = [ "www.weblounge.org" "credenza.weblounge.org" ];
+        "beta.weblounge.org" = [ ];
         "files.weblounge.org" = [ ];
         "irc.weblounge.org" = [ ];
         "members.weblounge.org" = [ ];
@@ -34,6 +35,7 @@ in
     expected = {
       virtualHosts = {
         "weblounge.localhost" = [ "www.weblounge.localhost" "credenza.weblounge.localhost" ];
+        "beta.weblounge.localhost" = [ ];
         "files.weblounge.localhost" = [ ];
         "irc.weblounge.localhost" = [ ];
         "members.weblounge.localhost" = [ ];

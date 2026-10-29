@@ -20,6 +20,7 @@ in
       ttl = 3600;
       records = [
         [ "A" "credenza" "107.173.231.206" ]
+        [ "CNAME" "beta" "credenza.weblounge.org." ]
         [ "CNAME" "files" "credenza.weblounge.org." ]
         [ "CNAME" "irc" "credenza.weblounge.org." ]
         [ "CNAME" "join" "credenza.weblounge.org." ]
