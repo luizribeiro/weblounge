@@ -3,8 +3,7 @@
 let
   inherit (config.weblounge) ergo;
   hostName = ergo.serverName;
-  origin = config.weblounge.origin hostName;
-  socket = "${lib.replaceStrings [ "https://" ] [ "wss://" ] origin}/socket";
+  socket = ergo.websocketUrl hostName;
   members = config.weblounge.concierge.publicUrl;
   upload = "${config.weblounge.origin config.weblounge.files.hostName}/upload";
 
@@ -36,19 +35,7 @@ in
         manifest-src = "'self'";
       };
       locations."= /config.json".alias = gamjaConfig;
-      locations."= /socket" = {
-        proxyPass = "http://${ergo.websocketListener}";
-        proxyWebsockets = true;
-        # Ergo takes the client's address from X-Forwarded-For when nginx, on
-        # loopback, sends it, so nginx replaces whatever the client sent.
-        recommendedProxySettings = false;
-        extraConfig = ''
-          proxy_set_header X-Forwarded-For $remote_addr;
-          proxy_set_header X-Forwarded-Proto https;
-          proxy_read_timeout 1d;
-          proxy_send_timeout 1d;
-        '';
-      };
+      locations."= /socket" = ergo.websocketProxy;
     }
   ];
 }

@@ -34,6 +34,32 @@ in
     description = "Where Ergo takes WebSocket connections from nginx, as host:port, without TLS.";
   };
 
+  options.weblounge.ergo.websocketUrl = lib.mkOption {
+    type = lib.types.functionTo lib.types.str;
+    readOnly = true;
+    default = host: "${lib.replaceStrings [ "https://" ] [ "wss://" ] (config.weblounge.origin host)}/socket";
+    description = "Where a web client served at this host name reaches Ergo's WebSocket, through websocketProxy.";
+  };
+
+  options.weblounge.ergo.websocketProxy = lib.mkOption {
+    type = lib.types.attrs;
+    readOnly = true;
+    default = {
+      proxyPass = "http://${cfg.websocketListener}";
+      proxyWebsockets = true;
+      # Ergo takes the client's address from X-Forwarded-For when nginx, on
+      # loopback, sends it, so nginx replaces whatever the client sent.
+      recommendedProxySettings = false;
+      extraConfig = ''
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+      '';
+    };
+    description = "The nginx location at /socket that hands a web client's WebSocket to Ergo.";
+  };
+
   options.weblounge.ergo.localAddress = lib.mkOption {
     type = lib.types.str;
     readOnly = true;
