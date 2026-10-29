@@ -1,8 +1,9 @@
 # shellcheck shell=bash
 # Usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION
+#                  | deploying TOPLEVEL REVISION
 #                  | boot | shutdown | down | drain | line INSTANCE
 # The host's major events, as lines in #ops. The hooks (started, failed,
-# switch, boot and down) run as root: they keep the little state there is
+# switch, boot and down) and scripts/push (deploying) run as root: they keep the little state there is
 # and queue each event as <event>[:<unit or switch>]. drain, ops-post's
 # one sandboxed run at a time, writes the queued events' lines and hands
 # them to ops-notify oldest first, so #ops hears them in the order they
@@ -142,6 +143,28 @@ switch() {
   esac
 }
 
+# sudo is all a push needs to call this, so its argument may only ever
+# read as a revision.
+valid_revision() {
+  [[ $1 =~ ^([0-9a-f]{7,40}(-dirty)?|unknown)$ ]]
+}
+
+refuse_revision() {
+  echo "ops-event: not a revision: $1" >&2
+  exit 2
+}
+
+# A push about to copy toplevel over, which a switch will follow, and so
+# like one says nothing of the system running already.
+deploying() {
+  local toplevel=$1 revision=$2 previous
+  valid_revision "$revision" || refuse_revision "$revision"
+  [ "$toplevel" != "$(readlink -f "$current_system")" ] || return 0
+  previous=$(raw_revision_of "$current_system")
+  valid_revision "$previous" || previous=unknown
+  notify "deploying:$revision $previous"
+}
+
 # A crash seconds after the marker changes would otherwise beat the
 # filesystem's next commit to disk.
 persist() {
@@ -238,6 +261,11 @@ line() {
         kept) echo "kept $system" ;;
       esac
       ;;
+    deploying)
+      local revisions
+      read -ra revisions <<<"$unit"
+      echo "deploying $(describe_revision "${revisions[0]}") (from $(describe_revision "${revisions[1]}"))"
+      ;;
     booted) echo "$OPS_HOST booted after $(boot_seconds)s (kernel $(uname -r))" ;;
     crash-booted) echo "$OPS_HOST booted after a crash or power loss (kernel $(uname -r))" ;;
     rebooting) echo "$OPS_HOST rebooting" ;;
@@ -274,9 +302,9 @@ umask 022
 command=${1:-}
 shift || true
 case $command in
-  started | failed | switch | boot | shutdown | down | drain | line) "$command" "$@" ;;
+  started | failed | switch | deploying | boot | shutdown | down | drain | line) "$command" "$@" ;;
   *)
-    echo "usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION | boot | shutdown | down | drain | line INSTANCE" >&2
+    echo "usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION | deploying TOPLEVEL REVISION | boot | shutdown | down | drain | line INSTANCE" >&2
     exit 2
     ;;
 esac

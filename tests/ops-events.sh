@@ -215,6 +215,33 @@ ops-event drain 2>/dev/null
 expect "and the ones behind a line that fails still go out" "nginx started" "$(sent)"
 
 setup
+system new 0123456789abcdef0123456789abcdef01234567
+switch_to new
+ops-event deploying "$OPS_ROOT/systems/next" fedcba9876543210fedcba9876543210fedcba98-dirty
+ops-event deploying "$OPS_ROOT/systems/later" fedcba9
+expect "a push queues what it deploys and the revision it deploys over" \
+  "deploying:fedcba9876543210fedcba9876543210fedcba98-dirty 0123456789abcdef0123456789abcdef01234567
+deploying:fedcba9 0123456789abcdef0123456789abcdef01234567" "$(queued)"
+expect "a deploy's start names both revisions, short" \
+  "deploying dirty tree on fedcba9 (from 0123456)" \
+  "$(ops-event line "deploying:fedcba9876543210fedcba9876543210fedcba98-dirty 0123456789abcdef0123456789abcdef01234567")"
+clear_queue
+ops-event deploying "$OPS_ROOT/systems/new" 0123456789abcdef0123456789abcdef01234567
+expect "a push of the running system says nothing" "" "$(queued)"
+system odd "release 1.0"
+switch_to odd
+ops-event deploying "$OPS_ROOT/systems/next" unknown
+expect "a revision of neither side's is unknown" \
+  "deploying an unknown revision (from an unknown revision)" "$(ops-event line "$(queued)")"
+clear_queue
+for revision in "" abc 0123456789abcdef0123456789abcdef012345678 FEDCBA9 "fedcba9 hi" "fedcba9
+hi" fedcba9-clean "unknown!"; do
+  expect "a push can't queue \"$revision\" as a revision" "2" \
+    "$(ops-event deploying "$OPS_ROOT/systems/next" "$revision" 2>/dev/null || echo $?)"
+done
+expect "and queues nothing for it" "" "$(queued)"
+
+setup
 stub system-state starting
 ops-event boot
 expect "a first boot is a clean one" "booted" "$(queued)"

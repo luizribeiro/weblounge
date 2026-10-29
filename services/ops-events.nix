@@ -38,7 +38,8 @@ in
 {
   imports = [ ./bender.nix ./sandbox.nix ];
 
-  environment.systemPackages = [ opsEvents.ops-notify ];
+  # ops-event for scripts/push, which tells #ops of a deploy it starts.
+  environment.systemPackages = [ opsEvents ];
 
   systemd.tmpfiles.rules = [
     "d /run/ops-events 0755 root root -"
