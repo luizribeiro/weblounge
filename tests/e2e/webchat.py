@@ -124,7 +124,9 @@ def beta_headers(path: str) -> str:
 with subtest("beta.weblounge.org serves the beta web client, set up to sign members in through concierge"):
     page = https(beta, "/", "-f")
     assert "<title>weblounge</title>" in page, page
-    config = json.loads(https(beta, "/config.json", "-f"))
+    body, content_type = https(beta, "/config.json", "-f", "-w", "\n%{content_type}").rsplit("\n", 1)
+    assert content_type == "application/json", content_type
+    config = json.loads(body)
     assert config == {
         "mode": "hosted",
         "network": {"name": "weblounge", "endpoint": f"wss://{beta}/socket", "autojoin": ["#lounge"]},
@@ -156,13 +158,18 @@ with subtest("the beta client's CSP lets it run its wasm in a worker and reach E
         assert directive in policy, (directive, policy)
 
 with subtest("concierge signs members in to the beta client, whose token logs in over beta's WebSocket"):
-    metadata = https(members, "/.well-known/oauth-authorization-server", "-fI", "-H", f"Origin: https://{beta}")
-    assert f"access-control-allow-origin: https://{beta}" in metadata.lower(), metadata
+    metadata = https(members, "/.well-known/oauth-authorization-server", "-fi", "-H", f"Origin: https://{beta}")
+    head, body = metadata.split("\r\n\r\n", 1)
+    assert f"access-control-allow-origin: https://{beta}" in head.lower(), head
+    endpoints = json.loads(body)
+    assert endpoints["issuer"] == config["oauth"]["issuer"], endpoints
+    for endpoint in ["authorization_endpoint", "token_endpoint"]:
+        assert endpoints[endpoint].startswith(f"{endpoints['issuer']}/"), endpoints
     verifier, challenge = pkce()
     code = authorize(graces_browser, challenge, client=beta_client)
     status, answer = exchange(code, verifier, client=beta_client)
     assert status == "200" and answer["token_type"] == "Bearer", (status, answer)
-    session = irc(token=answer["access_token"], websocket=beta)
+    session = irc(token=answer["access_token"], websocket=beta, nick="*")
     assert " 903 " in session, session
     assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
 

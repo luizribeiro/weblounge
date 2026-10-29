@@ -145,6 +145,7 @@ def main():
     parser.add_argument("--account")
     parser.add_argument("--password")
     parser.add_argument("--token", help="an OAuth 2.0 bearer token")
+    parser.add_argument("--nick", help="the nick to ask for; the account's, or visitor, by default")
     parser.add_argument("--cert", help="a PEM file with the key and certificate to present")
     parser.add_argument("--websocket", metavar="NAME", help="connect to wss://NAME/socket at the host, as a web client")
     parser.add_argument(
@@ -174,7 +175,7 @@ def main():
         bearer = f"n,,\x01auth=Bearer {args.token}\x01\x01"
         authenticate(conn, "OAUTHBEARER", bearer)
     conn.send("CAP END")
-    conn.send(f"NICK {args.account or 'visitor'}")
+    conn.send(f"NICK {args.nick or args.account or 'visitor'}")
     conn.send("USER guest 0 * :weblounge test client")
     if conn.read_until("001") is None:
         return
