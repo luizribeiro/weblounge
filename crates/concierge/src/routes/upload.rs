@@ -19,7 +19,7 @@ use crate::{
     authorization::Credentials,
     db::{self, NewUpload},
     name::{BotName, MemberName},
-    origin::WebchatOrigin,
+    oauth::WebClients,
     rate_limit::{self, ClientAddress},
     session::Token,
     upload_rules,
@@ -50,19 +50,15 @@ impl Uploader {
 const ALLOWED_HEADERS: &str = "Authorization, Content-Type, Content-Disposition";
 const EXPOSED_HEADERS: &str = "Location, Upload-Limit";
 
-/// Lets the web client's pages, and no other site's, post uploads with
-/// their credentials and read the answer: browsers ask first, as its
+/// Lets the web clients' pages, and no other site's, post uploads with
+/// their credentials and read the answer: browsers ask first, as their
 /// requests carry an `Authorization`.
-pub async fn allow_webchat(
-    State(webchat): State<WebchatOrigin>,
+pub async fn allow_web_clients(
+    State(clients): State<WebClients>,
     request: Request,
     next: Next,
 ) -> Response {
-    let origin = request
-        .headers()
-        .get(header::ORIGIN)
-        .filter(|origin| origin.as_bytes() == webchat.as_str().as_bytes())
-        .cloned();
+    let origin = clients.origin_of(request.headers());
     let preflight = request.method() == Method::OPTIONS;
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
@@ -92,7 +88,7 @@ pub async fn allow_webchat(
 }
 
 /// What a browser asks before posting an upload from a page; the answer
-/// is [`allow_webchat`]'s to give.
+/// is [`allow_web_clients`]'s to give.
 pub async fn preflight() -> StatusCode {
     StatusCode::NO_CONTENT
 }

@@ -7,7 +7,7 @@ use super::{Layout, Tab, render};
 use crate::{
     app::AppState,
     auth::CurrentMember,
-    oauth::Webchat,
+    oauth::WebClient,
     platform::{Platform, VisitorPlatform},
 };
 
@@ -16,7 +16,7 @@ use crate::{
 struct Home<'a> {
     layout: Layout<'a>,
     nick: &'a str,
-    webchat: &'a Webchat,
+    webchat: &'a WebClient,
     platform: Option<Platform>,
 }
 
@@ -29,7 +29,7 @@ pub async fn show(
     render(&Home {
         layout: Layout::member(&app, &me.member).on(Tab::Home),
         nick,
-        webchat: &app.webchat,
+        webchat: &app.web_clients.webchat,
         platform,
     })
 }

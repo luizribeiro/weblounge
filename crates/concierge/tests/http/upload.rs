@@ -10,7 +10,7 @@ use concierge::{
 };
 use regex::Regex;
 
-use crate::{PASSWORD, PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
+use crate::{BETA_URL, PASSWORD, PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
 
 /// What starts like a PNG, which the fake scrubber stores as it is.
 pub const PNG: &[u8] = b"\x89PNG\r\n\x1a\nthe rest of a screenshot";
@@ -377,18 +377,20 @@ fn header_of(response: &Response, name: header::HeaderName) -> Option<&str> {
 }
 
 #[tokio::test]
-async fn the_web_client_may_post_uploads_with_its_token_and_read_the_answer() {
+async fn the_web_clients_may_post_uploads_with_their_tokens_and_read_the_answer() {
     let site = Site::start().await;
     let bearer = site.member_with_bearer("alice").await;
 
-    let asked = preflight(&site, WEBCHAT_URL).await;
+    for origin in [WEBCHAT_URL, BETA_URL] {
+        assert_web_client_may_upload(&site, &bearer, origin).await;
+    }
+}
 
+async fn assert_web_client_may_upload(site: &Site, bearer: &str, origin: &str) {
+    let asked = preflight(site, origin).await;
     assert_eq!(asked.status(), 204);
     let granted = |name| header_of(&asked, name);
-    assert_eq!(
-        granted(header::ACCESS_CONTROL_ALLOW_ORIGIN),
-        Some(WEBCHAT_URL)
-    );
+    assert_eq!(granted(header::ACCESS_CONTROL_ALLOW_ORIGIN), Some(origin));
     assert_eq!(
         granted(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
         Some("true")
@@ -399,18 +401,11 @@ async fn the_web_client_may_post_uploads_with_its_token_and_read_the_answer() {
         Some("Authorization, Content-Type, Content-Disposition")
     );
     let posted = site
-        .upload_with(
-            PNG,
-            Some(&bearer),
-            &[(header::ORIGIN.as_str(), WEBCHAT_URL)],
-        )
+        .upload_with(PNG, Some(bearer), &[(header::ORIGIN.as_str(), origin)])
         .await;
     assert_eq!(posted.status(), 201);
     let granted = |name| header_of(&posted, name);
-    assert_eq!(
-        granted(header::ACCESS_CONTROL_ALLOW_ORIGIN),
-        Some(WEBCHAT_URL)
-    );
+    assert_eq!(granted(header::ACCESS_CONTROL_ALLOW_ORIGIN), Some(origin));
     assert_eq!(
         granted(header::ACCESS_CONTROL_ALLOW_CREDENTIALS),
         Some("true")

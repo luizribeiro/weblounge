@@ -18,8 +18,7 @@ use crate::{
     app::AppState,
     auth::{self, Visitor},
     db::{self, NewAccessToken, NewAuthorizationCode},
-    oauth::{self, AuthorizationRequest, Refusal, TokenRequest, WEBCHAT_CLIENT},
-    origin::WebchatOrigin,
+    oauth::{self, AuthorizationRequest, Refusal, TokenRequest, WebClients},
     rate_limit::ClientAddress,
     session::Token,
 };
@@ -65,7 +64,7 @@ pub async fn authorize(
     uri: Uri,
     Query(request): Query<AuthorizationRequest>,
 ) -> Response {
-    let authorization = match request.check(&app.webchat) {
+    let authorization = match request.check(&app.web_clients) {
         Ok(authorization) => authorization,
         Err(refusal) => return refuse(&app, &visitor, &refusal),
     };
@@ -84,7 +83,7 @@ pub async fn authorize(
     let issued = NewAuthorizationCode {
         code_hash: &app.sessions.hash(&code),
         session_hash: &signed_in.token_hash,
-        client_id: WEBCHAT_CLIENT,
+        client_id: authorization.client_id,
         redirect_uri: &authorization.redirect_uri,
         code_challenge: &authorization.code_challenge,
         expires_at: now + oauth::CODE_LIFETIME,
@@ -110,9 +109,9 @@ pub async fn token(
     if request.grant_type != "authorization_code" {
         return token_error(StatusCode::BAD_REQUEST, "unsupported_grant_type");
     }
-    if request.client_id != WEBCHAT_CLIENT {
+    let Some(client) = app.web_clients.get(&request.client_id) else {
         return token_error(StatusCode::UNAUTHORIZED, "invalid_client");
-    }
+    };
     let Some(code) = Token::parse(request.code.expose()) else {
         return token_error(StatusCode::BAD_REQUEST, "invalid_grant");
     };
@@ -137,7 +136,7 @@ pub async fn token(
     let issued = NewAccessToken {
         token_hash: &app.sessions.hash(&token),
         session_hash: &code.session_hash,
-        client_id: WEBCHAT_CLIENT,
+        client_id: client.id,
         created_at: now,
         expires_at: session.expires_at,
     };
@@ -214,22 +213,18 @@ fn refuse(app: &crate::app::App, visitor: &Visitor, refusal: &Refusal) -> Respon
     }
 }
 
-/// Lets the web client's pages read the answers of the endpoints it
-/// calls from the browser, and no other site's.
-pub async fn allow_webchat(
-    State(origin): State<WebchatOrigin>,
+/// Lets the web clients' pages read the answers of the endpoints they
+/// call from the browser, and no other site's.
+pub async fn allow_web_clients(
+    State(clients): State<WebClients>,
     request: Request,
     next: Next,
 ) -> Response {
-    let origin = origin.as_str();
-    let from_webchat = request
-        .headers()
-        .get(header::ORIGIN)
-        .is_some_and(|value| value.as_bytes() == origin.as_bytes());
+    let origin = clients.origin_of(request.headers());
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.append(header::VARY, HeaderValue::from_static("origin"));
-    if from_webchat && let Ok(origin) = HeaderValue::from_str(origin) {
+    if let Some(origin) = origin {
         headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
     }
     response

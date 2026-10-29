@@ -10,7 +10,7 @@ use concierge::{
     config::{Config, Databases, ExpiryConfig, GreeterAccountConfig, RemindConfig},
     db::{self, Db},
     house,
-    oauth::Webchat,
+    oauth::WebClients,
     rate_limit::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
         OAUTH_REQUESTS_PER_ADDRESS, RECOVERIES_PER_ADDRESS, UploadLimiter,
@@ -104,9 +104,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         reset_links: MailLimiter::default(),
         public_url: config.public_url.clone(),
         invite_links: config.invite_links.clone(),
-        webchat: Webchat {
-            origin: config.webchat_url.clone(),
-        },
+        web_clients: WebClients::new(config.webchat_url.clone(), config.beta_client_url.clone()),
         introspection_secret: config.read_introspection_secret()?,
         irc_server: config.irc_server.clone(),
         presence_defaults: config.presence_defaults,

@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 
-use crate::{INTROSPECTION_SECRET, PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
+use crate::{BETA_URL, INTROSPECTION_SECRET, PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
 
 impl Site {
     /// Asks for a code as gamja does, with the session in `cookie`.
@@ -109,8 +109,14 @@ fn authorize_path(changes: &[(&str, Option<&str>)]) -> String {
 
 /// The code in a redirect back to gamja, checking the state came along.
 fn code_in(redirect: &str) -> String {
+    code_sent_to(REDIRECT_URI, redirect)
+}
+
+/// The code in a redirect back to `redirect_uri`, checking the state came
+/// along.
+fn code_sent_to(redirect_uri: &str, redirect: &str) -> String {
     let query = redirect
-        .strip_prefix(&format!("{REDIRECT_URI}?"))
+        .strip_prefix(&format!("{redirect_uri}?"))
         .unwrap_or_else(|| panic!("{redirect}"));
     let params: Vec<(String, String)> = form_urlencoded::parse(query.as_bytes())
         .into_owned()
@@ -473,6 +479,78 @@ async fn only_the_web_client_may_post_to_the_token_endpoint() {
     let response = site.post_with("/oauth/token", &[], None, &[]).await;
     assert_eq!(response.status(), 403);
     assert_eq!(site.exchange(&code, &[]).await.status(), 200);
+}
+
+const BETA_REDIRECT_URI: &str = "https://beta.weblounge.org/";
+const BETA_ID: &str = "weblounge-client";
+
+impl Site {
+    /// Asks for a code as the beta client does, with the session in
+    /// `cookie`.
+    async fn beta_authorization_code(&self, cookie: &str) -> String {
+        let path = authorize_path(&[
+            ("client_id", Some(BETA_ID)),
+            ("redirect_uri", Some(BETA_REDIRECT_URI)),
+        ]);
+        let response = self.get(&path, Some(cookie)).await;
+        code_sent_to(BETA_REDIRECT_URI, location(&response))
+    }
+
+    /// Posts to the token endpoint from the beta client's page, as it does.
+    async fn beta_exchange(&self, code: &str) -> axum::response::Response {
+        let form = [("client_id", BETA_ID), ("redirect_uri", BETA_REDIRECT_URI)];
+        self.exchange_from(code, &form, BETA_URL).await
+    }
+}
+
+#[tokio::test]
+async fn the_beta_client_signs_members_in_from_its_own_origin() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let metadata = site
+        .get_from("/.well-known/oauth-authorization-server", BETA_URL)
+        .await;
+    assert_eq!(
+        metadata.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        BETA_URL
+    );
+    let code = site.beta_authorization_code(&cookie).await;
+
+    let response = site.beta_exchange(&code).await;
+
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        BETA_URL
+    );
+    let token = json(response).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let answer = site.introspect(&token).await;
+    assert_eq!(answer["username"], "alice");
+    assert_eq!(answer["client_id"], BETA_ID);
+}
+
+#[tokio::test]
+async fn a_code_is_redeemed_only_by_the_client_it_was_issued_to() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+
+    let gamjas = site.authorization_code(&cookie).await;
+    let response = site.beta_exchange(&gamjas).await;
+    assert_eq!(response.status(), 400);
+    assert_eq!(json(response).await["error"], "invalid_grant");
+
+    let betas = site.beta_authorization_code(&cookie).await;
+    let response = site.exchange(&betas, &[]).await;
+    assert_eq!(response.status(), 400);
+    assert_eq!(json(response).await["error"], "invalid_grant");
+
+    let stored: i64 = site.query_scalar("SELECT COUNT(*) FROM oauth_tokens").await;
+    assert_eq!(stored, 0);
 }
 
 #[tokio::test]

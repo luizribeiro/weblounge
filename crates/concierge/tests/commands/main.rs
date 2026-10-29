@@ -61,6 +61,7 @@ impl Fixture {
             public_url: Origin::parse("https://members.weblounge.localhost:10443").unwrap(),
             invite_links: "https://join.weblounge.localhost:10443/#".into(),
             webchat_url: Origin::parse("https://irc.weblounge.localhost:10443").unwrap(),
+            beta_client_url: Some(Origin::parse("https://beta.weblounge.localhost:10443").unwrap()),
             files_url: Origin::parse("https://files.weblounge.localhost:10443").unwrap(),
             uploads: Store {
                 directory: scrubber.uploads.clone(),

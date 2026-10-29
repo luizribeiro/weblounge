@@ -19,7 +19,7 @@ use crate::{
     config::{IrcServer, Presence},
     csrf,
     db::Db,
-    oauth::Webchat,
+    oauth::WebClients,
     origin::{FilesOrigin, SiteOrigin},
     rate_limit::{AddressLimiter, Limiter, MailLimiter, UploadLimiter},
     reset_mail, routes, session,
@@ -51,8 +51,8 @@ pub struct App {
     pub public_url: SiteOrigin,
     /// What invite links start with; the code follows.
     pub invite_links: String,
-    /// The web client, which signs members in through our OAuth server.
-    pub webchat: Webchat,
+    /// The web clients, which sign members in through our OAuth server.
+    pub web_clients: WebClients,
     /// What Ergo authenticates with to introspect the web client's tokens.
     pub introspection_secret: SecretString,
     /// Where members point their IRC clients.
@@ -87,8 +87,8 @@ impl App {
 
 pub fn router(app: App) -> Router {
     let public_url = app.public_url.clone();
-    let webchat_origin = app.webchat.origin.clone();
-    let upload_origin = webchat_origin.clone();
+    let web_clients = app.web_clients.clone();
+    let upload_clients = web_clients.clone();
     let state = Arc::new(app);
     // Unknown paths are members' too, so signed-out visitors can't tell
     // which pages exist.
@@ -228,9 +228,9 @@ pub fn router(app: App) -> Router {
             state.clone(),
             routes::error_pages,
         ));
-    // The web client calls these from its own origin, so they sit outside
-    // the guard for our pages; the token endpoint takes posts from that
-    // origin alone, and PKCE and single-use codes protect it.
+    // The web clients call these from their own origins, so they sit
+    // outside the guard for our pages; the token endpoint takes posts from
+    // those origins alone, and PKCE and single-use codes protect it.
     let webchat_api = Router::new()
         .route(routes::oauth::METADATA_PATH, get(routes::oauth::metadata))
         .route(
@@ -238,13 +238,13 @@ pub fn router(app: App) -> Router {
             post(routes::oauth::token)
                 .layer(map_response(routes::no_store))
                 .layer(middleware::from_fn_with_state(
-                    webchat_origin.clone(),
-                    csrf::guard_webchat,
+                    web_clients.clone(),
+                    csrf::guard_web_clients,
                 )),
         )
         .layer(middleware::from_fn_with_state(
-            webchat_origin,
-            routes::oauth::allow_webchat,
+            web_clients,
+            routes::oauth::allow_web_clients,
         ));
     let router = Router::new()
         .merge(pages)
@@ -264,8 +264,8 @@ pub fn router(app: App) -> Router {
             post(routes::upload::upload)
                 .options(routes::upload::preflight)
                 .layer(middleware::from_fn_with_state(
-                    upload_origin,
-                    routes::upload::allow_webchat,
+                    upload_clients,
+                    routes::upload::allow_web_clients,
                 )),
         )
         .with_state(state);

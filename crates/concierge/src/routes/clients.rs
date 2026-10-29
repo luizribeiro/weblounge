@@ -15,7 +15,7 @@ use crate::{
     auth::CurrentMember,
     clients::{self, Client, Snippet},
     config::IrcServer,
-    oauth::Webchat,
+    oauth::WebClient,
     platform::{Platform, VisitorPlatform},
 };
 
@@ -34,7 +34,7 @@ struct Guide<'a> {
     client: &'a Client,
     snippet: Option<Snippet>,
     ircs_link: Option<String>,
-    webchat: &'a Webchat,
+    webchat: &'a WebClient,
 }
 
 #[derive(Template)]
@@ -43,7 +43,7 @@ struct Index<'a> {
     layout: Layout<'a>,
     platform: Option<Platform>,
     picks: Vec<&'a Client>,
-    webchat: &'a Webchat,
+    webchat: &'a WebClient,
 }
 
 #[derive(Template)]
@@ -71,7 +71,7 @@ pub async fn index(
         layout: Layout::member(&app, &me.member).on(Tab::Help),
         platform,
         picks: clients::recommended(platform),
-        webchat: &app.webchat,
+        webchat: &app.web_clients.webchat,
     })
 }
 
@@ -91,7 +91,7 @@ pub async fn show(
         client,
         snippet: client.snippet(&app.irc_server, nick),
         ircs_link: client.ircs_link(&app.irc_server),
-        webchat: &app.webchat,
+        webchat: &app.web_clients.webchat,
     })
 }
 

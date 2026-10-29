@@ -43,7 +43,7 @@ use concierge::{
     email::Email,
     invite_rules,
     name::MemberName,
-    oauth::Webchat,
+    oauth::WebClients,
     origin::Origin,
     rate_limit::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
@@ -63,6 +63,7 @@ use tower::ServiceExt;
 
 const PUBLIC_URL: &str = "https://members.weblounge.org";
 const WEBCHAT_URL: &str = "https://irc.weblounge.org";
+const BETA_URL: &str = "https://beta.weblounge.org";
 const JOIN_URL: &str = "https://join.weblounge.org";
 const FILES_URL: &str = "https://files.weblounge.org";
 const SESSION_KEY: &[u8] = b"a session key for tests, at least 32 bytes";
@@ -133,9 +134,10 @@ impl Site {
             reset_links: MailLimiter::default(),
             public_url: Origin::parse(PUBLIC_URL).unwrap(),
             invite_links: format!("{JOIN_URL}/#"),
-            webchat: Webchat {
-                origin: Origin::parse(WEBCHAT_URL).unwrap(),
-            },
+            web_clients: WebClients::new(
+                Origin::parse(WEBCHAT_URL).unwrap(),
+                Some(Origin::parse(BETA_URL).unwrap()),
+            ),
             introspection_secret: INTROSPECTION_SECRET.into(),
             irc_server: irc_server(),
             presence_defaults: Presence {

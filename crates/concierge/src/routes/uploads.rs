@@ -14,7 +14,7 @@ use crate::{
     app::{App, AppState},
     auth::CurrentMember,
     db::{self, Member, Upload},
-    oauth::Webchat,
+    oauth::WebClient,
     tree, upload_rules,
 };
 
@@ -27,7 +27,7 @@ struct UploadsPage<'a> {
     uploads: Vec<Listed>,
     used: i64,
     rules: upload_rules::InWords,
-    webchat: &'a Webchat,
+    webchat: &'a WebClient,
 }
 
 /// An upload as the tab lists it.
@@ -84,7 +84,7 @@ pub async fn show(State(app): State<AppState>, CurrentMember(me): CurrentMember)
             .collect(),
         used,
         rules: upload_rules::InWords::default(),
-        webchat: &app.webchat,
+        webchat: &app.web_clients.webchat,
     })
 }
 

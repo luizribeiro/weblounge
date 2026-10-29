@@ -29,7 +29,7 @@ use crate::{
     invite_code, invite_rules,
     name::MemberName,
     nick::{self, Nick},
-    oauth::Webchat,
+    oauth::WebClient,
     password_rules::{self, FieldErrors},
     platform::VisitorPlatform,
     rate_limit::{self, ClientAddress, Recipient},
@@ -69,7 +69,7 @@ struct Welcome<'a> {
     /// Where the verification link went, if one did.
     mailed_to: Option<&'a str>,
     recommended: Vec<&'a Client>,
-    webchat: &'a Webchat,
+    webchat: &'a WebClient,
 }
 
 #[derive(Deserialize, Default)]
@@ -413,7 +413,7 @@ fn welcome(
         nick,
         mailed_to,
         recommended: clients::recommended(platform),
-        webchat: &app.webchat,
+        webchat: &app.web_clients.webchat,
     };
     let mut response = render(&page);
     if let Some(cookie) = cookie {

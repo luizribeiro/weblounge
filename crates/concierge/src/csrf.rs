@@ -8,19 +8,19 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::origin::{SiteOrigin, WebchatOrigin};
+use crate::{oauth::WebClients, origin::SiteOrigin};
 
-/// Whether a request with these headers may go ahead on the site at
-/// `public_url`. Browsers send `Origin` on every POST; `Referer` stands in
-/// for the few that leave it out.
-pub fn allows(method: &Method, headers: &HeaderMap, public_url: &str) -> bool {
+/// Whether a request with these headers may go ahead on a site whose
+/// pages are at the origins `ours` takes. Browsers send `Origin` on every
+/// POST; `Referer` stands in for the few that leave it out.
+pub fn allows(method: &Method, headers: &HeaderMap, ours: impl Fn(&str) -> bool) -> bool {
     if matches!(*method, Method::GET | Method::HEAD) {
         return true;
     }
     let header = |name| headers.get(name).and_then(|value| value.to_str().ok());
     match (header(header::ORIGIN), header(header::REFERER)) {
-        (Some(origin), _) => origin == public_url,
-        (None, Some(referer)) => origin_of(referer).as_deref() == Some(public_url),
+        (Some(origin), _) => ours(origin),
+        (None, Some(referer)) => origin_of(referer).is_some_and(|origin| ours(&origin)),
         (None, None) => false,
     }
 }
@@ -31,25 +31,21 @@ fn origin_of(url: &str) -> Option<String> {
 }
 
 /// Guards the members' site's own pages.
-pub async fn guard_site(
-    State(origin): State<SiteOrigin>,
+pub async fn guard_site(State(site): State<SiteOrigin>, request: Request, next: Next) -> Response {
+    guard(|origin| origin == site.as_str(), request, next).await
+}
+
+/// Guards the endpoints the web clients post to.
+pub async fn guard_web_clients(
+    State(clients): State<WebClients>,
     request: Request,
     next: Next,
 ) -> Response {
-    guard(origin.as_str(), request, next).await
+    guard(|origin| clients.at(origin), request, next).await
 }
 
-/// Guards the endpoints the web client posts to.
-pub async fn guard_webchat(
-    State(origin): State<WebchatOrigin>,
-    request: Request,
-    next: Next,
-) -> Response {
-    guard(origin.as_str(), request, next).await
-}
-
-async fn guard(origin: &str, request: Request, next: Next) -> Response {
-    if allows(request.method(), request.headers(), origin) {
+async fn guard(ours: impl Fn(&str) -> bool, request: Request, next: Next) -> Response {
+    if allows(request.method(), request.headers(), ours) {
         next.run(request).await
     } else {
         (StatusCode::FORBIDDEN, "Cross-origin request refused.\n").into_response()
@@ -67,7 +63,7 @@ mod tests {
         for (name, value) in headers {
             map.insert(name, value.parse().unwrap());
         }
-        allows(&method, &map, SITE)
+        allows(&method, &map, |origin| origin == SITE)
     }
 
     #[test]
@@ -141,8 +137,8 @@ mod tests {
         let mut headers = HeaderMap::new();
         let vm = "https://members.weblounge.localhost:10443";
         headers.insert(header::ORIGIN, vm.parse().unwrap());
-        assert!(allows(&Method::POST, &headers, vm));
+        assert!(allows(&Method::POST, &headers, |origin| origin == vm));
         headers.insert(header::ORIGIN, SITE.parse().unwrap());
-        assert!(!allows(&Method::POST, &headers, vm));
+        assert!(!allows(&Method::POST, &headers, |origin| origin == vm));
     }
 }

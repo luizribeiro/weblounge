@@ -93,7 +93,7 @@ impl<'a> Facts<'a> {
         Self {
             nick,
             history_kept: invite_rules::in_words(app.history_expiry),
-            webchat: app.webchat.redirect_uri(),
+            webchat: app.web_clients.webchat.redirect_uri(),
             uploads: upload_rules::InWords::default(),
         }
     }

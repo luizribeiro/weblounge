@@ -29,8 +29,10 @@ pub struct Config {
     pub public_url: SiteOrigin,
     /// What invite links start with; the code follows.
     pub invite_links: String,
-    /// The web client's origin, the one OAuth client.
+    /// gamja's origin, the web client members are sent to.
     pub webchat_url: WebchatOrigin,
+    /// The beta web client's origin, where one is served.
+    pub beta_client_url: Option<WebchatOrigin>,
     /// Where uploads are served from.
     pub files_url: FilesOrigin,
     /// Where uploads are handed to the scrubber, and stored.
@@ -125,6 +127,9 @@ impl Config {
             invite_links: invite_links(public_url.as_str(), join_url.as_deref()),
             public_url,
             webchat_url: origin("CONCIERGE_WEBCHAT_URL", webchat_url)?,
+            beta_client_url: var("CONCIERGE_BETA_CLIENT_URL")
+                .map(|url| origin("CONCIERGE_BETA_CLIENT_URL", url))
+                .transpose()?,
             files_url: origin("CONCIERGE_FILES_URL", require("CONCIERGE_FILES_URL")?)?,
             uploads: Store::from_vars(&var)?,
             irc_server: irc_server_in(irc_server)?,
@@ -376,11 +381,12 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 15] = [
+    const PRODUCTION: [(&str, &str); 16] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
         ("CONCIERGE_WEBCHAT_URL", "https://irc.weblounge.org"),
+        ("CONCIERGE_BETA_CLIENT_URL", "https://beta.weblounge.org"),
         ("CONCIERGE_FILES_URL", "https://files.weblounge.org"),
         ("CONCIERGE_UPLOADS", "/var/lib/concierge-files"),
         ("CONCIERGE_SCRUBBER", "/run/concierge-scrubber.sock"),
@@ -429,6 +435,7 @@ mod tests {
                 public_url: origin("https://members.weblounge.org"),
                 invite_links: "https://join.weblounge.org/#".into(),
                 webchat_url: origin("https://irc.weblounge.org"),
+                beta_client_url: Some(origin("https://beta.weblounge.org")),
                 files_url: origin("https://files.weblounge.org"),
                 uploads: Store {
                     directory: "/var/lib/concierge-files".into(),
@@ -579,6 +586,23 @@ mod tests {
             parse_with(&[("CONCIERGE_WEBCHAT_URL", None)]),
             Err(ConfigError::Missing("CONCIERGE_WEBCHAT_URL"))
         );
+    }
+
+    #[test]
+    fn the_beta_client_url_is_an_optional_origin() {
+        let beta = |url| parse_with(&[("CONCIERGE_BETA_CLIENT_URL", url)]);
+        assert_eq!(
+            beta(Some("https://beta.weblounge.localhost:10443/"))
+                .unwrap()
+                .beta_client_url
+                .map(|url| url.to_string()),
+            Some("https://beta.weblounge.localhost:10443".into())
+        );
+        assert!(matches!(
+            beta(Some("https://beta.weblounge.org/app")),
+            Err(ConfigError::Invalid { .. })
+        ));
+        assert_eq!(beta(None).unwrap().beta_client_url, None);
     }
 
     #[test]
