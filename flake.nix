@@ -28,6 +28,9 @@
       inputs.crane.follows = "crane";
       inputs.git-hooks.follows = "git-hooks";
     };
+    # The web client in beta at beta.weblounge.org. Its build pins its own
+    # toolchain and dependency hashes, so nothing follows ours.
+    weblounge-client.url = "github:luizribeiro/weblounge-client";
   };
 
   outputs = { nixpkgs, git-hooks, ... } @ inputs:

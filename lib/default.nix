@@ -1,9 +1,9 @@
-{ self, nixpkgs, disko, sops-nix, louro, crane, advisory-db, ... }:
+{ self, nixpkgs, disko, sops-nix, louro, crane, advisory-db, weblounge-client, ... }:
 
 let
   inherit (nixpkgs) lib;
 
-  overlay = import ../pkgs { inherit crane advisory-db; };
+  overlay = import ../pkgs { inherit crane advisory-db weblounge-client; };
 
   hostNames = builtins.attrNames
     (lib.filterAttrs (_: type: type == "directory") (builtins.readDir ../hosts));
