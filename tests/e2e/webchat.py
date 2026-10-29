@@ -145,12 +145,15 @@ with subtest("the beta client's hashed assets keep a year, and the rest revalida
     assert "content-type: application/wasm" in beta_headers("/engine_bg.wasm")
     not_found_page(beta, "/no-such-page")
 
-with subtest("the beta client's CSP lets it run its wasm in a worker and reach Ergo, concierge and uploads"):
+with subtest(
+    "the beta client's CSP lets it run its wasm in a worker, style itself and reach Ergo, concierge and uploads"
+):
     [policy] = re.findall(r"^content-security-policy: (.*)$", beta_headers("/"), re.M)
     assert beta_connects in policy, policy
     for directive in [
         "script-src 'self' 'wasm-unsafe-eval'",
         "worker-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
         "font-src 'self'",
         "default-src 'none'",
         "frame-ancestors 'none'",

@@ -22,9 +22,11 @@ let
     };
   });
 
-  # The client's engine is wasm, compiled in a SharedWorker.
+  # The client's engine is wasm, compiled in a SharedWorker, and its UI
+  # sets styles from script, which style-src 'self' alone blocks.
   policy = {
     script-src = "'self' 'wasm-unsafe-eval'";
+    style-src = "'self' 'unsafe-inline'";
     worker-src = "'self'";
     font-src = "'self'";
     connect-src = "'self' ${socket} ${members} ${upload}";
