@@ -143,7 +143,12 @@ with subtest("the beta client's hashed assets keep a year, and the rest revalida
         assert "cache-control: no-cache" in headers, (path, headers)
         assert beta_connects in headers, (path, headers)
     assert "content-type: application/wasm" in beta_headers("/engine_bg.wasm")
-    not_found_page(beta, "/no-such-page")
+
+with subtest("a reload of the beta client's deep links gets the app, while a missing asset is a 404"):
+    deep = https(beta, "/weblounge/lounge", "-fi")
+    assert "<title>weblounge</title>" in deep, deep
+    assert "cache-control: no-cache" in deep.lower(), deep
+    not_found_page(beta, "/assets/no-such-chunk.js")
 
 with subtest(
     "the beta client's CSP lets it run its wasm in a worker, style itself and reach Ergo, concierge and uploads"

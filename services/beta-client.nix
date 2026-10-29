@@ -51,7 +51,12 @@ in
       # names; the rest keep theirs across builds. The error pages' assets
       # set their own Cache-Control, so the server level sets none.
       extraConfig = config.weblounge.nginx.securityHeaders policy;
-      locations."/".extraConfig = headersWith "no-cache";
+      # The client routes by path, so a reload of /weblounge/lounge gets
+      # index.html; a missing asset under /assets/ still answers 404.
+      locations."/" = {
+        tryFiles = "$uri /index.html";
+        extraConfig = headersWith "no-cache";
+      };
       locations."/assets/".extraConfig = headersWith "public, max-age=31536000, immutable";
       locations."= /config.json" = {
         alias = clientConfig;
