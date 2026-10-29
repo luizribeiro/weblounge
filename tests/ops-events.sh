@@ -242,6 +242,18 @@ done
 expect "and queues nothing for it" "" "$(queued)"
 
 setup
+system new 0123456789abcdef0123456789abcdef01234567
+switch_to new
+ops-event gave-up "$OPS_ROOT/systems/next" fedcba9876543210fedcba9876543210fedcba98
+ops-event gave-up "$OPS_ROOT/systems/new" 0123456789abcdef0123456789abcdef01234567
+expect "a push that stops before switching says so, unless it pushed the running system" \
+  "gave-up:fedcba9876543210fedcba9876543210fedcba98" "$(queued)"
+expect "a push that stops before switching names what it didn't deploy" \
+  "gave up deploying fedcba9" "$(ops-event line "$(queued)")"
+expect "a push can't queue anything but a revision as one it gave up on" "2" \
+  "$(ops-event gave-up "$OPS_ROOT/systems/next" "it broke" 2>/dev/null || echo $?)"
+
+setup
 stub system-state starting
 ops-event boot
 expect "a first boot is a clean one" "booted" "$(queued)"

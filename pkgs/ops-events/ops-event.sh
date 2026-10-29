@@ -1,10 +1,11 @@
 # shellcheck shell=bash
 # Usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION
-#                  | deploying TOPLEVEL REVISION
+#                  | deploying TOPLEVEL REVISION | gave-up TOPLEVEL REVISION
 #                  | boot | shutdown | down | drain | line INSTANCE
 # The host's major events, as lines in #ops. The hooks (started, failed,
-# switch, boot and down) and scripts/push (deploying) run as root: they keep the little state there is
-# and queue each event as <event>[:<unit or switch>]. drain, ops-post's
+# switch, boot and down) and scripts/push, through sudo (deploying and
+# gave-up), run as root: they keep the little state there is and queue
+# each event as <event>[:<unit or switch>]. drain, ops-post's
 # one sandboxed run at a time, writes the queued events' lines and hands
 # them to ops-notify oldest first, so #ops hears them in the order they
 # happened. No unit starts while the host goes down, so shutdown posts
@@ -154,15 +155,27 @@ refuse_revision() {
   exit 2
 }
 
-# A push about to copy toplevel over, which a switch will follow, and so
-# like one says nothing of the system running already.
-deploying() {
-  local toplevel=$1 revision=$2 previous
+# A push of toplevel, which like a switch says nothing of the system
+# running already.
+pushing() {
+  local toplevel=$1 revision=$2
   valid_revision "$revision" || refuse_revision "$revision"
-  [ "$toplevel" != "$(readlink -f "$current_system")" ] || return 0
+  [ "$toplevel" != "$(readlink -f "$current_system")" ]
+}
+
+# A push about to copy toplevel over, which a switch will follow.
+deploying() {
+  local revision=$2 previous
+  pushing "$@" || return 0
   previous=$(raw_revision_of "$current_system")
   valid_revision "$previous" || previous=unknown
   notify "deploying:$revision $previous"
+}
+
+# A push that stopped before switching, so its start isn't left hanging.
+gave_up() {
+  pushing "$@" || return 0
+  notify "gave-up:$2"
 }
 
 # A crash seconds after the marker changes would otherwise beat the
@@ -266,6 +279,7 @@ line() {
       read -ra revisions <<<"$unit"
       echo "deploying $(describe_revision "${revisions[0]}") (from $(describe_revision "${revisions[1]}"))"
       ;;
+    gave-up) echo "gave up deploying $(describe_revision "$unit")" ;;
     booted) echo "$OPS_HOST booted after $(boot_seconds)s (kernel $(uname -r))" ;;
     crash-booted) echo "$OPS_HOST booted after a crash or power loss (kernel $(uname -r))" ;;
     rebooting) echo "$OPS_HOST rebooting" ;;
@@ -302,9 +316,9 @@ umask 022
 command=${1:-}
 shift || true
 case $command in
-  started | failed | switch | deploying | boot | shutdown | down | drain | line) "$command" "$@" ;;
+  started | failed | switch | deploying | gave-up | boot | shutdown | down | drain | line) "${command//-/_}" "$@" ;;
   *)
-    echo "usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION | deploying TOPLEVEL REVISION | boot | shutdown | down | drain | line INSTANCE" >&2
+    echo "usage: ops-event started UNIT | failed UNIT | switch TOPLEVEL ACTION | deploying TOPLEVEL REVISION | gave-up TOPLEVEL REVISION | boot | shutdown | down | drain | line INSTANCE" >&2
     exit 2
     ;;
 esac
