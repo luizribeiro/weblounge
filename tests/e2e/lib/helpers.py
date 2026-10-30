@@ -24,18 +24,27 @@ def ergo_api_token() -> str:
     return credenza.succeed("cat /run/weblounge-secrets/ergo-api-token").strip()
 
 
-def ergo_api(endpoint: str, token: str | None = None, **fields: object) -> tuple[str, str]:
+def ergo_api_command(endpoint: str, token: str | None = None, **fields: object) -> str:
     token = token or ergo_api_token()
     auth = f"Authorization: Bearer {token}"
     url = f"http://127.0.0.1:8089/v1/{endpoint}"
-    command = ["curl", "-s", "-w", "\\n%{http_code}", "-H", auth, "-d", json.dumps(fields), url]
-    body, status = credenza.succeed(shlex.join(command)).rsplit("\n", 1)
+    return shlex.join(["curl", "-s", "-w", "\\n%{http_code}", "-H", auth, "-d", json.dumps(fields), url])
+
+
+def ergo_api(endpoint: str, token: str | None = None, **fields: object) -> tuple[str, str]:
+    body, status = credenza.succeed(ergo_api_command(endpoint, token, **fields)).rsplit("\n", 1)
     return body, status
 
 
 def register(account: str, password: str) -> str:
-    body, _ = ergo_api("ns/saregister", accountName=account, passphrase=password)
-    return body
+    """Ergo's answer to registering account. On a loaded host Ergo can outlast its API's 10s write
+    timeout and create the account without answering; then the answer is check_auth's, once password
+    opens it."""
+    status, output = credenza.execute(ergo_api_command("ns/saregister", accountName=account, passphrase=password))
+    if status == 0:
+        return output.rsplit("\n", 1)[0]
+    check_auth = ergo_api_command("check_auth", accountName=account, passphrase=password)
+    return credenza.wait_until_succeeds(f"{check_auth} | grep -F '\"success\":true'", timeout=60).strip()
 
 
 def irc_command(*commands: str, host: str = "credenza", **options: str) -> str:
