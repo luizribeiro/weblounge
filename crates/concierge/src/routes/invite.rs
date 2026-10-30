@@ -2,7 +2,7 @@
 //! it carries into an Ergo account and a member. Links carry the code in
 //! their fragment, which no server sees; the form posts it.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use askama::Template;
 use axum::{
@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::Response,
 };
-use ergo_api::{AccountName, Passphrase, Registration};
+use ergo_api::{Passphrase, Registration};
 use secret::SecretString;
 use serde::Deserialize;
 
@@ -33,6 +33,7 @@ use crate::{
     password_rules::{self, FieldErrors},
     platform::VisitorPlatform,
     rate_limit::{self, ClientAddress, Recipient},
+    registration::{self, LOST_REPLY_CHECKS},
 };
 
 #[derive(Template)]
@@ -190,14 +191,6 @@ enum Failure {
     Unfinished,
 }
 
-/// How many times, [`RECHECK_INTERVAL`] apart, signup asks Ergo whether
-/// a registration it got no answer to created the account. Each ask can
-/// take Ergo's 10s, as checking a password is as slow as setting one, so
-/// with the registration's own 10s these keep a signup within the 60s
-/// nginx waits for an answer.
-const LOST_REPLY_CHECKS: usize = 3;
-const RECHECK_INTERVAL: Duration = Duration::from_secs(2);
-
 /// Creates the Ergo account, then the member who redeemed `claim`,
 /// releasing the claim if that fails in a way the invite survives.
 /// Answers the member's name as Ergo spells it.
@@ -315,41 +308,15 @@ async fn unclaimed_account(
             return Err(Failure::Unreachable);
         }
     }
-    match opened_account(app, account, checks).await {
-        Ok(opened) => Ok(opened
-            .map(|opened| MemberName::new(opened.as_str()))
-            .filter(|opened| *opened == account.name)),
-        Err(error) => {
+    registration::opened(&app.ergo, &account.name, &account.password, checks)
+        .await
+        .map_err(|error| {
             eprintln!(
                 "Checking account {}'s password failed: {error}",
                 account.name
             );
-            Err(Failure::Unreachable)
-        }
-    }
-}
-
-/// The account `account`'s name and password open, asking Ergo up to
-/// `checks` times, [`RECHECK_INTERVAL`] apart, until one does.
-async fn opened_account(
-    app: &App,
-    account: &NewAccount,
-    checks: usize,
-) -> ergo_api::Result<Option<AccountName>> {
-    let mut opened = Ok(None);
-    for check in 0..checks {
-        if check > 0 {
-            tokio::time::sleep(RECHECK_INTERVAL).await;
-        }
-        opened = app
-            .ergo
-            .check_auth(&account.name, account.password.expose())
-            .await;
-        if matches!(opened, Ok(Some(_))) {
-            break;
-        }
-    }
-    opened
+            Failure::Unreachable
+        })
 }
 
 /// Whether a member or a bot holds `name`, so no newcomer may take it.
