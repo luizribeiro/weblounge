@@ -1,7 +1,8 @@
 # Builds a VM test of credenza's real configuration, probed from a client,
-# that runs tests/e2e/<name>.py. Takes { credenza, client, browsers, mail }
-# to add to the nodes; browsers maps command names to Playwright scripts,
-# and `mail = true;` adds the mail node of ./mail.nix.
+# that runs tests/e2e/<name>.py. Takes { credenza, client, browsers, mail,
+# webkit } to add to the nodes; browsers maps command names to Playwright
+# scripts, `mail = true;` adds the mail node of ./mail.nix, and
+# `webkit = true;` lets those scripts run WebKit.
 { pkgs, weblounge, name, script }:
 
 test:
@@ -20,11 +21,12 @@ let
   ircClient = pkgs.writers.writePython3Bin "irc-client" { doCheck = false; } ../clients/irc-client.py;
   browsers = test.browsers or { };
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
+  webkit = test.webkit or false;
   # The headless shell, and full Chromium for the notification permissions
-  # the shell always denies.
+  # the shell always denies; WebKit, Safari's engine, for tests that ask.
   playwrightBrowsers = pkgs.playwright-driver.browsers.override {
     withFirefox = false;
-    withWebkit = false;
+    withWebkit = webkit;
     withFfmpeg = false;
   };
   browserModule = pkgs.writeTextDir "browser.py" (builtins.readFile ../clients/browser.py);
@@ -61,8 +63,14 @@ pkgs.testers.runNixOSTest {
         "-device virtio-net-pci,netdev=wan,mac=00:16:3c:1a:01:be"
       ];
     };
-    client = {
+    client = { lib, nodes, ... }: {
       imports = [ (test.client or { }) ];
+      # WebKit aborts without an EGL display, and can't be told where a name
+      # points, so it looks credenza's up.
+      hardware.graphics.enable = webkit;
+      networking.hosts = lib.mkIf webkit {
+        ${nodes.credenza.networking.primaryIPAddress} = lib.attrNames nodes.credenza.services.nginx.virtualHosts;
+      };
       environment.systemPackages = [ pkgs.curl pkgs.netcat pkgs.nmap pkgs.openssl ircClient ]
         ++ lib.mapAttrsToList browserCommand browsers;
       environment.etc.upload-fixtures.source = ../../../crates/scrubber/fixtures;

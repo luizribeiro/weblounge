@@ -42,15 +42,21 @@ def open_settings(page):
 
 
 @contextmanager
-def browsing(expected_errors=(), notifications=False):
+def browsing(expected_errors=(), notifications=False, webkit=False):
     """expected_errors: substrings of console errors the caller provokes.
     notifications: run full Chromium, whose notification permission starts
-    at "default" and can be granted; the headless shell always denies it."""
+    at "default" and can be granted; the headless shell always denies it.
+    webkit: run WebKit, Safari's engine, which finds credenza by the names
+    a test with `webkit = true;` puts in /etc/hosts."""
     errors = []
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            channel="chromium" if notifications else None, args=["--host-resolver-rules=MAP *.weblounge.org credenza"]
-        )
+        if webkit:
+            browser = playwright.webkit.launch()
+        else:
+            browser = playwright.chromium.launch(
+                channel="chromium" if notifications else None,
+                args=["--host-resolver-rules=MAP *.weblounge.org credenza"],
+            )
         page = browser.new_page(ignore_https_errors=True)
         page.set_default_timeout(TIMEOUT_MS)
         expect.set_options(timeout=TIMEOUT_MS)
