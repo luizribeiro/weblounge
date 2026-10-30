@@ -67,12 +67,26 @@ with subtest("a push of a healthy system keeps it, and boots into it"):
         assert f"✓ {check}" in output, (check, output)
     assert running() == "healthy" and boots_into() == client.succeed("readlink -f /etc/variants/healthy"), output
 
-with subtest("#ops hears of every trial, and of whether it was kept or rolled back"):
-    wait_for_ops_line("kept an unknown revision", **luiz)
+with subtest("a push of the system running already keeps it"):
+    status, output = push("healthy")
+    assert status == 0 and "push: kept" in output, output
+
+with subtest("a push that can't arm its rollback gives up before switching"):
+    credenza.succeed("systemd-run --unit=weblounge-rollback --on-active=1h true")
+    status, output = push("failing-on-host")
+    credenza.succeed("systemctl stop weblounge-rollback.timer")
+    assert status != 0 and "push: couldn't arm the rollback" in output, output
+    assert running() == "healthy", output
+
+with subtest("#ops hears of every push's start, its trial, and whether it was kept or rolled back"):
+    wait_for_ops_line("gave up deploying an unknown revision", **luiz)
     kinds = [
         re.sub(r" — restarted: .*", "", line)
         for line in ops_lines(**luiz)
-        if re.match(r"deployed |rolled back |kept ", line)
+        if re.match(r"deploying |deployed |rolled back |kept |gave up ", line)
     ]
-    trial, rolled_back = "deployed an unknown revision (on trial)", "rolled back to an unknown revision"
-    assert kinds == [trial, rolled_back] * 4 + [trial, "kept an unknown revision"], kinds
+    unknown, healthy = "an unknown revision", "22e5438"
+    tried = [f"deploying {unknown} (from {unknown})", f"deployed {unknown} (on trial)", f"rolled back to {unknown}"]
+    kept = [f"deploying {healthy} (from {unknown})", f"deployed {healthy} (on trial)", f"kept {healthy}"]
+    gave_up = [f"deploying {unknown} (from {healthy})", f"gave up deploying {unknown}"]
+    assert kinds == tried * 4 + kept + gave_up, kinds

@@ -30,6 +30,19 @@ can_log_in() {
   return 1
 }
 
+# The host queues the line behind its other events, so it can't reach
+# #ops after the switch's; a host without ops-event yet stays quiet.
+tell_ops() {
+  remote "sudo ops-event $1 $toplevel $(printf %q "$revision")" \
+    || echo "push: couldn't tell #ops of the push" >&2
+}
+
+give_up() {
+  echo "push: $1" >&2
+  tell_ops gave-up
+  exit 1
+}
+
 # switch-to-configuration refuses to run beside another, so a rollback the
 # timer already started is left to finish first.
 revert() {
@@ -58,15 +71,18 @@ ssh ${NIX_SSHOPTS:-} -o ControlMaster=yes -o ControlPath="$lifeline" -o ControlP
 trap 'ssh -o ControlPath="$lifeline" -O exit "$host" 2>/dev/null' EXIT
 
 toplevel=$(nix build --no-link --print-out-paths "$attr")
+# What the host reads once it runs the system, which isn't there yet.
+revision=$("$toplevel/sw/bin/nixos-version" --configuration-revision 2>/dev/null || echo unknown)
+tell_ops deploying
 # Trusted users may import unsigned paths regardless; this only stops the
 # daemon rejecting ones we just built (seen on the VM, whose store overlays
 # the host's).
-nix copy --no-check-sigs --to "ssh-ng://$host" "$toplevel"
-previous=$(remote readlink /run/current-system)
+nix copy --no-check-sigs --to "ssh-ng://$host" "$toplevel" || give_up "copying the system failed"
+previous=$(remote readlink /run/current-system) || give_up "couldn't read the running system"
 
 # The timer's unit name also keeps a second push from starting a trial.
 remote "sudo systemd-run --quiet --collect --unit=$rollback --on-active=$grace \
-  $previous/bin/switch-to-configuration test" || { echo "push: couldn't arm the rollback; is another push on trial?" >&2; exit 1; }
+  $previous/bin/switch-to-configuration test" || give_up "couldn't arm the rollback; is another push on trial?"
 echo "push: on trial; $host goes back to $previous by itself in $grace unless kept" >&2
 remote "sudo $toplevel/bin/switch-to-configuration test" || revert "activating failed"
 

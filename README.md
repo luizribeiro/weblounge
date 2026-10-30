@@ -248,7 +248,9 @@ it only if a fresh SSH login works and every deploy check passes; otherwise
 it switches back to the system that was running. Deploy checks are declared
 next to what they check, as `weblounge.deployChecks`, and run on the host or
 from your machine. The host keeps a timer of its own, so it also goes back
-by itself, ten minutes on, if the push loses touch with it.
+by itself, ten minutes on, if the push loses touch with it. #ops hears of
+each push once it's built, before the copy to the host, and then of its
+trial and whether it was kept, rolled back or given up on before switching.
 
 IRC clients connect to `irc.weblounge.org:6697` over TLS.
 

@@ -4,7 +4,10 @@ let
   # Systems to push, each credenza with something added. They're in its own
   # closure already, so a push copies little and needs no network.
   variants = { lib, ... }: {
-    healthy.environment.etc.pushed.text = "healthy";
+    healthy = {
+      environment.etc.pushed.text = "healthy";
+      system.configurationRevision = "22e5438f0123456789abcdef0123456789abcdef";
+    };
     locked-out = {
       environment.etc.pushed.text = "locked-out";
       services.openssh.settings.AllowUsers = lib.mkForce [ "nobody" ];
