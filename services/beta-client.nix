@@ -38,7 +38,7 @@ in
 
   weblounge.ergo.settings.server.websockets.allowed-origins = [ origin ];
 
-  systemd.services.concierge.serviceConfig.Environment = [ "CONCIERGE_BETA_CLIENT_URL=${origin}" ];
+  weblounge.concierge.webClients.CONCIERGE_BETA_CLIENT_URL = origin;
 
   services.nginx.virtualHosts.${hostName} = lib.mkMerge [
     (config.weblounge.nginx.errorPages { "404" = "404.html"; })

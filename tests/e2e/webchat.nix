@@ -1,6 +1,8 @@
 { vmTest, ... }:
 
 vmTest {
+  webkit = true;
+  browsers.beta-signin-browser = ./clients/beta-signin-browser.py;
   browsers.webchat-browser = ./clients/webchat-browser.py;
   browsers.webchat-notifications-browser = ./clients/webchat-notifications-browser.py;
   browsers.webchat-reconnect-browser = ./clients/webchat-reconnect-browser.py;

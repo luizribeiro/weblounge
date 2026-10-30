@@ -107,6 +107,12 @@ in
     description = "The settings of a unit that opens concierge's database once it's migrated, as concierge.";
   };
 
+  options.weblounge.concierge.webClients = lib.mkOption {
+    type = lib.types.attrsOf lib.types.str;
+    default = { };
+    description = "The origins of the web clients concierge signs members in to, by the variable that tells concierge each one's.";
+  };
+
   options.weblounge.concierge.listen = lib.mkOption {
     type = lib.types.str;
     default = "127.0.0.1:8080";
@@ -115,6 +121,7 @@ in
 
   config = {
     weblounge.loopbackListeners.Concierge = cfg.listen;
+    weblounge.concierge.webClients.CONCIERGE_WEBCHAT_URL = config.weblounge.origin config.weblounge.ergo.serverName;
 
     # The account home's switches only make sense where members can choose.
     assertions = lib.mapAttrsToList
@@ -175,12 +182,11 @@ in
         serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // stateAccess // serviceOnly
           // withAccess [ outboxAccess filesAccess scrubberAccess ] // {
           RestrictAddressFamilies = config.weblounge.sandbox.RestrictAddressFamilies ++ [ "AF_UNIX" ];
-          Environment = lib.mapAttrsToList (name: value: "${name}=${value}") filesEnvironment ++ [
+          Environment = lib.mapAttrsToList (name: value: "${name}=${value}") (filesEnvironment // cfg.webClients) ++ [
             "CONCIERGE_OUTBOX=${outboxPath}"
             "CONCIERGE_LISTEN=${cfg.listen}"
             "CONCIERGE_PUBLIC_URL=${publicUrl}"
             "CONCIERGE_JOIN_URL=${config.weblounge.origin joinHostName}"
-            "CONCIERGE_WEBCHAT_URL=${config.weblounge.origin config.weblounge.ergo.serverName}"
             "CONCIERGE_IRC_SERVER=${config.weblounge.ergo.address}"
             "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
             "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"
@@ -246,9 +252,12 @@ in
         forceSSL = true;
         # Signup and password forms fetch the password rules and nick
         # availability as members type, and the Uploads tab shows each upload
-        # from where it's served.
+        # from where it's served. Signing in for a web client posts the form
+        # here, then redirects on to the client with its code, and browsers
+        # hold every redirect after a form's POST to form-action.
         extraConfig = config.weblounge.nginx.securityHeaders {
           connect-src = "'self'";
+          form-action = lib.concatStringsSep " " ([ "'self'" ] ++ lib.attrValues cfg.webClients);
           img-src = "'self' ${filesEnvironment.CONCIERGE_FILES_URL}";
         };
         locations."/" = {

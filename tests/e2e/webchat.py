@@ -224,6 +224,15 @@ with subtest("in a browser, a signed-in member opens irc.weblounge.org and lands
     page = client.succeed(f"webchat-browser {grace['account']} {shlex.quote(grace['password'])} 2>&1")
     assert "#lounge" in page, page
 
+with subtest("in WebKit, a signed-out member signs in where the beta client sends them, and lands in #lounge"):
+    report = json.loads(client.succeed(shlex.join(["beta-signin-browser", grace["account"], grace["password"]])))
+    signed_out, signed_in = report["signed out"], report["signed in"]
+    sign_in_page, callback, cleaned = signed_out["visited"][1:]
+    assert sign_in_page.startswith(f"https://{members}/signin?next=%2Foauth%2Fauthorize%3F"), report
+    assert re.fullmatch(rf"https://{beta}/\?code=[\w-]+&state=[\w-]+", callback), report
+    assert cleaned == signed_out["url"] == signed_in["url"] == f"https://{beta}/", report
+    assert signed_out["lounge"] and signed_in["lounge"], report
+
 with subtest("in a browser, pasting an image or picking one with gamja's upload button puts its link in the composer"):
     paste = ["webchat-upload-browser", grace["account"], grace["password"], f"{fixtures}/photo.png"]
     links = json.loads(client.succeed(shlex.join(paste)))
