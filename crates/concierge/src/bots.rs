@@ -10,6 +10,7 @@ use crate::{
     name::{BotName, MemberName},
     nick::{self, InvalidNick, Nick},
     password,
+    registration::{self, LOST_REPLY_CHECKS},
     uploads::Store,
 };
 
@@ -114,13 +115,12 @@ impl Bots<'_> {
             BotInsertion::NameTaken => return Ok(Err(Refusal::Taken)),
             BotInsertion::TooMany => return Ok(Err(Refusal::TooMany)),
         }
-        let registration = self.ergo.register(&account, password).await;
-        if !matches!(registration, Ok(Registration::Created)) {
+        let registered = self.register(&account, password).await;
+        if !matches!(registered, Ok(true)) {
             self.db.take_back_bot(&account, replacing.as_ref()).await?;
         }
-        match registration.with_context(|| format!("Ergo didn't create {account}"))? {
-            Registration::Created => {}
-            Registration::NameTaken => return Ok(Err(Refusal::Taken)),
+        if !registered.with_context(|| format!("Ergo didn't create {account}"))? {
+            return Ok(Err(Refusal::Taken));
         }
         self.set_up(&account, owner).await.with_context(|| {
             format!(
@@ -128,6 +128,42 @@ impl Bots<'_> {
             )
         })?;
         Ok(Ok(account))
+    }
+
+    /// Registers `account` with `password`, answering whether the account
+    /// is the bot's: Ergo created it, or `password` opens the account Ergo
+    /// has under the name, as when Ergo didn't answer, or an earlier try
+    /// whose answer was lost made it. The bot's row holds the name by
+    /// now, so concierge knows of no member or other bot under it; that
+    /// the password, generated or the bot's own secret, opens it is what
+    /// proves the account Ergo has is the bot's.
+    async fn register(&self, account: &BotName, password: &Passphrase) -> ergo_api::Result<bool> {
+        match self.ergo.register(account, password).await {
+            Ok(Registration::Created) => Ok(true),
+            Ok(Registration::NameTaken) => self.opens(account, password, 1).await,
+            Err(error) if error.unanswered() => {
+                eprintln!("Ergo didn't answer creating {account}: {error}");
+                match self.opens(account, password, LOST_REPLY_CHECKS).await {
+                    Ok(true) => Ok(true),
+                    Ok(false) => Err(error),
+                    Err(check) => {
+                        eprintln!("Checking whether Ergo made {account} failed: {check}");
+                        Err(error)
+                    }
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn opens(
+        &self,
+        account: &BotName,
+        password: &Passphrase,
+        checks: usize,
+    ) -> ergo_api::Result<bool> {
+        let opened = registration::opened(self.ergo, account, password, checks).await?;
+        Ok(opened.is_some())
     }
 
     /// Sets the live bot `account` of `owner` up again and gives it a new

@@ -507,6 +507,24 @@ async fn nothing_is_made_when_ergo_fails() {
 }
 
 #[tokio::test]
+async fn the_bot_is_made_when_ergos_answer_is_lost_but_it_made_the_account() {
+    let site = Site::start().await;
+    site.add_verified_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    site.ergo.fail_next(Failure::LostReply);
+
+    let (status, page) = make(&site, &cookie, "bender").await;
+
+    assert_eq!(status, 200, "{page}");
+    assert!(signs_in_to_ergo(&site, "bender", &shown_password(&page)).await);
+    assert_eq!(listed(&page), ["<strong>bender</strong>"]);
+    assert_eq!(
+        site.ergo.vhost("bender").as_deref(),
+        Some("weblounge/bot/alice")
+    );
+}
+
+#[tokio::test]
 async fn says_so_when_ergo_makes_the_bot_but_doesnt_set_it_up() {
     let site = Site::start().await;
     site.add_verified_member("alice").await;

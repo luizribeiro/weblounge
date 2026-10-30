@@ -495,9 +495,11 @@ mod ensure {
         path::{Path, PathBuf},
     };
 
+    use concierge::registration::LOST_REPLY_CHECKS;
     use ergo_api::SettingsChanges;
 
     use super::*;
+    use crate::OLD_PASSWORD;
 
     const PASSWORD: &str = "q7Hx-2mZp_9vLcT4wRfB";
 
@@ -606,6 +608,101 @@ mod ensure {
             )
         );
         assert!(!fixture.in_ergo("bender").await);
+    }
+
+    async fn assert_bender_created(fixture: &Fixture, output: anyhow::Result<String>) {
+        assert_eq!(output.unwrap(), "created bender\n");
+        assert!(fixture.signs_in_to_ergo("bender", PASSWORD).await);
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
+        assert_eq!(fixture.bot("bender").await.unwrap().owner.as_str(), "luiz");
+    }
+
+    #[tokio::test]
+    async fn creates_the_bot_when_ergos_answer_is_lost_but_it_made_the_account() {
+        let fixture = Fixture::with_owners().await;
+        let file = password_file(&fixture, PASSWORD);
+        fixture.ergo.fail_next(Failure::LostReply);
+
+        let output = ensure(&fixture, "luiz", &file).await;
+
+        assert_bender_created(&fixture, output).await;
+    }
+
+    #[tokio::test]
+    async fn finishes_the_bot_an_earlier_try_whose_answer_was_lost_made() {
+        let fixture = Fixture::with_owners().await;
+        let file = password_file(&fixture, PASSWORD);
+        fixture.ergo.fail_next(Failure::LostReply);
+        for _ in 0..LOST_REPLY_CHECKS {
+            fixture.ergo.fail_next(Failure::Dropped);
+        }
+        let error = ensure(&fixture, "luiz", &file).await.unwrap_err();
+        assert!(
+            format!("{error:#}").starts_with("Ergo didn't create bender: "),
+            "{error:#}"
+        );
+        assert_eq!(fixture.bot("bender").await, None);
+
+        let output = ensure(&fixture, "luiz", &file).await;
+
+        assert_bender_created(&fixture, output).await;
+    }
+
+    #[tokio::test]
+    async fn records_nothing_when_ergos_answer_is_lost_and_it_made_nothing() {
+        let fixture = Fixture::with_owners().await;
+        let file = password_file(&fixture, PASSWORD);
+        fixture.ergo.fail_next(Failure::Dropped);
+
+        assert!(ensure(&fixture, "luiz", &file).await.is_err());
+
+        assert_eq!(fixture.bot("bender").await, None);
+        assert!(!fixture.in_ergo("bender").await);
+    }
+
+    #[tokio::test]
+    async fn refuses_an_account_its_password_does_not_open() {
+        let fixture = Fixture::with_owners().await;
+        fixture.register("bender").await;
+        let file = password_file(&fixture, PASSWORD);
+
+        let error = ensure(&fixture, "luiz", &file).await.unwrap_err();
+
+        assert_eq!(error.to_string(), "bender is taken");
+        assert_eq!(fixture.bot("bender").await, None);
+        assert!(!fixture.signs_in_to_ergo("bender", PASSWORD).await);
+    }
+
+    #[tokio::test]
+    async fn refuses_a_members_name_even_with_their_password() {
+        let fixture = Fixture::with_owners().await;
+        fixture.add_member("bender", Some("luiz")).await;
+        let members = password_file(&fixture, OLD_PASSWORD);
+
+        let error = ensure(&fixture, "luiz", &members).await.unwrap_err();
+
+        assert_eq!(error.to_string(), "bender is taken");
+        assert_eq!(fixture.bot("bender").await, None);
+    }
+
+    #[tokio::test]
+    async fn refuses_another_members_bot_even_with_its_password() {
+        let fixture = Fixture::with_owners().await;
+        fixture.add_member("zoe", Some("luiz")).await;
+        let file = password_file(&fixture, PASSWORD);
+        ensure(&fixture, "zoe", &file).await.unwrap();
+
+        let error = ensure(&fixture, "luiz", &file).await.unwrap_err();
+
+        assert_eq!(error.to_string(), "bender belongs to zoe");
+        assert_eq!(fixture.bot("bender").await.unwrap().owner.as_str(), "zoe");
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/zoe")
+        );
     }
 
     #[tokio::test]
