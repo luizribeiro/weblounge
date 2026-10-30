@@ -160,10 +160,15 @@ with subtest(
         "worker-src 'self'",
         "style-src 'self' 'unsafe-inline'",
         "font-src 'self'",
+        "manifest-src 'self'",
         "default-src 'none'",
         "frame-ancestors 'none'",
     ]:
         assert directive in policy, (directive, policy)
+
+with subtest("the beta client's manifest is served as one, so phones can install it"):
+    manifest = beta_headers("/manifest.webmanifest")
+    assert "content-type: application/manifest+json" in manifest, manifest
 
 with subtest("concierge signs members in to the beta client, whose token logs in over beta's WebSocket"):
     metadata = https(members, "/.well-known/oauth-authorization-server", "-fi", "-H", f"Origin: https://{beta}")

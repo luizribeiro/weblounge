@@ -29,6 +29,7 @@ let
     style-src = "'self' 'unsafe-inline'";
     worker-src = "'self'";
     font-src = "'self'";
+    manifest-src = "'self'";
     connect-src = "'self' ${socket} ${members} ${upload}";
   };
   headersWith = cacheControl:
