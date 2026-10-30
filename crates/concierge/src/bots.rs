@@ -140,6 +140,10 @@ impl Bots<'_> {
     async fn register(&self, account: &BotName, password: &Passphrase) -> ergo_api::Result<bool> {
         match self.ergo.register(account, password).await {
             Ok(Registration::Created) => Ok(true),
+            // TODO: bot ensure adopts any account Ergo has that concierge
+            // has no record of, such as the house account concierge, when
+            // the password opens it. Revisit once registration moves to the
+            // papo server.
             Ok(Registration::NameTaken) => self.opens(account, password, 1).await,
             Err(error) if error.unanswered() => {
                 eprintln!("Ergo didn't answer creating {account}: {error}");

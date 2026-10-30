@@ -126,6 +126,10 @@ pub async fn create(
             }
         };
     }
+    // TODO: An account Ergo makes after create stops checking, about 44s
+    // in, is left with no bot, and each retry's new password can't open
+    // it, so the name stays taken until an oper erases it. Revisit once
+    // registration moves to the papo server.
     let password = password::generate();
     let created = bots(&app)
         .create(
