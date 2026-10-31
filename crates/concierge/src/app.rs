@@ -17,7 +17,7 @@ use crate::{
     auth,
     background::Background,
     config::{IrcServer, Presence},
-    csrf,
+    cors, csrf,
     db::Db,
     oauth::WebClients,
     origin::{FilesOrigin, SiteOrigin},
@@ -244,7 +244,7 @@ pub fn router(app: App) -> Router {
         )
         .layer(middleware::from_fn_with_state(
             web_clients,
-            routes::oauth::allow_web_clients,
+            cors::allow_web_clients,
         ));
     let router = Router::new()
         .merge(pages)
@@ -261,12 +261,12 @@ pub fn router(app: App) -> Router {
         // through files.weblounge.org alone; nginx keeps it off this site.
         .route(
             routes::upload::PATH,
-            post(routes::upload::upload)
-                .options(routes::upload::preflight)
-                .layer(middleware::from_fn_with_state(
-                    upload_clients,
-                    routes::upload::allow_web_clients,
-                )),
+            post(routes::upload::upload).options(cors::preflight).layer(
+                middleware::from_fn_with_state(
+                    routes::upload::cors(upload_clients),
+                    cors::allow_web_clients_with_credentials,
+                ),
+            ),
         )
         .with_state(state);
     // Pages reload themselves when the dev loop restarts concierge.

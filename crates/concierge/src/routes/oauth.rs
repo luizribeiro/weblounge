@@ -4,9 +4,8 @@ use std::time::Instant;
 
 use axum::{
     Form, Json,
-    extract::{Query, Request, State},
-    http::{HeaderMap, HeaderValue, StatusCode, Uri, header},
-    middleware::Next,
+    extract::{Query, State},
+    http::{HeaderMap, StatusCode, Uri, header},
     response::{IntoResponse, Redirect, Response},
 };
 use secret::SecretString;
@@ -18,7 +17,7 @@ use crate::{
     app::AppState,
     auth::{self, Visitor},
     db::{self, NewAccessToken, NewAuthorizationCode},
-    oauth::{self, AuthorizationRequest, Refusal, TokenRequest, WebClients},
+    oauth::{self, AuthorizationRequest, Refusal, TokenRequest},
     rate_limit::ClientAddress,
     session::Token,
 };
@@ -211,21 +210,4 @@ fn refuse(app: &crate::app::App, visitor: &Visitor, refusal: &Refusal) -> Respon
             &["Open the chat from the account page instead."],
         ),
     }
-}
-
-/// Lets the web clients' pages read the answers of the endpoints they
-/// call from the browser, and no other site's.
-pub async fn allow_web_clients(
-    State(clients): State<WebClients>,
-    request: Request,
-    next: Next,
-) -> Response {
-    let origin = clients.origin_of(request.headers());
-    let mut response = next.run(request).await;
-    let headers = response.headers_mut();
-    headers.append(header::VARY, HeaderValue::from_static("origin"));
-    if let Some(origin) = origin {
-        headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-    }
-    response
 }

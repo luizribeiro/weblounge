@@ -7,9 +7,8 @@ use std::time::Instant;
 
 use axum::{
     body::Body,
-    extract::{Request, State},
-    http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header},
-    middleware::Next,
+    extract::State,
+    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use filehost::{UploadId, handoff::Answer};
@@ -17,6 +16,7 @@ use filehost::{UploadId, handoff::Answer};
 use crate::{
     app::{App, AppState},
     authorization::Credentials,
+    cors,
     db::{self, NewUpload},
     name::{BotName, MemberName},
     oauth::WebClients,
@@ -46,51 +46,14 @@ impl Uploader {
     }
 }
 
-/// What the web client may send uploads with, and read of the answer.
-const ALLOWED_HEADERS: &str = "Authorization, Content-Type, Content-Disposition";
-const EXPOSED_HEADERS: &str = "Location, Upload-Limit";
-
-/// Lets the web clients' pages, and no other site's, post uploads with
-/// their credentials and read the answer: browsers ask first, as their
-/// requests carry an `Authorization`.
-pub async fn allow_web_clients(
-    State(clients): State<WebClients>,
-    request: Request,
-    next: Next,
-) -> Response {
-    let origin = clients.origin_of(request.headers());
-    let preflight = request.method() == Method::OPTIONS;
-    let mut response = next.run(request).await;
-    let headers = response.headers_mut();
-    headers.append(header::VARY, HeaderValue::from_static("origin"));
-    let Some(origin) = origin else {
-        return response;
-    };
-    let static_value = HeaderValue::from_static;
-    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
-        static_value("true"),
-    );
-    if preflight {
-        headers.insert(header::ACCESS_CONTROL_ALLOW_METHODS, static_value("POST"));
-        headers.insert(
-            header::ACCESS_CONTROL_ALLOW_HEADERS,
-            static_value(ALLOWED_HEADERS),
-        );
-    } else {
-        headers.insert(
-            header::ACCESS_CONTROL_EXPOSE_HEADERS,
-            static_value(EXPOSED_HEADERS),
-        );
+/// What the web clients may send uploads with, and read of the answer:
+/// browsers ask first, as their requests carry an `Authorization`.
+pub fn cors(clients: WebClients) -> cors::Credentialed {
+    cors::Credentialed {
+        clients,
+        allowed_headers: "Authorization, Content-Type, Content-Disposition",
+        exposed_headers: Some("Location, Upload-Limit"),
     }
-    response
-}
-
-/// What a browser asks before posting an upload from a page; the answer
-/// is [`allow_web_clients`]'s to give.
-pub async fn preflight() -> StatusCode {
-    StatusCode::NO_CONTENT
 }
 
 /// The size a client says its upload is.

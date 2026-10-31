@@ -8,6 +8,7 @@ pub mod bot_rules;
 pub mod bots;
 pub mod clients;
 pub mod config;
+mod cors;
 mod csrf;
 pub mod db;
 pub mod email;
