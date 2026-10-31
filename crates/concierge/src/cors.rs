@@ -11,6 +11,10 @@ use axum::{
 
 use crate::oauth::WebClients;
 
+/// How long, in seconds, a browser may go on trusting a preflight's
+/// answer before asking again; some browsers cap it lower themselves.
+const PREFLIGHT_MAX_AGE: &str = "3600";
+
 /// What the web clients may send an endpoint with their credentials, and
 /// read of its answer.
 #[derive(Clone)]
@@ -56,6 +60,10 @@ pub async fn allow_web_clients_with_credentials(
         headers.insert(
             header::ACCESS_CONTROL_ALLOW_HEADERS,
             static_value(cors.allowed_headers),
+        );
+        headers.insert(
+            header::ACCESS_CONTROL_MAX_AGE,
+            static_value(PREFLIGHT_MAX_AGE),
         );
     } else if let Some(exposed) = cors.exposed_headers {
         headers.insert(header::ACCESS_CONTROL_EXPOSE_HEADERS, static_value(exposed));

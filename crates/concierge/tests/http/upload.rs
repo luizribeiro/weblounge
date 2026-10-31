@@ -400,6 +400,7 @@ async fn assert_web_client_may_upload(site: &Site, bearer: &str, origin: &str) {
         granted(header::ACCESS_CONTROL_ALLOW_HEADERS),
         Some("Authorization, Content-Type, Content-Disposition")
     );
+    assert_eq!(granted(header::ACCESS_CONTROL_MAX_AGE), Some("3600"));
     let posted = site
         .upload_with(PNG, Some(bearer), &[(header::ORIGIN.as_str(), origin)])
         .await;
