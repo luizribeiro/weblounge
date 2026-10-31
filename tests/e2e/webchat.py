@@ -134,16 +134,26 @@ with subtest("beta.weblounge.org serves the beta web client, set up to sign memb
         "oauth": {"issuer": f"https://{members}", "client_id": "weblounge-client", "redirect_uri": f"https://{beta}/"},
     }, config
 
+
+def beta_asset(referrer: str, pattern: str) -> str:
+    [path] = set(re.findall(rf"/?(?:assets/)?({pattern})", referrer))
+    return f"/assets/{path}"
+
+
 with subtest("the beta client's hashed assets keep a year, and the rest revalidates"):
-    [script] = re.findall(r'src="(/assets/[^"]+\.js)"', page)
-    assets = beta_headers(script)
-    assert "cache-control: public, max-age=31536000, immutable" in assets, assets
-    assert beta_connects in assets, assets
-    for path in ["/", "/config.json", "/engine_bg.wasm", "/fonts/inter-latin.woff2"]:
+    script = beta_asset(page, r"index-[\w-]+\.js")
+    worker = beta_asset(https(beta, script, "-f"), r"engine\.shared-worker-[\w-]+\.js")
+    wasm = beta_asset(https(beta, worker, "-f"), r"engine_bg-[\w-]+\.wasm")
+    for path in [script, worker, wasm]:
+        headers = beta_headers(path)
+        assert "cache-control: public, max-age=31536000, immutable" in headers, (path, headers)
+        assert beta_connects in headers, (path, headers)
+    assert "content-type: application/wasm" in beta_headers(wasm)
+    for path in ["/", "/config.json", "/manifest.webmanifest", "/icons/favicon.svg"]:
         headers = beta_headers(path)
         assert "cache-control: no-cache" in headers, (path, headers)
         assert beta_connects in headers, (path, headers)
-    assert "content-type: application/wasm" in beta_headers("/engine_bg.wasm")
+
 
 with subtest("a reload of the beta client's deep links gets the app, while a missing asset is a 404"):
     deep = https(beta, "/weblounge/lounge", "-fi")
