@@ -14,11 +14,12 @@ use serde_json::json;
 
 use super::internal_error;
 use crate::{
-    app::AppState,
+    app::{App, AppState},
     auth::{self, Visitor},
     db::{self, NewAccessToken, NewAuthorizationCode},
     oauth::{self, AuthorizationRequest, Refusal, TokenRequest},
     rate_limit::ClientAddress,
+    secret_hash::SessionHash,
     session::Token,
 };
 
@@ -131,13 +132,26 @@ pub async fn token(
         Ok(None) => return token_error(StatusCode::BAD_REQUEST, "invalid_grant"),
         Err(error) => return internal_error("Looking up a session", error),
     };
+    issue_access_token(&app, &code.session_hash, client.id, now, session.expires_at).await
+}
+
+/// Issues `client_id` an access token that lasts until `expires_at` or
+/// the session ends, whichever comes first, and answers it the way RFC
+/// 6749 has the token endpoint do.
+async fn issue_access_token(
+    app: &App,
+    session_hash: &SessionHash,
+    client_id: &str,
+    now: i64,
+    expires_at: i64,
+) -> Response {
     let token = Token::generate();
     let issued = NewAccessToken {
         token_hash: &app.sessions.hash(&token),
-        session_hash: &code.session_hash,
-        client_id: client.id,
+        session_hash,
+        client_id,
         created_at: now,
-        expires_at: session.expires_at,
+        expires_at,
     };
     if let Err(error) = app.db.insert_access_token(&issued).await {
         return internal_error("Issuing an access token", error);
@@ -145,7 +159,7 @@ pub async fn token(
     let answer = json!({
         "access_token": token.expose(),
         "token_type": "Bearer",
-        "expires_in": session.expires_at - now,
+        "expires_in": expires_at - now,
     });
     Json(answer).into_response()
 }
@@ -198,7 +212,7 @@ fn token_error(status: StatusCode, error: &str) -> Response {
     (status, Json(json!({ "error": error }))).into_response()
 }
 
-fn refuse(app: &crate::app::App, visitor: &Visitor, refusal: &Refusal) -> Response {
+fn refuse(app: &App, visitor: &Visitor, refusal: &Refusal) -> Response {
     match refusal.redirect() {
         Some(url) => Redirect::to(&url).into_response(),
         None => super::message(
