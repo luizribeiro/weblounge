@@ -26,6 +26,8 @@ const MAX_NEXT_LENGTH: usize = 512;
 pub struct SignedIn {
     pub member: Member,
     pub token_hash: SessionHash,
+    /// When the session expires, renewed by this request if it was due.
+    pub expires_at: i64,
 }
 
 /// The visitor's session, if they're signed in.
@@ -54,8 +56,10 @@ pub async fn resolve(State(app): State<AppState>, mut request: Request, next: Ne
             Err(error) => return internal_error("Looking up a session", error),
         };
         if let Some(session) = session {
-            if session::needs_renewal(session.expires_at, now) {
-                let renewed = app.db.renew_session(&token_hash, session::expires_at(now));
+            let mut expires_at = session.expires_at;
+            if session::needs_renewal(expires_at, now) {
+                expires_at = session::expires_at(now);
+                let renewed = app.db.renew_session(&token_hash, expires_at);
                 if let Err(error) = renewed.await {
                     return internal_error("Renewing a session", error);
                 }
@@ -64,6 +68,7 @@ pub async fn resolve(State(app): State<AppState>, mut request: Request, next: Ne
             visitor = Visitor(Some(Arc::new(SignedIn {
                 member: session.member,
                 token_hash,
+                expires_at,
             })));
         }
     }

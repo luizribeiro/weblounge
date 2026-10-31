@@ -28,6 +28,7 @@ if TYPE_CHECKING:
         members,
         not_found_page,
         pkce,
+        session_token,
     )
 
 grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
@@ -189,6 +190,28 @@ with subtest("a code for gamja buys the beta client nothing"):
     status, answer = exchange(authorize(graces_browser, challenge), verifier, client=beta_client)
     assert (status, answer) == ("400", {"error": "invalid_grant"}), (status, answer)
 
+with subtest("the beta client's page gets a token for the member's session in the background, which logs in"):
+    answer = session_token(graces_browser)
+    assert answer["status"] == 200, answer
+    headers = answer["headers"]
+    assert headers["access-control-allow-origin"] == f"https://{beta}", answer
+    assert headers["access-control-allow-credentials"] == "true", answer
+    assert headers["cache-control"] == "no-store", answer
+    granted = json.loads(answer["body"])
+    assert granted["token_type"] == "Bearer" and granted["expires_in"] == 15 * 60, granted
+    background = granted["access_token"]
+    session = irc(token=background, websocket=beta, nick="*")
+    assert " 903 " in session, session
+    assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
+
+with subtest("without a session the beta client's page is told to sign in, and other sites get no token"):
+    signed_out = session_token()
+    assert signed_out["status"] == 401, signed_out
+    assert json.loads(signed_out["body"]) == {"error": "login_required"}, signed_out
+    evil = session_token(graces_browser, origin="https://evil.example")
+    assert evil["status"] == 403, evil
+    assert "access-control-allow-origin" not in evil["headers"], evil
+
 with subtest("a garbage token is refused"):
     reply = client.fail(irc_command(token="q7Hx2mZp9vLcT4wRfBa-_wq7Hx2mZp9vLcT4wRfBa-_") + " 2>&1")
     assert "SASL OAUTHBEARER login failed" in reply, reply
@@ -316,5 +339,5 @@ with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web cl
 
 with subtest("tokens and codes never reach the journal"):
     credenza.succeed("journalctl --sync")
-    for secret in [token, revoked, ghost_token, rebooted, code, verifier]:
+    for secret in [token, background, revoked, ghost_token, rebooted, code, verifier]:
         credenza.fail(f"journalctl | grep -qF -- {secret}")

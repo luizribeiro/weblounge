@@ -327,6 +327,13 @@ def answer_of(response: str) -> Answer:
     return {"status": int(status.split()[1]), "headers": {k.lower(): v for k, v in headers.items()}, "body": body}
 
 
+def session_token(browser: Browser | None = None, origin: str = beta_client["origin"]) -> Answer:
+    """Asks for a token for browser's session, or for none, the way the beta client's page does from origin."""
+    cookies = browser.cookies if browser else []
+    flags = ["-D", "-", "-H", f"Origin: {origin}", "-H", "Content-Type: application/json", "--data", "{}"]
+    return answer_of(https(members, "/oauth/session-token", *cookies, *flags))
+
+
 def upload(path: str, *credentials: str) -> Answer:
     """Posts the file at path on the client to the upload endpoint, as an IRC
     client does, with curl's credentials flags, such as -u nick:password."""

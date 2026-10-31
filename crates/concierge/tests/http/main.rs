@@ -18,6 +18,7 @@ mod password;
 mod presence;
 mod reset;
 mod security;
+mod session_token;
 mod signin;
 mod signup;
 mod tabs;

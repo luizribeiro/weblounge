@@ -25,6 +25,16 @@ pub fn allows(method: &Method, headers: &HeaderMap, ours: impl Fn(&str) -> bool)
     }
 }
 
+/// Whether a request says its body is JSON, which no HTML form can, so a
+/// browser asks first before sending it from another origin.
+pub fn is_json(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("application/json"))
+}
+
 fn origin_of(url: &str) -> Option<String> {
     let uri: Uri = url.parse().ok()?;
     Some(format!("{}://{}", uri.scheme()?, uri.authority()?))
@@ -130,6 +140,38 @@ mod tests {
     fn writes_with_neither_header_are_refused() {
         assert!(!allows_with(Method::POST, &[]));
         assert!(!allows_with(Method::OPTIONS, &[]));
+    }
+
+    fn with_content_type(value: Option<&str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        if let Some(value) = value {
+            headers.insert(header::CONTENT_TYPE, value.parse().unwrap());
+        }
+        headers
+    }
+
+    #[test]
+    fn json_is_told_by_its_media_type_alone() {
+        for value in [
+            "application/json",
+            "application/json; charset=utf-8",
+            "Application/JSON",
+            " application/json ;charset=UTF-8",
+        ] {
+            assert!(is_json(&with_content_type(Some(value))), "{value}");
+        }
+        for value in [
+            None,
+            Some(""),
+            Some("text/plain"),
+            Some("application/x-www-form-urlencoded"),
+            Some("multipart/form-data; boundary=x"),
+            Some("text/plain; application/json"),
+            Some("application/json-seq"),
+            Some("application/jsonx"),
+        ] {
+            assert!(!is_json(&with_content_type(value)), "{value:?}");
+        }
     }
 
     #[test]

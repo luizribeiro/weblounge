@@ -74,7 +74,7 @@ impl Site {
     }
 }
 
-async fn json(response: axum::response::Response) -> Value {
+pub(crate) async fn json(response: axum::response::Response) -> Value {
     serde_json::from_str(&body_text(response).await).unwrap()
 }
 

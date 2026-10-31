@@ -21,6 +21,9 @@ pub const BETA_CLIENT: &str = "weblounge-client";
 pub const INTROSPECTION_CLIENT: &str = "ergo";
 /// Long enough for a browser to follow a redirect and post the code back.
 pub const CODE_LIFETIME: i64 = 60;
+/// A token handed over for the browser's session: short, since a page
+/// asks for another on every launch and reconnection.
+pub const SESSION_TOKEN_LIFETIME: i64 = 15 * 60;
 /// SHA-256 in unpadded base64url.
 const CHALLENGE_LENGTH: usize = 43;
 /// RFC 7636's bounds on a code verifier.
@@ -285,6 +288,12 @@ fn is_alphanumeric_or(value: &str, punctuation: &[u8]) -> bool {
 pub fn verifies(verifier: &CodeVerifier, challenge: &CodeChallenge) -> bool {
     let derived = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.0.expose().as_bytes()));
     derived.as_bytes().ct_eq(challenge.0.as_bytes()).into()
+}
+
+/// When a token handed over for a session expiring at `session_expires_at`
+/// expires: never after the session itself.
+pub fn session_token_expiry(now: i64, session_expires_at: i64) -> i64 {
+    (now + SESSION_TOKEN_LIFETIME).min(session_expires_at)
 }
 
 /// Whether an `Authorization` header authenticates Ergo with `secret`,
@@ -779,6 +788,13 @@ mod tests {
             &verifier(VERIFIER),
             &CodeChallenge::parse(VERIFIER).unwrap()
         ));
+    }
+
+    #[test]
+    fn a_session_token_lasts_fifteen_minutes_or_what_is_left_of_the_session() {
+        assert_eq!(session_token_expiry(ISSUED, ISSUED + 86400), ISSUED + 900);
+        assert_eq!(session_token_expiry(ISSUED, ISSUED + 900), ISSUED + 900);
+        assert_eq!(session_token_expiry(ISSUED, ISSUED + 60), ISSUED + 60);
     }
 
     #[test]

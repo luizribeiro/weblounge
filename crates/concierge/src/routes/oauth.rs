@@ -16,8 +16,9 @@ use super::internal_error;
 use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
+    cors, csrf,
     db::{self, NewAccessToken, NewAuthorizationCode},
-    oauth::{self, AuthorizationRequest, Refusal, TokenRequest},
+    oauth::{self, AuthorizationRequest, Refusal, TokenRequest, WebClients},
     rate_limit::ClientAddress,
     secret_hash::SessionHash,
     session::Token,
@@ -27,6 +28,7 @@ pub const METADATA_PATH: &str = "/.well-known/oauth-authorization-server";
 pub const AUTHORIZE_PATH: &str = "/oauth/authorize";
 pub const TOKEN_PATH: &str = "/oauth/token";
 pub const INTROSPECTION_PATH: &str = "/oauth/introspect";
+pub const SESSION_TOKEN_PATH: &str = "/oauth/session-token";
 
 /// RFC 8414's metadata. The introspection endpoint is left out: it's for
 /// Ergo alone, and gamja would call it from the browser if it were listed.
@@ -133,6 +135,60 @@ pub async fn token(
         Err(error) => return internal_error("Looking up a session", error),
     };
     issue_access_token(&app, &code.session_hash, client.id, now, session.expires_at).await
+}
+
+/// Hands a web client's page an access token for the members' session
+/// its browser already has, from the background: a top-level redirect to
+/// [`authorize`] shows the browser's own bar over a web app installed on
+/// a phone's home screen. The page posts from its own origin, with the
+/// session cookie:
+///
+/// ```js
+/// fetch(`${issuer}/oauth/session-token`, {
+///   method: "POST",
+///   credentials: "include",
+///   headers: { "Content-Type": "application/json" },
+///   body: "{}",
+/// })
+/// ```
+///
+/// The cookie alone vouches for the member, so no other site may make
+/// the request: it must carry a web client's `Origin`, and
+/// `Content-Type: application/json`, which no form can send, so a browser
+/// always asks first and only the clients' origins get leave to post.
+/// The body is not read. The token lasts [`oauth::SESSION_TOKEN_LIFETIME`],
+/// or as long as the session has left if that's less, and dies with the
+/// session; the page asks again for a new one.
+pub async fn session_token(
+    State(app): State<AppState>,
+    visitor: Visitor,
+    address: ClientAddress,
+    headers: HeaderMap,
+) -> Response {
+    let Some(client) = app.web_clients.sent_by(&headers) else {
+        return token_error(StatusCode::FORBIDDEN, "invalid_client");
+    };
+    if !csrf::is_json(&headers) {
+        return token_error(StatusCode::UNSUPPORTED_MEDIA_TYPE, "invalid_request");
+    }
+    if !app.oauth_requests.allows(address.0, Instant::now()) {
+        return token_error(StatusCode::TOO_MANY_REQUESTS, "invalid_request");
+    }
+    let Some(signed_in) = &visitor.0 else {
+        return token_error(StatusCode::UNAUTHORIZED, "login_required");
+    };
+    let now = db::now();
+    let expires_at = oauth::session_token_expiry(now, signed_in.expires_at);
+    issue_access_token(&app, &signed_in.token_hash, client.id, now, expires_at).await
+}
+
+/// What the web clients may send [`session_token`] with their cookies.
+pub fn session_token_cors(clients: WebClients) -> cors::Credentialed {
+    cors::Credentialed {
+        clients,
+        allowed_headers: "Content-Type",
+        exposed_headers: None,
+    }
 }
 
 /// Issues `client_id` an access token that lasts until `expires_at` or

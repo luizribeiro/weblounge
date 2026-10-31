@@ -89,6 +89,7 @@ pub fn router(app: App) -> Router {
     let public_url = app.public_url.clone();
     let web_clients = app.web_clients.clone();
     let upload_clients = web_clients.clone();
+    let session_token_clients = web_clients.clone();
     let state = Arc::new(app);
     // Unknown paths are members' too, so signed-out visitors can't tell
     // which pages exist.
@@ -252,6 +253,19 @@ pub fn router(app: App) -> Router {
         .route(&format!("{}{{file}}", assets::URL_PREFIX), get(asset))
         .layer(middleware::from_fn_with_state(public_url, csrf::guard_site))
         .merge(webchat_api)
+        // The web clients post here with the members' session cookie, which
+        // the handler and its CORS grant guard instead of our pages' guard.
+        .route(
+            routes::oauth::SESSION_TOKEN_PATH,
+            post(routes::oauth::session_token)
+                .options(cors::preflight)
+                .layer(map_response(routes::no_store))
+                .layer(middleware::from_fn_with_state(state.clone(), auth::resolve))
+                .layer(middleware::from_fn_with_state(
+                    routes::oauth::session_token_cors(session_token_clients),
+                    cors::allow_web_clients_with_credentials,
+                )),
+        )
         // Ergo calls this, not a browser, and authenticates with its secret.
         .route(
             routes::oauth::INTROSPECTION_PATH,
