@@ -70,15 +70,22 @@ impl WebClients {
 
     /// Whether `origin`, as a browser sends it, is one of the clients'.
     pub fn at(&self, origin: &str) -> bool {
-        self.all().any(|client| client.origin.as_str() == origin)
+        self.by_origin(origin).is_some()
+    }
+
+    fn by_origin(&self, origin: &str) -> Option<&WebClient> {
+        self.all().find(|client| client.origin.as_str() == origin)
+    }
+
+    /// The client whose page a request came from, by its `Origin`.
+    pub fn sent_by(&self, headers: &HeaderMap) -> Option<&WebClient> {
+        self.by_origin(headers.get(header::ORIGIN)?.to_str().ok()?)
     }
 
     /// The `Origin` a request came from, if it's one of the clients'.
     pub fn origin_of(&self, headers: &HeaderMap) -> Option<HeaderValue> {
-        headers
-            .get(header::ORIGIN)
-            .filter(|origin| origin.to_str().is_ok_and(|origin| self.at(origin)))
-            .cloned()
+        self.sent_by(headers)?;
+        headers.get(header::ORIGIN).cloned()
     }
 }
 
@@ -430,6 +437,37 @@ mod tests {
         }
         let gamja_only = WebClients::new(clients.webchat.origin, None);
         assert!(!gamja_only.at(BETA_ORIGIN));
+    }
+
+    fn from_origin(origin: Option<&str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        if let Some(origin) = origin {
+            headers.insert(header::ORIGIN, origin.parse().unwrap());
+        }
+        headers
+    }
+
+    #[test]
+    fn a_request_is_sent_by_the_client_at_its_origin() {
+        let clients = clients();
+        let sent_by = |origin| {
+            let headers = from_origin(origin);
+            clients.sent_by(&headers).map(|client| client.id)
+        };
+        assert_eq!(sent_by(Some("https://irc.weblounge.org")), Some("gamja"));
+        assert_eq!(sent_by(Some(BETA_ORIGIN)), Some("weblounge-client"));
+        for origin in [
+            None,
+            Some("https://evil.example"),
+            Some("https://members.weblounge.org"),
+            Some("https://beta.weblounge.org/"),
+            Some("null"),
+        ] {
+            assert_eq!(sent_by(origin), None, "{origin:?}");
+            assert_eq!(clients.origin_of(&from_origin(origin)), None, "{origin:?}");
+        }
+        let headers = from_origin(Some(BETA_ORIGIN));
+        assert_eq!(clients.origin_of(&headers).unwrap(), BETA_ORIGIN);
     }
 
     #[test]
