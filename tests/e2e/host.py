@@ -4,9 +4,9 @@ if TYPE_CHECKING:
     from driver import credenza, mail, subtest, tools
     from helpers import add_member, ergo_api_token, unit_file_problems
 
-# As in host.nix, whose stand-in certificate order fails its first attempt.
-cert = "files.weblounge.org"
-attempted = f"/var/lib/acme/.attempted-{cert}"
+# As in host.nix, whose stand-in certificate order fails its first attempt
+# and names its certificate here.
+attempted = "/var/lib/acme/.attempted"
 
 with subtest("sshd only accepts keys"):
     credenza.wait_for_unit("sshd.service")
@@ -37,8 +37,8 @@ with subtest("the VPS's NIC comes up with its static address and gateway"):
     credenza.succeed("ip route show default | grep -q 'via 107.173.231.129'")
 
 with subtest("a certificate order the CA refuses is tried again, not left for the daily renewal"):
-    unit = f"acme-order-renew-{cert}.service"
     credenza.wait_until_succeeds(f"test -e {attempted}", timeout=60)
+    unit = f"acme-order-renew-{credenza.succeed(f'cat {attempted}').strip()}.service"
     credenza.wait_until_succeeds(f"systemctl show -P Result {unit} | grep -qx success", timeout=60)
     assert credenza.succeed(f"systemctl show -P NRestarts {unit}").strip() == "1"
 
