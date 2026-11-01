@@ -1,0 +1,23 @@
+---
+name: nix
+description: Install Nix with KVM for the VM tests
+
+runs:
+  using: composite
+  steps:
+    # The VM tests need /dev/kvm, which the runner's user can't open.
+    - name: Enable KVM
+      shell: bash
+      run: |
+        echo 'KERNEL=="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+          | sudo tee /etc/udev/rules.d/99-kvm.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+
+    - uses: cachix/install-nix-action@v31
+      with:
+        # Each VM test boots two or more VMs; four at once outgrow the
+        # runner's 16 GB, and it gets shut down mid-check.
+        extra_nix_config: |
+          system-features = nixos-test benchmark big-parallel kvm
+          max-jobs = 2

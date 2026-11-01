@@ -17,27 +17,62 @@ concurrency:
     && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Evaluating every check in one process, as `nix flake check` does,
+# outgrows the runner's 16 GB, so each check gets a job of its own.
 jobs:
-  check:
+  list:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
+    outputs:
+      checks: ${{ steps.list.outputs.checks }}
     steps:
       - uses: actions/checkout@v7
-
-      # The VM tests need /dev/kvm, which the runner's user can't open.
-      - name: Enable KVM
+      - uses: ./.github/actions/nix
+      - id: list
         run: |
-          echo 'KERNEL=="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
-            | sudo tee /etc/udev/rules.d/99-kvm.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+          checks=$(nix eval --json .#checks.x86_64-linux \
+            --apply builtins.attrNames)
+          echo "checks=$checks" >> "$GITHUB_OUTPUT"
 
-      - uses: cachix/install-nix-action@v31
-        with:
-          # Each VM test boots two or more VMs; four at once outgrow the
-          # runner's 16 GB, and it gets shut down mid-check.
-          extra_nix_config: |
-            system-features = nixos-test benchmark big-parallel kvm
-            max-jobs = 2
+  # What `nix flake check` evaluates besides the checks.
+  outputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix
+      - name: Evaluate packages and formatter
+        run: |
+          nix eval --json .#packages.x86_64-linux \
+            --apply 'builtins.mapAttrs (_: p: p.drvPath)'
+          nix eval .#formatter.x86_64-linux.drvPath
+      - name: Build the dev shell
+        run: nix build -L --no-link .#devShells.x86_64-linux.default
 
-      - run: nix develop --command just check
+  build:
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        check: ${{ fromJSON(needs.list.outputs.checks) }}
+    name: ${{ matrix.check }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix
+      - run: nix build -L --no-link .#checks.x86_64-linux.${{ matrix.check }}
+
+  # The one status to require: it passes only if every job above did.
+  check:
+    needs: [list, outputs, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = success ] || exit 1
+          done
