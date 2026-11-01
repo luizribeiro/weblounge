@@ -19,6 +19,7 @@ let
       issuer = members;
       client_id = "weblounge-client";
       redirect_uri = "${origin}/";
+      session_token_endpoint = "${members}/oauth/session-token";
     };
   });
 

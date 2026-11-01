@@ -131,7 +131,12 @@ with subtest("beta.weblounge.org serves the beta web client, set up to sign memb
     assert config == {
         "mode": "hosted",
         "network": {"name": "weblounge", "endpoint": f"wss://{beta}/socket", "autojoin": ["#lounge"]},
-        "oauth": {"issuer": f"https://{members}", "client_id": "weblounge-client", "redirect_uri": f"https://{beta}/"},
+        "oauth": {
+            "issuer": f"https://{members}",
+            "client_id": "weblounge-client",
+            "redirect_uri": f"https://{beta}/",
+            "session_token_endpoint": f"https://{members}/oauth/session-token",
+        },
     }, config
 
 
@@ -149,7 +154,9 @@ with subtest("the beta client's hashed assets keep a year, and the rest revalida
         assert "cache-control: public, max-age=31536000, immutable" in headers, (path, headers)
         assert beta_connects in headers, (path, headers)
     assert "content-type: application/wasm" in beta_headers(wasm)
-    for path in ["/", "/config.json", "/manifest.webmanifest", "/icons/favicon.svg"]:
+    assert "content-type: text/javascript" in beta_headers("/service-worker.js")
+    startup = re.findall(r'href="(/startup/[^"]+\.png)"', page)[0]
+    for path in ["/", "/config.json", "/manifest.webmanifest", "/icons/favicon.svg", "/service-worker.js", startup]:
         headers = beta_headers(path)
         assert "cache-control: no-cache" in headers, (path, headers)
         assert beta_connects in headers, (path, headers)
@@ -265,6 +272,11 @@ with subtest("in WebKit, a signed-out member signs in where the beta client send
     assert re.fullmatch(rf"https://{beta}/\?code=[\w-]+&state=[\w-]+", callback), report
     assert cleaned == signed_out["url"] == signed_in["url"] == f"https://{beta}/", report
     assert signed_out["lounge"] and signed_in["lounge"], report
+
+with subtest("in WebKit, the beta client of a member signed in to concierge joins without leaving beta"):
+    fresh = report["members cookies only"]
+    assert fresh["lounge"], report
+    assert all(url.startswith(f"https://{beta}/") for url in fresh["visited"]), report
 
 with subtest("in a browser, pasting an image or picking one with gamja's upload button puts its link in the composer"):
     paste = ["webchat-upload-browser", grace["account"], grace["password"], f"{fixtures}/photo.png"]

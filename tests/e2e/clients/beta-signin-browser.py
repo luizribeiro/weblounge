@@ -1,7 +1,8 @@
 """In WebKit, open beta.weblounge.org signed out of members.weblounge.org
 and sign in where the beta client sends us, then open it again, signed
-in. Prints the pages each visit went through, where it ended, and
-whether the client showed #lounge.
+in, and once more in a browser that keeps only members' cookies. Prints
+the pages each visit went through, where it ended, and whether the
+client showed #lounge.
 
 WebKit, because Chromium's ignore_https_errors doesn't reach the
 client's SharedWorker, whose WebSocket then fails on the test's
@@ -12,7 +13,7 @@ import sys
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-from browser import MEMBERS, browsing
+from browser import MEMBERS, TIMEOUT_MS, browsing
 
 BETA = "https://beta.weblounge.org"
 
@@ -38,6 +39,14 @@ def visit(page, sign_in=None):
     return {"visited": visited, "url": page.url, "lounge": lounge}
 
 
+def with_members_cookies_only(page):
+    context = page.context.browser.new_context(ignore_https_errors=True)
+    context.add_cookies(page.context.cookies(MEMBERS))
+    fresh = context.new_page()
+    fresh.set_default_timeout(TIMEOUT_MS)
+    return fresh
+
+
 def main():
     nick, password = sys.argv[1:]
 
@@ -46,10 +55,13 @@ def main():
         page.fill("#password", password)
         page.click("button[type=submit]")
 
-    with browsing(webkit=True) as page:
+    # A signed-out launch learns it must sign in from the session-token
+    # endpoint's 401, which WebKit logs as a failed load.
+    with browsing(expected_errors=["status of 401 (Unauthorized)"], webkit=True) as page:
         report = {"signed out": visit(page, sign_in)}
         page.goto("about:blank")
         report["signed in"] = visit(page)
+        report["members cookies only"] = visit(with_members_cookies_only(page))
         print(json.dumps(report), flush=True)
 
 
