@@ -26,7 +26,7 @@ def visit(page, sign_in=None):
             visited.append(frame.url)
 
     page.on("framenavigated", record)
-    page.goto(f"{BETA}/")
+    page.goto(f"{BETA}/", wait_until="commit")
     if sign_in:
         page.wait_for_url(f"{MEMBERS}/signin?**")
         sign_in(page)
