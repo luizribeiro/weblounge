@@ -1,6 +1,14 @@
 ---
 name: nix
-description: Install Nix with KVM for the VM tests
+description: Install Nix with KVM, restoring the store a deps job saved
+
+inputs:
+  store-key:
+    description: Key of the cached Nix store to restore; none if empty
+    default: ""
+  save-store:
+    description: Save the store under store-key when the job ends
+    default: "false"
 
 runs:
   using: composite
@@ -21,3 +29,21 @@ runs:
         extra_nix_config: |
           system-features = nixos-test benchmark big-parallel kvm
           max-jobs = 2
+
+    # Falls back to the newest store when this key has none yet, so
+    # a changed input rebuilds only what depends on it.
+    - if: inputs.store-key != '' && inputs.save-store != 'true'
+      uses: nix-community/cache-nix-action/restore@v7
+      with:
+        primary-key: ${{ inputs.store-key }}
+        restore-prefixes-first-match: store-
+
+    - if: inputs.store-key != '' && inputs.save-store == 'true'
+      uses: nix-community/cache-nix-action@v7
+      with:
+        primary-key: ${{ inputs.store-key }}
+        restore-prefixes-first-match: store-
+        purge: true
+        purge-prefixes: store-
+        purge-last-accessed: P1D
+        purge-primary-key: never

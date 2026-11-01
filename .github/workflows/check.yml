@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       checks: ${{ steps.list.outputs.checks }}
+      store-key: ${{ steps.list.outputs.store-key }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix
@@ -33,14 +34,39 @@ jobs:
           checks=$(nix eval --json .#checks.x86_64-linux \
             --apply builtins.attrNames)
           echo "checks=$checks" >> "$GITHUB_OUTPUT"
+          toplevel=$(nix eval --raw \
+            .#checks.x86_64-linux.toplevel-credenza.drvPath)
+          echo "store-key=store-$(basename "$toplevel" .drv)" \
+            >> "$GITHUB_OUTPUT"
+
+  # Builds what most checks share, the crates, the web client and their
+  # toolchains among it, once, into a store the other jobs restore.
+  deps:
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/nix
+        with:
+          store-key: ${{ needs.list.outputs.store-key }}
+          save-store: "true"
+      - run: nix build -L --no-link .#checks.x86_64-linux.toplevel-credenza
 
   # What `nix flake check` evaluates besides the checks.
   outputs:
+    needs: [list, deps]
+    if: ${{ !cancelled() && needs.list.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix
+        with:
+          store-key: ${{ needs.list.outputs.store-key }}
       - name: Evaluate packages and formatter
         run: |
           nix eval --json .#packages.x86_64-linux \
@@ -50,7 +76,8 @@ jobs:
         run: nix build -L --no-link .#devShells.x86_64-linux.default
 
   build:
-    needs: list
+    needs: [list, deps]
+    if: ${{ !cancelled() && needs.list.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -61,11 +88,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix
+        with:
+          store-key: ${{ needs.list.outputs.store-key }}
       - run: nix build -L --no-link .#checks.x86_64-linux.${{ matrix.check }}
 
   # The one status to require: it passes only if every job above did.
   check:
-    needs: [list, outputs, build]
+    needs: [list, deps, outputs, build]
     if: always()
     runs-on: ubuntu-latest
     steps:
