@@ -5,6 +5,7 @@
 # subtests wait for the greeter's steps in its database, and read IRC
 # once a step is done.
 import re
+import shlex
 import time
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,7 @@ greeter_units = ["concierge-greeter-account", "concierge-greeter"]
 olive: Account = {"account": "olive", "password": "watches-the-lounge"}
 luiz: Account = {"account": "luiz", "password": "plain-old-vanilla"}
 luizs_browser = Browser("luiz")
+california = "TZDIR=/etc/zoneinfo TZ=America/Los_Angeles"
 # The greeter looks every five seconds; two looks leave it time for a step.
 two_ticks = 12
 
@@ -63,10 +65,21 @@ def joined_minutes_ago(account: str, minutes: int) -> None:
     )
 
 
+def move_clock_to(when: str) -> None:
+    """Sets credenza's clock to when, as date -d reads it in California."""
+    seconds = credenza.succeed(f"{california} date -d {shlex.quote(when)} +%s").strip()
+    credenza.succeed(f"date -s @{seconds}")
+
+
 def wait_for_step(account: str, step: str) -> None:
     """Waits until the greeter recorded step, an arrivals column, for account."""
     wait_for_concierge_sql(f"SELECT {step} IS NOT NULL FROM arrivals WHERE account = '{account}'", "1")
 
+
+# On a real Monday the greeter would remind luiz in the subtests before
+# the last, which sets the clock to Monday itself.
+if credenza.succeed(f"{california} date +%u").strip() == "1":
+    move_clock_to("tomorrow")
 
 with subtest("the greeter is in #lounge as concierge, a bot outside the members' bots' host"):
     credenza.wait_for_unit("concierge-greeter.service")
@@ -152,9 +165,7 @@ with subtest("someone removed before their welcome is never welcomed"):
 
 # It moves credenza's clock days on, so it goes last.
 with subtest("on Monday at 10:00 in California, luiz is reminded once to start the week's thread"):
-    california = "TZDIR=/etc/zoneinfo TZ=America/Los_Angeles"
-    monday = credenza.succeed(f"{california} date -d 'next monday 10:00' +%s").strip()
-    credenza.succeed(f"date -s @{monday}")
+    move_clock_to("next monday 10:00")
     wait_for_concierge_sql("SELECT count(*) FROM weekly_reminders", "1")
     time.sleep(two_ticks)
     lines = history_lines("concierge", **luiz, speaker="concierge")
