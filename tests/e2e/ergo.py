@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import Account, concierge_admin, ergo_api, irc, irc_command, register
+    from helpers import Account, assert_client_address_absent, concierge_admin, ergo_api, irc, irc_command, register
 
 alice: Account = {"account": "alice", "password": "correct-horse"}
 bob: Account = {"account": "bob", "password": "battery-staple"}
@@ -102,3 +102,11 @@ with subtest("every member's host shows as weblounge alone, always-on or not, so
     whois = irc("WHOIS alice", "WHOIS carol", **renewed)
     hosts = dict(re.findall(r" 311 carol (\S+) \S+ (\S+) ", whois))
     assert hosts == {"alice": "weblounge", "carol": "weblounge"}, whois
+
+with subtest("a client that drops its connection mid-burst leaves no address in Ergo's log"):
+    # Fakelag holds the rest of the burst's replies until after the reset, so Ergo's next write fails.
+    irc(*["PING burst"] * 20, close="reset", **renewed)
+    # Carol isn't always-on, so she leaves the network once Ergo gives up on the connection.
+    whois_carol = irc_command("WHOIS carol", **alice)
+    client.wait_until_succeeds(f"{whois_carol} | grep ' 401 alice carol ' >/dev/null", timeout=60)
+    assert_client_address_absent("journalctl -u ergochat")

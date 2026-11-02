@@ -162,10 +162,11 @@ in
       };
       # nixpkgs' ergo ships no translations for the default path to find.
       languages.enabled = false;
-      # connect-ip lines carry client addresses, which we promise not to keep.
+      # connect-ip lines, and quit lines for failed writes, carry client
+      # addresses, which we promise not to keep.
       logging = [{
         method = "stderr";
-        type = "* -userinput -useroutput -connect-ip";
+        type = "* -userinput -useroutput -connect-ip -quit";
         level = "info";
       }];
     };
