@@ -137,6 +137,11 @@ in
       ephemeral = true;
       loadedBy = [ "concierge" ];
     };
+    # What the push relay checks members' session tokens with.
+    weblounge.secrets.push-relay-introspection-secret = {
+      fromSops = true;
+      loadedBy = [ "concierge" ];
+    };
 
     # Ergo logs the web client in with SASL OAUTHBEARER, asking concierge
     # whose token it is. The secret comes from the environment; the empty
@@ -271,8 +276,8 @@ in
             proxy_set_header X-Real-IP $remote_addr;
           '';
         };
-        # Only Ergo introspects tokens, on loopback, and uploads come in on
-        # files.weblounge.org alone.
+        # Only Ergo and the push relay introspect tokens, on loopback, and
+        # uploads come in on files.weblounge.org alone.
         locations."= /oauth/introspect".return = "404";
         locations."= /upload".return = "404";
       }

@@ -99,6 +99,11 @@ members' site lands in #lounge without typing anything:
    token it is, authenticating with the generated
    `oauth-introspection-secret`, and never creates an account for it.
 
+Concierge's `INTROSPECTION_CLIENTS` lists who may introspect, each with
+a secret of its own; all get the same answers. Besides Ergo, the push
+relay checks members' session tokens as `push-relay`, with
+`push-relay-introspection-secret` from sops.
+
 In the VM it's at https://irc.weblounge.localhost:10443.
 
 `https://beta.weblounge.org` serves the web client that will replace

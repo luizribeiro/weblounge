@@ -130,7 +130,7 @@ with subtest("ergo's API and WebSocket listener and concierge listen on credenza
     assert_loopback_only(8097, "/")
     assert_loopback_only(8080, "/healthz")
 
-with subtest("concierge's introspection answers Ergo's secret alone"):
+with subtest("concierge's introspection refuses Ergo's id with any other secret"):
     introspect = "curl -s -o /dev/null -w '%{{http_code}}' -d token=x -u {} http://127.0.0.1:8080/oauth/introspect"
     secret = credenza.succeed(f"cat {generated['oauth-introspection-secret']}").strip()
     for credentials in ["ergo:wrong", "ergo:4TA0I7mJ3fUUcW05KJiODg", f"gamja:{secret}"]:

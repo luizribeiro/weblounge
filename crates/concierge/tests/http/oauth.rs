@@ -40,7 +40,7 @@ impl Site {
     }
 
     /// Introspects `token` as `client`, with its secret.
-    async fn introspect_by(&self, client: &str, token: &str) -> Value {
+    pub(crate) async fn introspect_by(&self, client: &str, token: &str) -> Value {
         let credentials = format!("{client}:{}", introspection_secret(client));
         let response = self.introspect_as(&credentials, token).await;
         assert_eq!(response.status(), 200);
@@ -627,13 +627,18 @@ async fn a_token_dies_with_its_session_or_its_member() {
 }
 
 #[tokio::test]
-async fn only_ergo_with_its_secret_may_introspect() {
+async fn only_the_introspection_clients_with_their_own_secrets_may_introspect() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
     let token = site.access_token(&cookie).await;
     for credentials in [
         "ergo:a wrong secret".to_owned(),
+        "push-relay:a wrong secret".to_owned(),
+        format!("push-relay:{}", introspection_secret("ergo")),
+        format!("ergo:{}", introspection_secret("push-relay")),
+        format!("unknown:{}", introspection_secret("unknown")),
+        format!("unknown:{}", introspection_secret("ergo")),
         "ergo:".to_owned(),
         format!("gamja:{}", introspection_secret("ergo")),
         format!("gamja:{}", introspection_secret("gamja")),
