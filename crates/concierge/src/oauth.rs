@@ -18,10 +18,16 @@ pub const WEBCHAT_CLIENT: &str = "gamja";
 /// The web client in beta beside gamja.
 pub const BETA_CLIENT: &str = "weblounge-client";
 /// The clients allowed to introspect tokens.
-pub const INTROSPECTION_CLIENTS: &[IntrospectionClient] = &[IntrospectionClient {
-    id: "ergo",
-    credential: "oauth-introspection-secret",
-}];
+pub const INTROSPECTION_CLIENTS: &[IntrospectionClient] = &[
+    IntrospectionClient {
+        id: "ergo",
+        credential: "oauth-introspection-secret",
+    },
+    IntrospectionClient {
+        id: "push-relay",
+        credential: "push-relay-introspection-secret",
+    },
+];
 /// Long enough for a browser to follow a redirect and post the code back.
 pub const CODE_LIFETIME: i64 = 60;
 /// A token handed over for the browser's session: short, since a page

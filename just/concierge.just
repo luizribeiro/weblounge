@@ -25,7 +25,7 @@ dev:
   #!/usr/bin/env bash
   set -euo pipefail
   mkdir -p "$STATE_DIRECTORY" "$CREDENTIALS_DIRECTORY" "$CONCIERGE_UPLOADS"
-  for secret in session-key ergo-api-token oauth-introspection-secret; do
+  for secret in session-key ergo-api-token oauth-introspection-secret push-relay-introspection-secret; do
     [ -e "$CREDENTIALS_DIRECTORY/$secret" ] || od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$CREDENTIALS_DIRECTORY/$secret"
   done
   trap 'kill $(jobs -p) 2>/dev/null' EXIT

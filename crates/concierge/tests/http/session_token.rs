@@ -3,7 +3,10 @@ use axum::{
     http::{Request, header},
     response::Response,
 };
-use concierge::{oauth::SESSION_TOKEN_LIFETIME, rate_limit::OAUTH_REQUESTS_PER_ADDRESS};
+use concierge::{
+    oauth::{INTROSPECTION_CLIENTS, SESSION_TOKEN_LIFETIME},
+    rate_limit::OAUTH_REQUESTS_PER_ADDRESS,
+};
 use serde_json::json;
 
 use crate::{BETA_URL, PUBLIC_URL, Site, WEBCHAT_URL, oauth::json};
@@ -58,6 +61,30 @@ fn assert_unreadable(response: &Response) {
         .filter(|name| name.as_str().starts_with("access-control-"))
         .collect();
     assert!(cors.is_empty(), "{cors:?}");
+}
+
+#[tokio::test]
+async fn every_introspection_client_learns_the_same_of_a_session_token() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let response = site
+        .session_token_with(Some(&cookie), &from(BETA_URL))
+        .await;
+    let token = json(response).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let as_ergo = site.introspect(&token).await;
+    assert_eq!(as_ergo["active"], true);
+    assert_eq!(as_ergo["username"], "alice");
+    for client in INTROSPECTION_CLIENTS {
+        let answer = site.introspect_by(client.id, &token).await;
+        assert_eq!(answer, as_ergo, "{}", client.id);
+        let unknown = site.introspect_by(client.id, "not-a-token").await;
+        assert_eq!(unknown, json!({ "active": false }), "{}", client.id);
+    }
 }
 
 #[tokio::test]

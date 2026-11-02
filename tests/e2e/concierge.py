@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         members,
         not_found_page,
         outcome,
+        session_token,
         wait_for_members,
     )
 
@@ -309,6 +310,32 @@ with subtest("concierge-admin bot delete erases the bot's account in Ergo"):
     body, _ = ergo_api("ns/info", accountName="bender")
     assert json.loads(body) == {"success": False}, body
     assert concierge_admin("bot", "list") == ""
+
+with subtest("the push relay introspects session tokens on loopback with its own secret, as Ergo does"):
+    add_member("pia", "a-pear-in-the-larder")
+    pias_browser = Browser("pia")
+    assert pias_browser.sign_in("pia", "a-pear-in-the-larder") == f"303 https://{members}/"
+    token = json.loads(session_token(pias_browser)["body"])["access_token"]
+    introspection_secrets = {
+        "ergo": credenza.succeed("cat /run/weblounge-secrets/oauth-introspection-secret").strip(),
+        "push-relay": credenza.succeed("cat /run/secrets/push-relay-introspection-secret").strip(),
+    }
+
+    def introspect(credentials: str) -> tuple[str, str]:
+        flags = f"-u {shlex.quote(credentials)} --data-urlencode token={shlex.quote(token)}"
+        response = credenza.succeed(f"curl -s -w '\\n%{{http_code}}' {flags} http://127.0.0.1:8080/oauth/introspect")
+        body, status = response.rsplit("\n", 1)
+        return status, body
+
+    answers = {name: introspect(f"{name}:{secret}") for name, secret in introspection_secrets.items()}
+    assert answers["push-relay"] == answers["ergo"], answers
+    status, body = answers["push-relay"]
+    assert status == "200" and json.loads(body)["username"] == "pia", answers
+    relay, ergo = introspection_secrets["push-relay"], introspection_secrets["ergo"]
+    for credentials in [f"push-relay:{ergo}", f"ergo:{relay}", f"pusher:{relay}"]:
+        assert introspect(credentials) == ("401", '{"error":"invalid_client"}'), credentials
+    outside_flags = ["-u", f"push-relay:{relay}", "-d", f"token={token}", "-o", "/dev/null", "-w", "%{http_code}"]
+    assert https(members, "/oauth/introspect", *outside_flags) == "404"
 
 with subtest("the passwords never reach the journal"):
     credenza.succeed("journalctl --sync")
