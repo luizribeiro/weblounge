@@ -105,7 +105,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         public_url: config.public_url.clone(),
         invite_links: config.invite_links.clone(),
         web_clients: WebClients::new(config.webchat_url.clone(), config.beta_client_url.clone()),
-        introspection_secret: config.read_introspection_secret()?,
+        introspection_secrets: config.read_introspection_secrets()?,
         irc_server: config.irc_server.clone(),
         presence_defaults: config.presence_defaults,
         history_expiry: config.history_expiry,

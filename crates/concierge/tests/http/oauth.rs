@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 
-use crate::{BETA_URL, INTROSPECTION_SECRET, PUBLIC_URL, Site, WEBCHAT_URL, body_text, location};
+use crate::{BETA_URL, PUBLIC_URL, Site, WEBCHAT_URL, body_text, introspection_secret, location};
 
 impl Site {
     /// Asks for a code as gamja does, with the session in `cookie`.
@@ -34,10 +34,15 @@ impl Site {
             .await
     }
 
+    /// Introspects `token` the way Ergo does.
     pub(crate) async fn introspect(&self, token: &str) -> Value {
-        let response = self
-            .introspect_as(&format!("ergo:{INTROSPECTION_SECRET}"), token)
-            .await;
+        self.introspect_by("ergo", token).await
+    }
+
+    /// Introspects `token` as `client`, with its secret.
+    async fn introspect_by(&self, client: &str, token: &str) -> Value {
+        let credentials = format!("{client}:{}", introspection_secret(client));
+        let response = self.introspect_as(&credentials, token).await;
         assert_eq!(response.status(), 200);
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
         json(response).await
@@ -630,8 +635,9 @@ async fn only_ergo_with_its_secret_may_introspect() {
     for credentials in [
         "ergo:a wrong secret".to_owned(),
         "ergo:".to_owned(),
-        format!("gamja:{INTROSPECTION_SECRET}"),
-        format!("ergo:{INTROSPECTION_SECRET} "),
+        format!("gamja:{}", introspection_secret("ergo")),
+        format!("gamja:{}", introspection_secret("gamja")),
+        format!("ergo:{} ", introspection_secret("ergo")),
     ] {
         let response = site.introspect_as(&credentials, &token).await;
         assert_eq!(response.status(), 401, "{credentials}");

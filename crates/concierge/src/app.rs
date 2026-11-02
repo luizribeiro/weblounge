@@ -10,7 +10,6 @@ use axum::{
 };
 use ergo_api::Client;
 use outbox::Outbox;
-use secret::SecretString;
 
 use crate::{
     assets::{self, Assets},
@@ -19,7 +18,7 @@ use crate::{
     config::{IrcServer, Presence},
     cors, csrf,
     db::Db,
-    oauth::WebClients,
+    oauth::{IntrospectionSecrets, WebClients},
     origin::{FilesOrigin, SiteOrigin},
     rate_limit::{AddressLimiter, Limiter, MailLimiter, UploadLimiter},
     reset_mail, routes, session,
@@ -53,8 +52,8 @@ pub struct App {
     pub invite_links: String,
     /// The web clients, which sign members in through our OAuth server.
     pub web_clients: WebClients,
-    /// What Ergo authenticates with to introspect the web client's tokens.
-    pub introspection_secret: SecretString,
+    /// What the introspection clients authenticate with.
+    pub introspection_secrets: IntrospectionSecrets,
     /// Where members point their IRC clients.
     pub irc_server: IrcServer,
     /// What Ergo turns on for members who haven't chosen.

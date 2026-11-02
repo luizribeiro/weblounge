@@ -226,9 +226,10 @@ pub struct Introspection {
     token: SecretString,
 }
 
-/// RFC 7662 introspection, for Ergo alone: it authenticates with its
-/// secret, and learns whose token gamja logged in with, in the
-/// `username` claim it reads.
+/// RFC 7662 introspection, for the introspection clients alone: each
+/// authenticates with its own secret, and learns whose token a web
+/// client handed it, in the `username` claim Ergo reads. Every client
+/// gets the same answer.
 pub async fn introspect(
     State(app): State<AppState>,
     headers: HeaderMap,
@@ -237,7 +238,7 @@ pub async fn introspect(
     let authorization = headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok());
-    if !oauth::authenticates_introspection(authorization, app.introspection_secret.expose()) {
+    if !app.introspection_secrets.authenticate(authorization) {
         let challenge = [(header::WWW_AUTHENTICATE, "Basic realm=\"concierge\"")];
         let error = token_error(StatusCode::UNAUTHORIZED, "invalid_client");
         return (challenge, error).into_response();

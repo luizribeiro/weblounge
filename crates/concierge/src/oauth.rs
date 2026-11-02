@@ -17,8 +17,11 @@ use crate::{authorization::Credentials, db::AuthorizationCode, origin::WebchatOr
 pub const WEBCHAT_CLIENT: &str = "gamja";
 /// The web client in beta beside gamja.
 pub const BETA_CLIENT: &str = "weblounge-client";
-/// Ergo, the only client allowed to introspect tokens.
-pub const INTROSPECTION_CLIENT: &str = "ergo";
+/// The clients allowed to introspect tokens.
+pub const INTROSPECTION_CLIENTS: &[IntrospectionClient] = &[IntrospectionClient {
+    id: "ergo",
+    credential: "oauth-introspection-secret",
+}];
 /// Long enough for a browser to follow a redirect and post the code back.
 pub const CODE_LIFETIME: i64 = 60;
 /// A token handed over for the browser's session: short, since a page
@@ -296,14 +299,36 @@ pub fn session_token_expiry(now: i64, session_expires_at: i64) -> i64 {
     (now + SESSION_TOKEN_LIFETIME).min(session_expires_at)
 }
 
-/// Whether an `Authorization` header authenticates Ergo with `secret`,
-/// by HTTP Basic with form-encoded credentials, as RFC 6749 has it.
-pub fn authenticates_introspection(authorization: Option<&str>, secret: &str) -> bool {
-    let Some((id, given)) = authorization.and_then(basic_credentials) else {
-        return false;
-    };
-    let right_secret: bool = given.expose().as_bytes().ct_eq(secret.as_bytes()).into();
-    id == INTROSPECTION_CLIENT && right_secret && !secret.is_empty()
+/// A confidential client that introspects tokens, with the secret in the
+/// systemd credential named `credential`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IntrospectionClient {
+    pub id: &'static str,
+    pub credential: &'static str,
+}
+
+/// Each introspection client's secret, by its id.
+#[derive(Debug)]
+pub struct IntrospectionSecrets(Vec<(&'static str, SecretString)>);
+
+impl IntrospectionSecrets {
+    pub fn new(secrets: impl IntoIterator<Item = (&'static str, SecretString)>) -> Self {
+        Self(secrets.into_iter().collect())
+    }
+
+    /// Whether an `Authorization` header authenticates one of the clients
+    /// with its own secret, by HTTP Basic with form-encoded credentials,
+    /// as RFC 6749 has it.
+    pub fn authenticate(&self, authorization: Option<&str>) -> bool {
+        let Some((id, given)) = authorization.and_then(basic_credentials) else {
+            return false;
+        };
+        self.0.iter().any(|(client, secret)| {
+            let secret = secret.expose().as_bytes();
+            let right_secret: bool = given.expose().as_bytes().ct_eq(secret).into();
+            id == *client && right_secret && !secret.is_empty()
+        })
+    }
 }
 
 fn basic_credentials(authorization: &str) -> Option<(String, SecretString)> {
@@ -797,18 +822,49 @@ mod tests {
         assert_eq!(session_token_expiry(ISSUED, ISSUED + 60), ISSUED + 60);
     }
 
+    const OTHER_SECRET: &str = "a secret of the other client's, long enough";
+
+    fn introspection_secrets() -> IntrospectionSecrets {
+        IntrospectionSecrets::new([("ergo", SECRET.into()), ("other", OTHER_SECRET.into())])
+    }
+
+    fn authenticates(header: Option<&str>) -> bool {
+        introspection_secrets().authenticate(header)
+    }
+
     #[test]
     fn ergo_authenticates_with_its_secret_the_way_it_sends_it() {
         let header = basic(&format!("ergo:{SECRET}"));
-        assert!(authenticates_introspection(Some(&header), SECRET));
+        assert!(authenticates(Some(&header)));
         let lowercase = header.replacen("Basic", "basic", 1);
-        assert!(authenticates_introspection(Some(&lowercase), SECRET));
+        assert!(authenticates(Some(&lowercase)));
+    }
+
+    #[test]
+    fn each_client_authenticates_with_its_own_secret_alone() {
+        assert!(authenticates(Some(&basic(&format!(
+            "other:{OTHER_SECRET}"
+        )))));
+        assert!(!authenticates(Some(&basic(&format!("other:{SECRET}")))));
+        assert!(!authenticates(Some(&basic(&format!(
+            "ergo:{OTHER_SECRET}"
+        )))));
+    }
+
+    #[test]
+    fn introspection_clients_each_have_an_id_and_a_credential_of_their_own() {
+        let ids: std::collections::HashSet<_> =
+            INTROSPECTION_CLIENTS.iter().map(|c| c.id).collect();
+        let credentials: std::collections::HashSet<_> =
+            INTROSPECTION_CLIENTS.iter().map(|c| c.credential).collect();
+        assert_eq!(ids.len(), INTROSPECTION_CLIENTS.len());
+        assert_eq!(credentials.len(), INTROSPECTION_CLIENTS.len());
     }
 
     #[test]
     fn credentials_are_form_decoded() {
-        let header = basic("ergo:a%2Bb%3Ac");
-        assert!(authenticates_introspection(Some(&header), "a+b:c"));
+        let secrets = IntrospectionSecrets::new([("ergo", "a+b:c".into())]);
+        assert!(secrets.authenticate(Some(&basic("ergo:a%2Bb%3Ac"))));
     }
 
     #[test]
@@ -816,6 +872,7 @@ mod tests {
         for header in [
             None,
             Some(basic(&format!("gamja:{SECRET}"))),
+            Some(basic(&format!("unknown:{SECRET}"))),
             Some(basic("ergo:wrong")),
             Some(basic("ergo:")),
             Some(basic(&format!("ergo:{SECRET}x"))),
@@ -823,11 +880,10 @@ mod tests {
             Some(format!("Bearer {SECRET}")),
             Some("Basic not-base64!".into()),
         ] {
-            assert!(
-                !authenticates_introspection(header.as_deref(), SECRET),
-                "{header:?}"
-            );
+            assert!(!authenticates(header.as_deref()), "{header:?}");
         }
-        assert!(!authenticates_introspection(Some(&basic("ergo:")), ""));
+        let empty = IntrospectionSecrets::new([("ergo", "".into())]);
+        assert!(!empty.authenticate(Some(&basic("ergo:"))));
+        assert!(!IntrospectionSecrets::new([]).authenticate(Some(&basic("ergo:"))));
     }
 }

@@ -11,6 +11,7 @@ pub use crate::routes::presence::Presence;
 use crate::{
     history,
     name::MemberName,
+    oauth::{INTROSPECTION_CLIENTS, IntrospectionSecrets},
     origin::{self, FilesOrigin, Origin, SiteOrigin, WebchatOrigin},
     uploads::Store,
 };
@@ -18,7 +19,6 @@ pub use common::config::ConfigError;
 
 pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
 pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
-pub const INTROSPECTION_SECRET_CREDENTIAL: &str = "oauth-introspection-secret";
 const DEFAULT_ERGO_API: &str = "http://127.0.0.1:8089";
 const DATABASE: &str = "concierge.db";
 const MIN_SECRET_BYTES: usize = 32;
@@ -169,9 +169,13 @@ impl Config {
         ergo_client(&self.ergo_api, &self.credentials_dir)
     }
 
-    /// The secret Ergo authenticates with to introspect tokens.
-    pub fn read_introspection_secret(&self) -> anyhow::Result<SecretString> {
-        self.read_long_credential(INTROSPECTION_SECRET_CREDENTIAL)
+    /// The secrets the introspection clients authenticate with.
+    pub fn read_introspection_secrets(&self) -> anyhow::Result<IntrospectionSecrets> {
+        INTROSPECTION_CLIENTS
+            .iter()
+            .map(|client| Ok((client.id, self.read_long_credential(client.credential)?)))
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map(IntrospectionSecrets::new)
     }
 
     /// The credential `name`, refused unless it's long enough that nobody
@@ -379,6 +383,7 @@ fn checked_origin<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{Engine, engine::general_purpose::STANDARD};
     use std::collections::HashMap;
 
     const PRODUCTION: [(&str, &str); 16] = [
@@ -696,20 +701,45 @@ mod tests {
         assert!(error.contains("holds 7 bytes"), "{error}");
     }
 
+    fn write_introspection_secrets(dir: &std::path::Path, secret: impl Fn(&str) -> String) {
+        for client in INTROSPECTION_CLIENTS {
+            let path = dir.join(client.credential);
+            std::fs::write(path, format!("{}\n", secret(client.id))).unwrap();
+        }
+    }
+
+    fn long_secret(client: &str) -> String {
+        format!("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08-{client}")
+    }
+
     #[test]
-    fn reads_the_introspection_secret_and_refuses_a_short_one() {
+    fn reads_each_introspection_clients_secret_without_its_newline() {
         let dir = tempfile::tempdir().unwrap();
-        let config = config_with_credentials(dir.path());
-        assert!(config.read_introspection_secret().is_err());
-        let path = dir.path().join(INTROSPECTION_SECRET_CREDENTIAL);
-        std::fs::write(&path, "hunter2\n").unwrap();
-        assert!(config.read_introspection_secret().is_err());
-        let generated = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
-        std::fs::write(&path, format!("{generated}\n")).unwrap();
-        assert_eq!(
-            config.read_introspection_secret().unwrap().expose(),
-            generated
-        );
+        write_introspection_secrets(dir.path(), long_secret);
+        let secrets = config_with_credentials(dir.path())
+            .read_introspection_secrets()
+            .unwrap();
+        for client in INTROSPECTION_CLIENTS {
+            let credentials = format!("{}:{}", client.id, long_secret(client.id));
+            let header = format!("Basic {}", STANDARD.encode(credentials));
+            assert!(secrets.authenticate(Some(&header)), "{}", client.id);
+        }
+    }
+
+    #[test]
+    fn refuses_a_missing_or_short_introspection_secret() {
+        for missing in INTROSPECTION_CLIENTS {
+            let dir = tempfile::tempdir().unwrap();
+            write_introspection_secrets(dir.path(), long_secret);
+            let config = config_with_credentials(dir.path());
+            let path = dir.path().join(missing.credential);
+            std::fs::remove_file(&path).unwrap();
+            assert!(config.read_introspection_secrets().is_err(), "{missing:?}");
+            std::fs::write(&path, "hunter2\n").unwrap();
+            let error = config.read_introspection_secrets().unwrap_err().to_string();
+            assert!(error.contains(missing.credential), "{error}");
+            assert!(error.contains("holds 7 bytes"), "{error}");
+        }
     }
 
     #[test]
