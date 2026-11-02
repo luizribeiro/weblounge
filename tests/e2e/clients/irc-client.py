@@ -9,6 +9,7 @@ import contextlib
 import os
 import socket
 import ssl
+import struct
 
 QUIET_SECONDS = 2
 
@@ -117,6 +118,11 @@ class Connection:
                 return
             self.buffer += data
 
+    def reset(self):
+        """Drops the connection with a TCP RST, as a phone losing its network can leave it."""
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+        self.sock.close()
+
     def drain(self, seconds):
         self.sock.settimeout(seconds)
         for _ in self.lines():
@@ -155,6 +161,12 @@ def main():
         metavar="SECONDS",
         help="stay connected after the commands until the server is quiet this long or closes the connection",
     )
+    parser.add_argument(
+        "--close",
+        choices=["quit", "reset"],
+        default="quit",
+        help="leave with QUIT once the server is quiet, or reset the connection once it answers the first PING",
+    )
     parser.add_argument("commands", nargs="*")
     args = parser.parse_args()
     if args.account and not (args.password or args.cert):
@@ -182,6 +194,10 @@ def main():
 
     for command in args.commands:
         conn.send(command)
+    if args.close == "reset":
+        conn.read_until("PONG")
+        conn.reset()
+        return
     conn.drain(args.linger)
     with contextlib.suppress(OSError):
         conn.send("QUIT")
