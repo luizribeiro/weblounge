@@ -44,7 +44,7 @@ use concierge::{
     email::Email,
     invite_rules,
     name::MemberName,
-    oauth::WebClients,
+    oauth::{INTROSPECTION_CLIENTS, IntrospectionSecrets, WebClients},
     origin::Origin,
     rate_limit::{
         AddressLimiter, BOT_CHANGES_PER_ADDRESS, LOOKUPS_PER_ADDRESS, Limiter, MailLimiter,
@@ -69,7 +69,6 @@ const JOIN_URL: &str = "https://join.weblounge.org";
 const FILES_URL: &str = "https://files.weblounge.org";
 const SESSION_KEY: &[u8] = b"a session key for tests, at least 32 bytes";
 const PASSWORD: &str = "correct-horse-battery";
-const INTROSPECTION_SECRET: &str = "a secret Ergo introspects tokens with";
 /// Ergo's `2w`, as production configures it.
 const HISTORY_EXPIRY: i64 = 14 * 24 * 60 * 60;
 
@@ -139,7 +138,11 @@ impl Site {
                 Origin::parse(WEBCHAT_URL).unwrap(),
                 Some(Origin::parse(BETA_URL).unwrap()),
             ),
-            introspection_secret: INTROSPECTION_SECRET.into(),
+            introspection_secrets: IntrospectionSecrets::new(
+                INTROSPECTION_CLIENTS
+                    .iter()
+                    .map(|client| (client.id, introspection_secret(client.id).into())),
+            ),
             irc_server: irc_server(),
             presence_defaults: Presence {
                 always_on: true,
@@ -342,6 +345,11 @@ async fn execute(database: &Path, sql: &str) {
     let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
     sqlx::raw_sql(sql).execute(&pool).await.unwrap();
     pool.close().await;
+}
+
+/// The secret `client` introspects tokens with.
+fn introspection_secret(client: &str) -> String {
+    format!("a secret {client} introspects tokens with")
 }
 
 fn irc_server() -> IrcServer {
