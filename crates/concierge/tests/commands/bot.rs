@@ -153,6 +153,29 @@ mod create {
         let luiz = MemberName::new("luiz");
         let bots = fixture.db().await.bots(Some(&luiz)).await.unwrap();
         assert_eq!(bots.len() as i64, beyond);
+        assert!(bots.iter().all(|bot| !bot.service));
+    }
+
+    #[tokio::test]
+    async fn makes_a_service_bot_when_asked() {
+        let fixture = Fixture::with_owners().await;
+
+        let output = fixture
+            .run(&["bot", "create", "luiz", "bender", "--service"])
+            .await
+            .unwrap();
+
+        assert!(
+            fixture
+                .signs_in_to_ergo("bender", printed_password(&output))
+                .await
+        );
+        let bot = fixture.bot("bender").await.unwrap();
+        assert!(bot.service);
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
     }
 
     #[tokio::test]
@@ -512,9 +535,78 @@ mod ensure {
     }
 
     async fn ensure(fixture: &Fixture, owner: &str, file: &Path) -> anyhow::Result<String> {
+        ensure_with(fixture, owner, file, &[]).await
+    }
+
+    async fn ensure_with(
+        fixture: &Fixture,
+        owner: &str,
+        file: &Path,
+        flags: &[&str],
+    ) -> anyhow::Result<String> {
         let file = file.to_str().unwrap();
-        let args = ["bot", "ensure", owner, "bender", "--password-file", file];
+        let mut args = vec!["bot", "ensure", owner, "bender", "--password-file", file];
+        args.extend(flags);
         fixture.run(&args).await
+    }
+
+    async fn is_service(fixture: &Fixture) -> bool {
+        fixture.bot("bender").await.unwrap().service
+    }
+
+    #[tokio::test]
+    async fn creates_a_missing_service_bot_when_asked() {
+        let fixture = Fixture::with_owners().await;
+        let file = password_file(&fixture, PASSWORD);
+
+        let output = ensure_with(&fixture, "luiz", &file, &["--service"]).await;
+
+        assert_eq!(output.unwrap(), "created bender\n");
+        assert!(fixture.signs_in_to_ergo("bender", PASSWORD).await);
+        assert!(is_service(&fixture).await);
+    }
+
+    #[tokio::test]
+    async fn makes_an_existing_bot_a_service_bot_that_stays_one_without_asking_again() {
+        let fixture = Fixture::with_owners().await;
+        fixture
+            .run(&["bot", "create", "luiz", "bender"])
+            .await
+            .unwrap();
+        let file = password_file(&fixture, PASSWORD);
+        ensure(&fixture, "luiz", &file).await.unwrap();
+        assert!(!is_service(&fixture).await);
+
+        let output = ensure_with(&fixture, "luiz", &file, &["--service"]).await;
+        assert_eq!(output.unwrap(), "updated bender\n");
+        assert!(is_service(&fixture).await);
+
+        assert_eq!(
+            ensure(&fixture, "luiz", &file).await.unwrap(),
+            "updated bender\n"
+        );
+        assert!(is_service(&fixture).await);
+        assert!(fixture.signs_in_to_ergo("bender", PASSWORD).await);
+        assert_eq!(
+            fixture.vhost("bender").as_deref(),
+            Some("weblounge/bot/luiz")
+        );
+    }
+
+    #[tokio::test]
+    async fn makes_no_other_members_bot_a_service_bot() {
+        let fixture = Fixture::with_owners().await;
+        fixture.add_member("zoe", Some("luiz")).await;
+        fixture
+            .run(&["bot", "create", "zoe", "bender"])
+            .await
+            .unwrap();
+        let file = password_file(&fixture, PASSWORD);
+
+        let error = ensure_with(&fixture, "luiz", &file, &["--service"]).await;
+
+        assert_eq!(error.unwrap_err().to_string(), "bender belongs to zoe");
+        assert!(!is_service(&fixture).await);
     }
 
     #[tokio::test]
@@ -816,6 +908,8 @@ mod list {
             .await;
         fixture.insert_bot("hal", "luiz", None).await;
         fixture.insert_deleted_bot("dalek").await;
+        let db = fixture.db().await;
+        assert!(db.make_service_bot(&BotName::new("bender")).await.unwrap());
         fixture
     }
 
@@ -824,7 +918,7 @@ mod list {
         let fixture = with_bots().await;
         assert_eq!(
             fixture.run(&["bot", "list"]).await.unwrap(),
-            "Bender luiz 2025-10-09 answers !ping\n\
+            "Bender luiz 2025-10-09 (service) answers !ping\n\
              hal luiz 2025-10-09\n\
              marvin Zoe 2025-10-09 posts the weather\n"
         );

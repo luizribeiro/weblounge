@@ -273,6 +273,11 @@ machine. They print plain lines a script can read:
 | `bot delete <name>`                             | Erases a bot and its uploads, disconnecting it; frees its name   |
 | `bot ensure <owner> <name> --password-file <f>` | Creates the bot if missing, else sets its password; `-` is stdin |
 
+`--service` on `bot create` or `bot ensure` makes a service bot, one the
+network runs, such as bender: it takes none of its owner's three places.
+`bot list` marks it `(service)`, and `bot ensure` without the flag leaves
+it one.
+
 After `member delete`, an oper still runs `/NS ERASE <account>`. `bot
 delete` erases the bot's account itself, through
 `pkgs/ergochat-ns-erase-api.patch`, which disconnects it too.

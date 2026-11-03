@@ -26,9 +26,13 @@ pub enum BotCommand {
         /// What the bot is for.
         #[arg(long)]
         note: Option<String>,
+        /// Make it a service bot, which the network runs: it takes none of
+        /// its owner's places for bots.
+        #[arg(long)]
+        service: bool,
     },
     /// List the bots, of one member or of everyone: name, owner, creation
-    /// date and note.
+    /// date, (service) for service bots, and note.
     List { owner: Option<String> },
     /// Give a bot a new generated password, and print it once. Turns its
     /// always-on and auto-away off and sets its vhost again too.
@@ -46,6 +50,10 @@ pub enum BotCommand {
         /// The file holding the password, or - for standard input.
         #[arg(long)]
         password_file: PathBuf,
+        /// Make it a service bot, as create --service does. Without it, a
+        /// service bot stays one.
+        #[arg(long)]
+        service: bool,
     },
     /// A migration: give every live bot its owner's vhost and print each
     /// one's name. Bots from before vhosts need it once; create, ensure
@@ -55,9 +63,12 @@ pub enum BotCommand {
 
 pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<String> {
     match command {
-        BotCommand::Create { owner, name, note } => {
-            create(admin, &owner, &name, note.as_deref()).await
-        }
+        BotCommand::Create {
+            owner,
+            name,
+            note,
+            service,
+        } => create(admin, &owner, &name, note.as_deref(), service).await,
         BotCommand::List { owner } => list(admin, owner.as_deref()).await,
         BotCommand::ResetPassword { name } => reset_password(admin, &name).await,
         BotCommand::Delete { name } => delete(admin, &name).await,
@@ -65,7 +76,8 @@ pub(super) async fn run(command: BotCommand, admin: &Admin) -> anyhow::Result<St
             owner,
             name,
             password_file,
-        } => ensure(admin, &owner, &name, &password_file).await,
+            service,
+        } => ensure(admin, &owner, &name, &password_file, service).await,
         BotCommand::ApplyVhosts => apply_vhosts(admin).await,
     }
 }
@@ -86,10 +98,11 @@ async fn create(
     owner: &str,
     name: &str,
     note: Option<&str>,
+    service: bool,
 ) -> anyhow::Result<String> {
     let owner = admin.current_member(owner).await?;
     let password = password::generate();
-    register(admin, &owner, name, note, &password).await?;
+    register(admin, &owner, name, note, &password, service).await?;
     Ok(print_once(&password))
 }
 
@@ -98,11 +111,12 @@ async fn ensure(
     owner: &str,
     name: &str,
     password_file: &Path,
+    service: bool,
 ) -> anyhow::Result<String> {
     let password = read_password(password_file)?;
     let owner = admin.current_member(owner).await?;
     let Some(bot) = admin.db.bot(name).await? else {
-        let nick = register(admin, &owner, name, None, &password).await?;
+        let nick = register(admin, &owner, name, None, &password, service).await?;
         return Ok(format!("created {nick}\n"));
     };
     ensure_live(&bot)?;
@@ -112,6 +126,9 @@ async fn ensure(
         bot.account,
         bot.owner
     );
+    if service {
+        admin.db.make_service_bot(&bot.account).await?;
+    }
     admin.bots().set_up(&bot.account, &bot.owner).await?;
     password::set(&admin.ergo, &bot.account, &password).await?;
     Ok(format!("updated {}\n", bot.account))
@@ -150,7 +167,8 @@ async fn list(admin: &Admin, owner: Option<&str>) -> anyhow::Result<String> {
                 bot.owner.to_string(),
                 tree::date(bot.created_at),
             ];
-            let fields: Vec<_> = fields.into_iter().chain(bot.note).collect();
+            let service = bot.service.then(|| "(service)".to_owned());
+            let fields: Vec<_> = fields.into_iter().chain(service).chain(bot.note).collect();
             fields.join(" ") + "\n"
         })
         .collect())
@@ -225,10 +243,11 @@ async fn register(
     name: &str,
     note: Option<&str>,
     password: &Passphrase,
+    service: bool,
 ) -> anyhow::Result<BotName> {
     match admin
         .bots()
-        .create(&owner.account, name, note, password, None)
+        .create(&owner.account, name, note, password, None, service)
         .await?
     {
         Ok(bot) => Ok(bot),

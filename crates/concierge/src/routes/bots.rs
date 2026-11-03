@@ -138,6 +138,7 @@ pub async fn create(
             None,
             &password,
             Some(bot_rules::MAX_LIVE),
+            false,
         )
         .await;
     match created {

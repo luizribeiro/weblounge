@@ -78,7 +78,9 @@ pub async fn name_claim(
 impl Bots<'_> {
     /// Records `name` as a bot of `owner` and registers its Ergo account
     /// with `password`, answering its name, or why it can't be created.
-    /// With `max_live`, it's created only while `owner` has fewer live bots.
+    /// With `max_live`, it's created only while `owner` has fewer live bots,
+    /// unless it's a `service` bot, which the network runs outside its
+    /// owner's quota.
     pub async fn create(
         &self,
         owner: &MemberName,
@@ -86,6 +88,7 @@ impl Bots<'_> {
         note: Option<&str>,
         password: &Passphrase,
         max_live: Option<i64>,
+        service: bool,
     ) -> anyhow::Result<Result<BotName, Refusal>> {
         let nick = match Nick::parse(name) {
             Ok(nick) => nick,
@@ -105,7 +108,7 @@ impl Bots<'_> {
             owner,
             note,
             created_at: db::now(),
-            service: false,
+            service,
         };
         match self
             .db
