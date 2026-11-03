@@ -250,8 +250,9 @@ with subtest("ergo, concierge and its other units, the push relay, nginx, bender
     ]:
         credenza.succeed(f"systemd-analyze security --threshold=20 --no-pager {unit}.service")
 
-# A server on the Internet, as security.nix stands one in.
+# A server on the Internet, and credenza's own address there, as security.nix stands them in.
 internet_host = "198.51.100.2"
+credenzas_address = "198.51.100.1"
 
 
 def reaches(unit: str, address: str, port: int) -> bool:
@@ -287,7 +288,7 @@ with subtest("the mailer reaches nothing on credenza but resolved, and no privat
     bind = shlex.quote("import socket; socket.socket().bind(('0.0.0.0', 9001))")
     credenza.fail(f"as-concierge-mailer {tools['python3']} -c {bind}")
 
-with subtest("the push relay connects to port 443 alone out there, and on credenza to concierge and resolved"):
+with subtest("the push relay connects to port 443 on other machines alone, and on credenza to concierge and resolved"):
     assert reaches("push-relay", internet_host, 443)
     assert reaches("push-relay", "127.0.0.1", 8080)
     assert reaches("push-relay", "127.0.0.53", 53)
@@ -296,6 +297,8 @@ with subtest("the push relay connects to port 443 alone out there, and on creden
         (internet_host, 465),
         ("127.0.0.1", 8089),
         ("127.0.0.1", 8097),
+        ("127.0.0.1", 443),
+        (credenzas_address, 443),
         (private, 443),
     ]:
         assert not reaches("push-relay", address, port), (address, port)

@@ -1,9 +1,10 @@
-# Confines a service's outbound connections to a few TCP ports, wherever
-# they lead, a few ports on loopback, and name lookups through resolved's
-# stub; it may still answer connections made to it, as to a listener. A
-# rule naming a unit's cgroup or user resolves it as the rule loads, which
-# is before the unit runs, so systemd puts each unit's cgroup in an
-# nftables set as it starts (NFTSet=), and the rules match the set.
+# Confines a service's outbound connections to a few TCP ports on other
+# machines, whichever they are, a few ports on loopback, and name lookups
+# through resolved's stub; it may still answer connections made to it, as
+# to a listener. A rule naming a unit's cgroup or user resolves it as the
+# rule loads, which is before the unit runs, so systemd puts each unit's
+# cgroup in an nftables set as it starts (NFTSet=), and the rules match
+# the set.
 { config, lib, pkgs, ... }:
 
 let
@@ -28,7 +29,7 @@ let
 
         chain ${setOf service} {
           ct state established,related accept
-          tcp dport ${portSet ports} accept
+          oifname != "lo" tcp dport ${portSet ports} accept
           ip daddr 127.0.0.53 meta l4proto { tcp, udp } th dport 53 accept
           ${lib.optionalString (loopbackPorts ? ${service}) "ip daddr 127.0.0.1 tcp dport ${portSet loopbackPorts.${service}} accept"}
           reject
