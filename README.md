@@ -114,6 +114,29 @@ reads its settings from the `/config.json` `services/beta-client.nix`
 generates, and connects to `wss://beta.weblounge.org/socket`. Members
 are still sent to gamja.
 
+## Push notifications
+
+`https://push.weblounge.org` is the push relay, `services/push-relay.nix`,
+also from weblounge-client but through an input of its own, `push-relay`,
+so it and the beta client can move apart. A device registers with it once,
+which takes a member's session token that it checks with concierge, and
+gets a route for each home, such as our Ergo, to POST its encrypted
+pushes to. The relay passes them on to the device's browser push service,
+signed with its own VAPID key, `push-relay-vapid-key` from sops; it never
+decrypts them. It keeps devices and routes in
+`/var/lib/push-relay/push-relay.sqlite3`, and reaches the push services
+on port 443 alone, and concierge.
+
+nginx refuses bodies over 4 KB and holds homes to a rate per route, and
+per address but for credenza's own, which Ergo pushes from for every
+member; it holds devices to a rate per address. Like concierge's limits,
+these keep addresses in memory alone, for minutes. The web client will need the key's public half, as base64url:
+
+```sh
+sops decrypt --extract '["push-relay-vapid-key"]' secrets/credenza.yaml \
+  | openssl ec -pubout -outform DER | tail -c 65 | basenc --base64url | tr -d '=\n'
+```
+
 ## Bots
 
 A bot is an Ergo account a member owns. Ergo can't tell it from anyone
