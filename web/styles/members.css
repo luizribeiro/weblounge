@@ -521,6 +521,16 @@ dialog.card {
   gap: 0 1rem;
 }
 
+.bot-label {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
 .dialog-actions {
   display: flex;
   flex-wrap: wrap;

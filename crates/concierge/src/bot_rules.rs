@@ -6,7 +6,7 @@
 //!
 //! Times are Unix seconds.
 
-use crate::name::MemberName;
+use crate::{db::Bot, name::MemberName};
 
 /// How many live bots a member may have, counting the ones an admin made
 /// for them.
@@ -16,6 +16,12 @@ pub const MAX_LIVE: i64 = 3;
 pub enum Refusal {
     Unverified,
     TooMany,
+}
+
+/// How many of a member's live `bots` count toward [`MAX_LIVE`]: service
+/// bots, which the network runs, don't.
+pub fn counted(bots: &[Bot]) -> i64 {
+    bots.iter().filter(|bot| !bot.service).count() as i64
 }
 
 /// How many more bots a member who `verified` their email and has `live`
@@ -57,6 +63,7 @@ pub fn may_create(verified: bool, live: i64) -> Result<(), Refusal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::name::BotName;
 
     #[test]
     fn confirmed_members_make_up_to_three_live_bots() {
@@ -72,6 +79,22 @@ mod tests {
     fn bots_an_admin_made_beyond_the_cap_leave_none_to_make() {
         assert_eq!(remaining(true, MAX_LIVE + 2), 0);
         assert_eq!(may_create(true, MAX_LIVE + 2), Err(Refusal::TooMany));
+    }
+
+    #[test]
+    fn service_bots_dont_count() {
+        let bot = |account, service| Bot {
+            account: BotName::new(account),
+            owner: name("luiz"),
+            note: None,
+            created_at: 0,
+            removed_at: None,
+            service,
+        };
+        assert_eq!(counted(&[]), 0);
+        let bots = [bot("bender", true), bot("hal", false), bot("eve", false)];
+        assert_eq!(counted(&bots), 2);
+        assert_eq!(counted(&bots[..1]), 0);
     }
 
     const DELETED: i64 = 1_760_000_000;

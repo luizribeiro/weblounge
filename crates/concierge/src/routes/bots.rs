@@ -36,6 +36,8 @@ use crate::{
 struct BotsPage<'a> {
     layout: Layout<'a>,
     bots: Vec<Bot>,
+    /// How many of them count toward the most the member may have.
+    counted: i64,
     /// How many more the member may make now.
     remaining: i64,
     /// Where confirming the member's email stands, until they do; making
@@ -114,7 +116,7 @@ pub async fn create(
         return refuse(StatusCode::TOO_MANY_REQUESTS, None, Some(TRY_LATER.into())).await;
     }
     let live = match app.db.bots(Some(&member.account)).await {
-        Ok(bots) => bots.len() as i64,
+        Ok(bots) => bot_rules::counted(&bots),
         Err(error) => return internal_error("Listing a member's bots", error),
     };
     let verified = member.email_verified_at.is_some();
@@ -194,7 +196,7 @@ pub async fn confirm_delete(
 }
 
 async fn ask(app: &App, member: &Member, name: &str, question: Question) -> Response {
-    let bot = match owned_or_not_found(app, member, name).await {
+    let bot = match changeable_bot(app, member, name).await {
         Ok(bot) => bot,
         Err(response) => return response,
     };
@@ -216,7 +218,7 @@ pub async fn delete(
     Path(name): Path<String>,
 ) -> Response {
     let member = &me.member;
-    let bot = match owned_or_not_found(&app, member, &name).await {
+    let bot = match changeable_bot(&app, member, &name).await {
         Ok(bot) => bot,
         Err(response) => return response,
     };
@@ -248,7 +250,7 @@ pub async fn reset(
     Path(name): Path<String>,
 ) -> Response {
     let member = &me.member;
-    let bot = match owned_or_not_found(&app, member, &name).await {
+    let bot = match changeable_bot(&app, member, &name).await {
         Ok(bot) => bot,
         Err(response) => return response,
     };
@@ -303,13 +305,23 @@ async fn owned_bot(app: &App, member: &Member, name: &str) -> sqlx::Result<Optio
     Ok(bot.filter(|bot| bot.removed_at.is_none() && bot.owner == member.account))
 }
 
-/// `member`'s live bot named `name`, or the answer that none was found.
-async fn owned_or_not_found(app: &App, member: &Member, name: &str) -> Result<Bot, Response> {
+/// `member`'s live bot named `name`, unless none was found or it's a
+/// service bot, which members don't change.
+async fn changeable_bot(app: &App, member: &Member, name: &str) -> Result<Bot, Response> {
     match owned_bot(app, member, name).await {
+        Ok(Some(bot)) if bot.service => {
+            let refusal = network_bot_refusal(&bot.account);
+            Err(alert(app, member, StatusCode::FORBIDDEN, &refusal).await)
+        }
         Ok(Some(bot)) => Ok(bot),
         Ok(None) => Err(not_found()),
         Err(error) => Err(internal_error("Looking up a bot", error)),
     }
+}
+
+/// What the tab says when a member tries to change a service bot.
+fn network_bot_refusal(bot: &BotName) -> String {
+    format!("{bot} is a network bot. Ask an admin to change it.")
 }
 
 /// The tab saying why the last change didn't go through.
@@ -337,9 +349,11 @@ async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'_>) 
         Err(error) => return internal_error("Listing a member's bots", error),
     };
     let verified = member.email_verified_at.is_some();
+    let counted = bot_rules::counted(&bots);
     let page = BotsPage {
         layout: Layout::new(app, Some(member.account.as_str())).on(Tab::Bots),
-        remaining: bot_rules::remaining(verified, bots.len() as i64),
+        remaining: bot_rules::remaining(verified, counted),
+        counted,
         bots,
         unconfirmed: Unconfirmed::of(member, db::now()),
         forms,

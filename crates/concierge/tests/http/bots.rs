@@ -86,7 +86,8 @@ async fn bots_tab(site: &Site, cookie: &str) -> String {
 /// The bots a page lists, as each one's name and note read.
 fn listed(page: &str) -> Vec<String> {
     let name =
-        Regex::new(r#"<span class="bot-name">(.*?)</span>\s*<span class="bot-actions">"#).unwrap();
+        Regex::new(r#"<span class="bot-name">(.*?)</span>\s*<span class="bot-(?:actions|label)">"#)
+            .unwrap();
     name.captures_iter(page).map(|c| c[1].to_owned()).collect()
 }
 
@@ -115,7 +116,10 @@ async fn a_member_without_bots_sees_none_and_their_room_for_more() {
     assert!(is_tab(&page, "/bots"), "{page}");
     assert!(page.contains("No bots yet."), "{page}");
     assert!(page.contains(&count(0)), "{page}");
-    assert!(page.contains("You can have up to 3 at a time."), "{page}");
+    assert!(
+        page.contains("You can have up to 3 at a time.</p>"),
+        "{page}"
+    );
     let blurb = page
         .find(r#"<a href="/help/make-a-bot">Learn how to make one</a>"#)
         .expect(&page);
@@ -175,6 +179,46 @@ async fn says_when_a_member_has_as_many_bots_as_they_may() {
         page.contains("That's as many as you can have. Delete one to make another."),
         "{page}"
     );
+}
+
+#[tokio::test]
+async fn shows_service_bots_as_network_bots_without_controls_or_a_place() {
+    let site = Site::start().await;
+    site.add_verified_member("luiz").await;
+    site.execute(
+        "INSERT INTO bots (account, owner, note, created_at, service)
+         VALUES ('bender', 'luiz', 'runs #ops', 0, TRUE), ('hal', 'luiz', NULL, 0, FALSE)",
+    )
+    .await;
+    let cookie = site.sign_in("luiz").await;
+
+    let page = bots_tab(&site, &cookie).await;
+
+    assert_eq!(
+        listed(&page),
+        [
+            r#"<strong>bender</strong> <span class="muted">· runs #ops</span>"#,
+            "<strong>hal</strong>",
+        ]
+    );
+    assert_eq!(
+        page.matches(r#"<span class="bot-label">network bot</span>"#)
+            .count(),
+        1,
+        "{page}"
+    );
+    for control in ["/bots/bender/", "reset-bender", "delete-bender"] {
+        assert!(!page.contains(control), "{control} {page}");
+    }
+    assert!(page.contains("/bots/hal/password"), "{page}");
+    assert!(page.contains("/bots/hal/delete"), "{page}");
+    assert!(page.contains(&count(1)), "{page}");
+    assert_eq!(page.matches(r#"<span class="available">"#).count(), 1);
+    assert!(
+        page.contains("You can have up to 3 at a time. Network bots don't count."),
+        "{page}"
+    );
+    assert!(page.contains("Make a bot"), "{page}");
 }
 
 #[tokio::test]
@@ -434,6 +478,33 @@ async fn bots_an_admin_made_count_and_deleted_ones_dont() {
 }
 
 #[tokio::test]
+async fn a_member_makes_three_besides_their_service_bots() {
+    let site = Site::start().await;
+    site.add_verified_member("luiz").await;
+    site.execute(
+        "INSERT INTO bots (account, owner, created_at, service) VALUES ('bender', 'luiz', 0, TRUE)",
+    )
+    .await;
+    let cookie = site.sign_in("luiz").await;
+    for name in ["hal", "marvin", "eve"] {
+        assert_eq!(make(&site, &cookie, name).await.0, 200, "{name}");
+    }
+
+    let (status, page) = make(&site, &cookie, "eliza").await;
+
+    assert_eq!(status, 409, "{page}");
+    assert!(page.contains(&count(MAX_LIVE)), "{page}");
+    assert!(
+        page.contains(
+            "That's as many as you can have. Delete one to make another. \
+             Network bots don't count."
+        ),
+        "{page}"
+    );
+    assert_eq!(listed(&page).len(), 4, "{page}");
+}
+
+#[tokio::test]
 async fn an_unconfirmed_member_makes_none() {
     let site = Site::start().await;
     site.add_member("alice").await;
@@ -653,6 +724,30 @@ async fn someone_elses_or_a_deleted_bot_is_not_found() {
         assert_eq!(response.status(), 404, "{name}");
     }
     assert!(signs_in_to_ergo(&site, "bender", &bender).await);
+}
+
+#[tokio::test]
+async fn a_service_bot_is_neither_reset_nor_deleted_nor_asked_about() {
+    let site = Site::start().await;
+    let (cookie, password) = alice_with_bender(&site).await;
+    site.execute("UPDATE bots SET service = TRUE").await;
+    let refusal = "bender is a network bot. Ask an admin to change it.";
+
+    for path in ["/bots/bender/password", "/bots/BENDER/delete"] {
+        let asked = site.get(path, Some(&cookie)).await;
+        assert_eq!(asked.status(), 403, "{path}");
+        let page = body_text(asked).await;
+        assert!(page.contains(refusal), "{path} {page}");
+        let response = site.post(path, &[], Some(&cookie)).await;
+        assert_eq!(response.status(), 403, "{path}");
+        let page = body_text(response).await;
+        assert!(page.contains(refusal), "{path} {page}");
+        assert!(passwords(&page).is_empty(), "{path} {page}");
+    }
+
+    assert!(signs_in_to_ergo(&site, "bender", &password).await);
+    let bender = site.db.bot("bender").await.unwrap().unwrap();
+    assert_eq!(bender.removed_at, None);
 }
 
 #[tokio::test]

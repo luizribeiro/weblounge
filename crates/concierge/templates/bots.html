@@ -17,11 +17,11 @@
           <a class="button button-primary" href="{{ crate::routes::verify::ACCOUNT_EMAIL }}">Confirm your email</a>
         </div>
         {%- else %}
-        <p class="invite-count"><span class="invite-count-number">{{ bots.len() }} of {{ crate::bot_rules::MAX_LIVE }}</span> bots</p>
+        <p class="invite-count"><span class="invite-count-number">{{ counted }} of {{ crate::bot_rules::MAX_LIVE }}</span> bots</p>
         <div class="invite-meter" aria-hidden="true">
-          {%- for slot in 0..crate::bot_rules::MAX_LIVE %}<span{% if slot < bots.len() as i64 %} class="available"{% endif %}></span>{% endfor -%}
+          {%- for slot in 0..crate::bot_rules::MAX_LIVE %}<span{% if slot < counted %} class="available"{% endif %}></span>{% endfor -%}
         </div>
-        <p class="hint">{% if remaining == 0 %}That's as many as you can have. Delete one to make another.{% else %}You can have up to {{ crate::bot_rules::MAX_LIVE }} at a time.{% endif %}</p>
+        <p class="hint">{% if remaining == 0 %}That's as many as you can have. Delete one to make another.{% else %}You can have up to {{ crate::bot_rules::MAX_LIVE }} at a time.{% endif %}{% if counted < bots.len() as i64 %} Network bots don't count.{% endif %}</p>
         {%- endif %}
         {%- if bots.is_empty() %}
         <p class="bots-empty">No bots yet.</p>
@@ -30,6 +30,9 @@
           {%- for bot in bots %}
           <li class="bot">
             <span class="bot-name"><strong>{{ bot.account }}</strong>{% if let Some(note) = bot.note %} <span class="muted">· {{ note }}</span>{% endif %}</span>
+            {%- if bot.service %}
+            <span class="bot-label">network bot</span>
+            {%- else %}
             <span class="bot-actions">
               <a class="button button-small" href="/bots/{{ bot.account }}/password" data-dialog="reset-{{ bot.account }}">New password</a>
               <a class="danger-link" href="/bots/{{ bot.account }}/delete" data-dialog="delete-{{ bot.account }}">Delete</a>
@@ -42,6 +45,7 @@
               <h2 class="eyebrow" id="delete-{{ bot.account }}-title">Delete {{ bot.account }}</h2>
               {%- call components::delete_bot(bot.account, history_kept) %}<button class="button" type="submit" formmethod="dialog" autofocus>Keep it</button>{% endcall %}
             </dialog>
+            {%- endif %}
           </li>
           {%- endfor %}
         </ul>
