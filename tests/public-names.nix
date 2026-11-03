@@ -11,6 +11,7 @@ let
     virtualHosts = lib.mapAttrs (_: vhost: vhost.serverAliases) host.services.nginx.virtualHosts;
     conciergeUrl = envOf host "CONCIERGE_PUBLIC_URL=";
     joinUrl = envOf host "CONCIERGE_JOIN_URL=";
+    pushRelayOrigin = host.systemd.services.push-relay.environment.PUSH_RELAY_ORIGIN;
   };
 in
 {
@@ -24,9 +25,11 @@ in
         "irc.weblounge.org" = [ ];
         "members.weblounge.org" = [ ];
         "join.weblounge.org" = [ ];
+        "push.weblounge.org" = [ ];
       };
       conciergeUrl = "CONCIERGE_PUBLIC_URL=https://members.weblounge.org";
       joinUrl = "CONCIERGE_JOIN_URL=https://join.weblounge.org";
+      pushRelayOrigin = "https://push.weblounge.org";
     };
   };
 
@@ -40,9 +43,11 @@ in
         "irc.weblounge.localhost" = [ ];
         "members.weblounge.localhost" = [ ];
         "join.weblounge.localhost" = [ ];
+        "push.weblounge.localhost" = [ ];
       };
       conciergeUrl = "CONCIERGE_PUBLIC_URL=https://members.weblounge.localhost:10443";
       joinUrl = "CONCIERGE_JOIN_URL=https://join.weblounge.localhost:10443";
+      pushRelayOrigin = "https://push.weblounge.localhost:10443";
     };
   };
 }

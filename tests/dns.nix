@@ -25,6 +25,7 @@ in
         [ "CNAME" "irc" "credenza.weblounge.org." ]
         [ "CNAME" "join" "credenza.weblounge.org." ]
         [ "CNAME" "members" "credenza.weblounge.org." ]
+        [ "CNAME" "push" "credenza.weblounge.org." ]
         [ "A" "@" "107.173.231.206" ]
         [ "CNAME" "www" "credenza.weblounge.org." ]
         [ "MX" "@" 10 "shadow.mxrouting.net." ]
