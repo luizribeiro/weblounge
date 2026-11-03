@@ -155,6 +155,7 @@ in
       webpush = {
         enabled = true;
         subscriber = "https://${domain}";
+        max-subscriptions = 10;
       };
       api = {
         enabled = true;
