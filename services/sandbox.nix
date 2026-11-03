@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ config, lib, ... }:
 
 {
   options.weblounge.sandbox = lib.mkOption {
@@ -54,5 +54,28 @@
       IPAddressDeny = "any";
     };
     description = "serviceConfig for a service that only talks to others on this machine.";
+  };
+
+  options.weblounge.internetOnly = lib.mkOption {
+    type = lib.types.attrsOf lib.types.anything;
+    readOnly = true;
+    default = {
+      IPAddressDeny = [ "localhost" "link-local" "multicast" "10.0.0.0/8" "100.64.0.0/10" "172.16.0.0/12" "192.168.0.0/16" "fc00::/7" ];
+      IPAddressAllow = [ "127.0.0.53" ];
+
+      # The trust store in /etc and resolved's address are all it reads
+      # beyond the store and what it binds.
+      TemporaryFileSystem = [ "/var:ro" "/run:ro" ];
+      BindReadOnlyPaths = [ "/run/systemd/resolve" ];
+      # PrivateTmp= and PrivateDevices= mount their own /tmp and /dev/shm.
+      NoExecPaths = [ "/" "/tmp" "/dev/shm" ];
+      ExecPaths = [ "/nix/store" ];
+      PrivateIPC = true;
+
+      SystemCallFilter = config.weblounge.sandbox.SystemCallFilter
+        ++ [ "~@chown" "~@ipc" "~@keyring" "~@memlock" "~@resources" "~@setuid" ];
+      SystemCallErrorNumber = "EPERM";
+    };
+    description = "serviceConfig, over weblounge.sandbox, for a service that talks to servers on the Internet: nothing on this machine but resolved's stub, nothing on private networks, and no files but the store, /etc and what it binds.";
   };
 }
