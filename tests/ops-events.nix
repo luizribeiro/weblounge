@@ -1,5 +1,7 @@
 # ops-event and ops-notify against stand-ins for systemctl and louro,
 # which answer from files under $OPS_ROOT/stub and log what they're asked.
+# A property's file of several lines answers each read with the next,
+# then keeps its last.
 { pkgs, ... }:
 
 let
@@ -10,7 +12,11 @@ let
       "is-system-running --wait") ;;
       "-q is-active "*) [ -e "$stub/active/$3" ] ;;
       "list-jobs --no-legend") cat "$stub/jobs" 2>/dev/null || true ;;
-      "show -P "*) cat "$stub/$4.$3" ;;
+      "show -P "*)
+        property=$stub/$4.$3
+        head -n 1 "$property"
+        if [ "$(wc -l <"$property")" -gt 1 ]; then sed -i 1d "$property"; fi
+        ;;
       *) echo "systemctl stand-in: $*" >&2; exit 1 ;;
     esac
   '';

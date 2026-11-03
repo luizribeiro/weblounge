@@ -112,9 +112,16 @@ ops-event started nginx
 expect "a start that fails is left to the failure's line" "" "$(queued)"
 
 setup
-stub concierge.ActiveState activating
+stub concierge.ActiveState "activating
+active"
 ops-event failed concierge
 expect "a failure a restart follows is left to the restart's line" "" "$(queued)$(ls "$OPS_ROOT/run/ops-events/failed")"
+stub concierge.ActiveState "activating
+failed"
+ops-event failed concierge
+expect "a failure whose restart gives up while it waits is the give-up" "failed:concierge" "$(queued)"
+clear_queue
+rm "$OPS_ROOT/run/ops-events/failed/concierge"
 stub concierge.ActiveState failed
 ops-event failed concierge
 expect "a unit left failed is remembered" "concierge" "$(ls "$OPS_ROOT/run/ops-events/failed")"
