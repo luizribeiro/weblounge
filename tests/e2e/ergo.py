@@ -110,3 +110,14 @@ with subtest("a client that drops its connection mid-burst leaves no address in 
     whois_carol = irc_command("WHOIS carol", **alice)
     client.wait_until_succeeds(f"{whois_carol} | grep ' 401 alice carol ' >/dev/null", timeout=60)
     assert_client_address_absent("journalctl -u ergochat")
+
+with subtest("a member may keep push subscriptions on ten devices, and no more"):
+    keys = (
+        "p256dh=BB-oXlVJ4NSC4u0q_xDR-sBNQvDtdOQkBoiAHSGfdjMYGgisDueQhqo_qJPXT9ZdtR6nxu40lmMYe5SfMkDfK6g;"
+        "auth=saK8t84e6IvjXtf1fv0KIg"
+    )
+    devices = [f"https://push.test/device-{n}" for n in range(11)]
+    replies = irc(*[f"WEBPUSH REGISTER {device} {keys}" for device in devices], **alice)
+    registered = re.findall(r" WEBPUSH REGISTER (\S+) ", replies)
+    assert registered == devices[:10], replies
+    assert f"FAIL WEBPUSH MAX_REGISTRATIONS REGISTER {devices[10]} " in replies, replies
