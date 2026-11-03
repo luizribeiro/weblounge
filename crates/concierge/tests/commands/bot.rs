@@ -35,6 +35,7 @@ impl Fixture {
             owner: &MemberName::new(owner),
             note,
             created_at: 1_760_000_000,
+            service: false,
         };
         let inserted = self.db().await.insert_bot(&bot, None, None).await;
         assert_eq!(inserted.unwrap(), db::BotInsertion::Inserted);

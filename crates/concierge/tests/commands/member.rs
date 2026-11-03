@@ -298,6 +298,7 @@ mod reconcile {
             owner: &MemberName::new("alice"),
             note: None,
             created_at: 1_760_000_000,
+            service: false,
         };
         db.insert_bot(&ghost, None, None).await.unwrap();
         db.remove_member(&MemberName::new("carol"), db::now())

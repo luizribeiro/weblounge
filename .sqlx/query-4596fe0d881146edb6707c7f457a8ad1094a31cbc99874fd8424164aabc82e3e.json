@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT account AS \"account!: BotName\", owner AS \"owner: MemberName\", note,\n                      created_at, removed_at\n               FROM bots WHERE removed_at IS NULL AND (?1 IS NULL OR owner = ?1 COLLATE NOCASE)\n               ORDER BY account",
+  "query": "SELECT account AS \"account!: BotName\", owner AS \"owner: MemberName\", note,\n                      created_at, removed_at, service\n               FROM bots WHERE removed_at IS NULL AND (?1 IS NULL OR owner = ?1 COLLATE NOCASE)\n               ORDER BY account",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,11 @@
         "name": "removed_at",
         "ordinal": 4,
         "type_info": "Integer"
+      },
+      {
+        "name": "service",
+        "ordinal": 5,
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -37,8 +42,9 @@
       false,
       true,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "b568b1cb2b9a7fbb2be7a639da3d0c808359b563dd2ed66bc43c17179a3c0fb1"
+  "hash": "4596fe0d881146edb6707c7f457a8ad1094a31cbc99874fd8424164aabc82e3e"
 }

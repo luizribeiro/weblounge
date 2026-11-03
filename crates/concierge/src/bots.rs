@@ -105,6 +105,7 @@ impl Bots<'_> {
             owner,
             note,
             created_at: db::now(),
+            service: false,
         };
         match self
             .db

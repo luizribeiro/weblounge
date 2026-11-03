@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO bots (account, owner, note, created_at, service) VALUES (?, ?, ?, ?, ?)\n             ON CONFLICT (account) DO UPDATE\n             SET owner = excluded.owner, note = excluded.note,\n                 created_at = excluded.created_at, removed_at = NULL,\n                 service = excluded.service\n             WHERE bots.owner = ? AND bots.removed_at = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "d0c0664b3c3088d12f4947ef1e818318ec977aff39b07d009e199cce1a41717b"
+}

@@ -222,6 +222,8 @@ pub struct NewBot<'a> {
     pub owner: &'a MemberName,
     pub note: Option<&'a str>,
     pub created_at: i64,
+    /// Whether the network runs it, outside its owner's quota.
+    pub service: bool,
 }
 
 /// A bot, or the row a deleted bot leaves to hold its name until it's
@@ -233,6 +235,8 @@ pub struct Bot {
     pub note: Option<String>,
     pub created_at: i64,
     pub removed_at: Option<i64>,
+    /// Whether the network runs it, outside its owner's quota.
+    pub service: bool,
 }
 
 /// What became of inserting a bot.
@@ -1151,6 +1155,7 @@ impl Db {
 
     /// Inserts `bot`, taking the row of `replacing`, the deleted bot whose
     /// name it reuses, unless its owner has `max_live` live bots already.
+    /// Service bots neither count toward `max_live` nor are held to it.
     /// Concurrent calls take turns, so they can't both see room for one
     /// more, and a name another bot took, or a deleted bot that changed,
     /// since the caller looked stays theirs.
@@ -1161,10 +1166,10 @@ impl Db {
         max_live: Option<i64>,
     ) -> sqlx::Result<BotInsertion> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        if let Some(max_live) = max_live {
+        if let Some(max_live) = max_live.filter(|_| !bot.service) {
             let live = sqlx::query_scalar!(
                 r#"SELECT COUNT(*) AS "live!: i64" FROM bots
-                   WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL"#,
+                   WHERE owner = ? COLLATE NOCASE AND removed_at IS NULL AND NOT service"#,
                 bot.owner,
             )
             .fetch_one(&mut *transaction)
@@ -1176,15 +1181,17 @@ impl Db {
         let replaced_owner = replacing.map(|replaced| &replaced.owner);
         let replaced_at = replacing.and_then(|replaced| replaced.removed_at);
         let inserted = sqlx::query!(
-            "INSERT INTO bots (account, owner, note, created_at) VALUES (?, ?, ?, ?)
+            "INSERT INTO bots (account, owner, note, created_at, service) VALUES (?, ?, ?, ?, ?)
              ON CONFLICT (account) DO UPDATE
              SET owner = excluded.owner, note = excluded.note,
-                 created_at = excluded.created_at, removed_at = NULL
+                 created_at = excluded.created_at, removed_at = NULL,
+                 service = excluded.service
              WHERE bots.owner = ? AND bots.removed_at = ?",
             bot.account,
             bot.owner,
             bot.note,
             bot.created_at,
+            bot.service,
             replaced_owner,
             replaced_at,
         )
@@ -1202,7 +1209,7 @@ impl Db {
         sqlx::query_as!(
             Bot,
             r#"SELECT account AS "account!: BotName", owner AS "owner: MemberName", note,
-                      created_at, removed_at
+                      created_at, removed_at, service
                FROM bots WHERE account = ?"#,
             account
         )
@@ -1216,7 +1223,7 @@ impl Db {
         sqlx::query_as!(
             Bot,
             r#"SELECT account AS "account!: BotName", owner AS "owner: MemberName", note,
-                      created_at, removed_at
+                      created_at, removed_at, service
                FROM bots WHERE removed_at IS NULL AND (?1 IS NULL OR owner = ?1 COLLATE NOCASE)
                ORDER BY account"#,
             owner
@@ -1244,12 +1251,14 @@ impl Db {
             }
             Some(replaced) => {
                 sqlx::query!(
-                    "UPDATE bots SET owner = ?, note = ?, created_at = ?, removed_at = ?
+                    "UPDATE bots SET owner = ?, note = ?, created_at = ?, removed_at = ?,
+                                     service = ?
                      WHERE account = ? AND removed_at IS NULL",
                     replaced.owner,
                     replaced.note,
                     replaced.created_at,
                     replaced.removed_at,
+                    replaced.service,
                     account,
                 )
                 .execute(&self.pool)
@@ -1271,6 +1280,18 @@ impl Db {
         )
         .fetch_all(&self.pool)
         .await
+    }
+
+    /// Marks the live bot `account` a service bot; answers whether it was
+    /// live.
+    pub async fn make_service_bot(&self, account: &BotName) -> sqlx::Result<bool> {
+        let made = sqlx::query!(
+            "UPDATE bots SET service = TRUE WHERE account = ? AND removed_at IS NULL",
+            account,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(made.rows_affected() == 1)
     }
 
     /// Marks a bot deleted, keeping its row so its name stays held until
@@ -3422,6 +3443,7 @@ pub(crate) mod tests {
                 owner: &MemberName::new(owner),
                 note,
                 created_at: 100,
+                service: false,
             };
             let inserted = db.insert_bot(&bot, None, None).await.unwrap();
             assert_eq!(inserted, BotInsertion::Inserted);
@@ -3442,6 +3464,7 @@ pub(crate) mod tests {
                 note: Some("answers !ping".into()),
                 created_at: 100,
                 removed_at: None,
+                service: false,
             })
         );
         assert_eq!(bender.unwrap().account.as_str(), "bender");
@@ -3478,6 +3501,7 @@ pub(crate) mod tests {
             owner: &owner,
             note: None,
             created_at: 300,
+            service: false,
         };
 
         let names = [BotName::new("hal"), BotName::new("eve")];
@@ -3502,6 +3526,7 @@ pub(crate) mod tests {
             owner: &owner,
             note: None,
             created_at: 300,
+            service: false,
         };
 
         let names = [BotName::new("hal"), BotName::new("eve")];
@@ -3515,6 +3540,58 @@ pub(crate) mod tests {
         assert!(inserted.contains(&BotInsertion::Inserted), "{inserted:?}");
         assert!(inserted.contains(&BotInsertion::TooMany), "{inserted:?}");
         assert_eq!(db.bots(Some(&owner)).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn service_bots_take_no_place_of_their_owners_and_need_none() {
+        let (db, _dir) = with_bots().await;
+        let owner = MemberName::new("luiz");
+        let names = [
+            BotName::new("hal"),
+            BotName::new("eve"),
+            BotName::new("ops"),
+        ];
+        let bot = |account, service| NewBot {
+            account,
+            owner: &owner,
+            note: None,
+            created_at: 300,
+            service,
+        };
+        assert!(db.make_service_bot(&BotName::new("BENDER")).await.unwrap());
+
+        let inserted = db.insert_bot(&bot(&names[0], false), None, Some(1)).await;
+        assert_eq!(inserted.unwrap(), BotInsertion::Inserted);
+        let inserted = db.insert_bot(&bot(&names[1], false), None, Some(1)).await;
+        assert_eq!(inserted.unwrap(), BotInsertion::TooMany);
+        let inserted = db.insert_bot(&bot(&names[2], true), None, Some(1)).await;
+        assert_eq!(inserted.unwrap(), BotInsertion::Inserted);
+
+        let services: Vec<_> = db
+            .bots(Some(&owner))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|bot| (bot.account.to_string(), bot.service))
+            .collect();
+        assert_eq!(
+            services,
+            [
+                ("bender".into(), true),
+                ("hal".into(), false),
+                ("ops".into(), true)
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn only_a_live_bot_is_made_a_service_bot() {
+        let (db, _dir) = with_bots().await;
+        for name in ["dalek", "nobody"] {
+            let made = db.make_service_bot(&BotName::new(name)).await.unwrap();
+            assert!(!made, "{name}");
+        }
+        assert!(!db.bot("dalek").await.unwrap().unwrap().service);
     }
 
     #[tokio::test]
@@ -3558,6 +3635,7 @@ pub(crate) mod tests {
             owner,
             note: None,
             created_at: 300,
+            service: false,
         };
         let hal = (BotName::new("hal"), MemberName::new("nobody"));
         let error = db
@@ -3580,6 +3658,7 @@ pub(crate) mod tests {
             owner,
             note: None,
             created_at: 300,
+            service: false,
         };
         let owners = [MemberName::new("luiz"), MemberName::new("alice")];
         let (luiz, alice) = (bot(&owners[0]), bot(&owners[1]));
@@ -3607,6 +3686,7 @@ pub(crate) mod tests {
             owner: &alice,
             note: Some("takes over"),
             created_at: 300,
+            service: false,
         };
         let changed_since = Bot {
             removed_at: Some(199),
@@ -3630,6 +3710,7 @@ pub(crate) mod tests {
                 note: Some("takes over".into()),
                 created_at: 300,
                 removed_at: None,
+                service: false,
             })
         );
         assert_eq!(taken_over.unwrap().account.as_str(), "dalek");
@@ -3646,10 +3727,15 @@ pub(crate) mod tests {
             owner: &owner,
             note: None,
             created_at: 300,
+            service: false,
         };
         let (hal, new_dalek) = (BotName::new("hal"), BotName::new("dalek"));
         db.insert_bot(&bot(&hal), None, None).await.unwrap();
-        db.insert_bot(&bot(&new_dalek), Some(&dalek), None)
+        let service_dalek = NewBot {
+            service: true,
+            ..bot(&new_dalek)
+        };
+        db.insert_bot(&service_dalek, Some(&dalek), None)
             .await
             .unwrap();
 
@@ -3657,6 +3743,33 @@ pub(crate) mod tests {
         db.take_back_bot(&new_dalek, Some(&dalek)).await.unwrap();
 
         assert_eq!(db.bot("hal").await.unwrap(), None);
+        assert_eq!(db.bot("dalek").await.unwrap(), Some(dalek));
+    }
+
+    #[tokio::test]
+    async fn taking_back_a_bot_puts_back_the_service_bot_it_replaced() {
+        let (db, _dir) = with_bots().await;
+        execute(
+            &db,
+            "UPDATE bots SET service = TRUE WHERE account = 'dalek'",
+        )
+        .await
+        .unwrap();
+        let dalek = db.bot("dalek").await.unwrap().unwrap();
+        let name = BotName::new("dalek");
+        let owner = MemberName::new("luiz");
+        let own_dalek = NewBot {
+            account: &name,
+            owner: &owner,
+            note: None,
+            created_at: 300,
+            service: false,
+        };
+        db.insert_bot(&own_dalek, Some(&dalek), None).await.unwrap();
+        assert!(!db.bot("dalek").await.unwrap().unwrap().service);
+
+        db.take_back_bot(&name, Some(&dalek)).await.unwrap();
+
         assert_eq!(db.bot("dalek").await.unwrap(), Some(dalek));
     }
 
