@@ -72,10 +72,10 @@ with subtest("luiz becomes a member and founds #lounge, as on credenza"):
     session = irc("CS REGISTER #lounge", **luiz)
     assert "Channel #lounge successfully registered" in session, session
 
-with subtest("once its owner is a member, bender registers itself as their bot"):
+with subtest("once its owner is a member, bender registers itself as their service bot"):
     credenza.succeed("systemctl start louro.service")
     bots = concierge_admin("bot", "list", "luiz")
-    assert re.match(r"bender luiz \d{4}-\d\d-\d\d$", bots), bots
+    assert re.match(r"bender luiz \d{4}-\d\d-\d\d \(service\)$", bots), bots
 
 with subtest("louro logs bender in to #bots and #ops, marked as a bot, from luiz's vhost"):
     register(**alice)
@@ -208,3 +208,15 @@ with subtest("a deleted bot's owner makes it again at once, and it logs in from 
     assert " 903 " in session, session
     assert re.search(r"^:\S+ 311 robbie robbie ~u weblounge/bot/zoe ", session, re.M), session
     assert re.match(r"robbie zoe \d{4}-\d\d-\d\d$", concierge_admin("bot", "list", "zoe").splitlines()[-1])
+
+with subtest("bender takes none of luiz's places: he makes three bots of his own, and can't change bender"):
+    confirm_email("luiz")
+    for name in ["hal", "eve", "kryten"]:
+        assert re.fullmatch("[a-z2-9]{26}", bots_browser(luiz, "create", name)), name
+    count = bots_browser(luiz, "network", "bender")
+    assert count == "3 of 3 bots", count
+    client.copy_from_vm("/tmp/screens", "bots")
+    bots = concierge_admin("bot", "list", "luiz").splitlines()
+    assert [bot.split()[0] for bot in bots] == ["bender", "eve", "hal", "kryten"], bots
+    assert bots[0].endswith(" (service)") and not any("(service)" in bot for bot in bots[1:]), bots
+    wait_for_bender()

@@ -1,15 +1,19 @@
 """Make, reset or delete a bot on the Bots tab, as its owner would, at a
 phone's width or a desktop's: `create NAME`, `reset NAME` or `delete
 NAME`. Creating and resetting print the password the dialog shows, once.
+`network NAME` checks, at both widths, that the service bot NAME is
+labelled a network bot with nothing to change it, saves screenshots in
+/tmp/screens and prints the tab's count.
 Checks that the name field calls the name free as it's typed, that the
 dialogs ask first, that the controls fit and are big
 enough to tap, and that the password is gone once the dialog is."""
 
+import os
 import sys
 
 from playwright.sync_api import Locator, Page, expect
 
-from browser import MEMBERS, WIDTHS, fits, signed_in
+from browser import MEMBERS, SCREENS, WIDTHS, fits, signed_in
 
 ONCE = "Copy it now. It won't be shown again; if you lose it, make a new one."
 
@@ -46,6 +50,21 @@ def confirm(page: Page, dialog_id: str, button: str, width: str) -> None:
         confirmed.click()
 
 
+def assert_network_bot(page: Page, name: str) -> str:
+    """Checks the tab at each width shows the service bot `name` read-only; answers its count."""
+    os.makedirs(SCREENS, exist_ok=True)
+    for width in ["phone", "desktop"]:
+        page.set_viewport_size({"width": WIDTHS[width], "height": 800})
+        bot = page.locator("li.bot", has=page.get_by_text(name, exact=True))
+        expect(bot.locator(".bot-label")).to_have_text("network bot")
+        expect(bot.get_by_role("link")).to_have_count(0)
+        expect(page.locator(f'[data-dialog$="-{name}"]')).to_have_count(0)
+        expect(page.get_by_role("button", name="Make a bot")).to_have_count(0)
+        assert fits(page), width
+        page.screenshot(path=f"{SCREENS}/bots-network-{width}.png", full_page=True)
+    return " ".join(page.locator(".invite-count").inner_text().split())
+
+
 def main():
     nick, password, action, name = sys.argv[1:]
     width = "phone" if action != "reset" else "desktop"
@@ -68,6 +87,8 @@ def main():
             assert page.url == f"{MEMBERS}/bots", page.url
             expect(page.get_by_text(name, exact=True)).to_have_count(0)
             print("deleted")
+        elif action == "network":
+            print(assert_network_bot(page, name))
 
 
 if __name__ == "__main__":

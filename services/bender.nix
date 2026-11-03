@@ -46,7 +46,7 @@ in
     # open the credential, so the password reaches it on standard input.
     script = config.weblounge.ergo.untilItAnswers ''
       cat "$CREDENTIALS_DIRECTORY/${nick}-password" \
-        | ${lib.getExe config.weblounge.concierge.admin} bot ensure ${owner} ${nick} --password-file -
+        | ${lib.getExe config.weblounge.concierge.admin} bot ensure ${owner} ${nick} --service --password-file -
     '';
     serviceConfig = {
       Type = "oneshot";

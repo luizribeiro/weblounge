@@ -1681,6 +1681,32 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn bender_alone_of_the_bots_from_before_service_bots_becomes_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261101120000,
+            "INSERT INTO members (account, email, joined_at)
+             VALUES ('luiz', 'luiz@example.org', 1);
+             INSERT INTO bots (account, owner, created_at)
+             VALUES ('bender', 'luiz', 2), ('hal', 'luiz', 3);",
+        )
+        .await;
+
+        let db = Db::migrate(&path).await.unwrap();
+
+        let services: Vec<_> = db
+            .bots(None)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|bot| (bot.account.to_string(), bot.service))
+            .collect();
+        assert_eq!(services, [("bender".into(), true), ("hal".into(), false)]);
+    }
+
+    #[tokio::test]
     async fn requiring_an_email_keeps_members_and_whatever_refers_to_them() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("concierge.db");
