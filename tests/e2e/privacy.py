@@ -52,6 +52,7 @@ with subtest("stored: concierge's database has the columns the page was written 
         "bots.note",
         "bots.owner",
         "bots.removed_at",
+        "bots.service",
         "invites.claimed_at",
         "invites.code_hash",
         "invites.created_at",
