@@ -48,17 +48,18 @@ booting() {
   esac
 }
 
-# Up to 5 minutes; a unit that fails to start has its own line.
-wait_until_up() {
-  local tries
+# The unit's state once it's done starting, stopping or restarting, or
+# as it stands after 5 minutes.
+settled_state() {
+  local tries state
   for ((tries = 0; tries < 300; tries++)); do
-    case $(systemctl show -P ActiveState "$1") in
-      active) return 0 ;;
-      failed | inactive) return 1 ;;
+    state=$(systemctl show -P ActiveState "$1")
+    case $state in
+      activating | deactivating | reloading | refreshing) sleep 1 ;;
+      *) break ;;
     esac
-    sleep 1
   done
-  return 1
+  echo "$state"
 }
 
 # The switch running now, which the units it restarts are listed in.
@@ -74,7 +75,8 @@ started() {
     if [ -e "$restarted" ]; then echo "$unit" >>"$restarted"; fi
   elif booting; then
     rm -f "$state/failed/$unit"
-  elif ! wait_until_up "$unit"; then
+  elif [ "$(settled_state "$unit")" != active ]; then
+    # A unit that fails to start has its own line.
     return 0
   elif [ -e "$state/failed/$unit" ]; then
     rm -f "$state/failed/$unit"
@@ -87,10 +89,13 @@ started() {
 }
 
 # OnFailure= fires on every crash a restart follows too; only a unit
-# left failed has given up.
+# left failed has given up. It waits for the restart to play out: the
+# failure that gives up fires OnFailure= while this run may still be
+# going, and systemd folds that into this run rather than starting
+# another.
 failed() {
   local unit=$1
-  [ "$(systemctl show -P ActiveState "$unit")" = failed ] || return 0
+  [ "$(settled_state "$unit")" = failed ] || return 0
   touch "$state/failed/$unit"
   notify "failed:$unit"
 }
