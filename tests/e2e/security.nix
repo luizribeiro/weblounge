@@ -30,7 +30,7 @@ vmTest {
     {
       imports = [ (onTheInternet public.credenza) ];
       environment.systemPackages = [ pkgs.nftables ]
-        ++ map confinedAs [ "concierge" "concierge-mailer" "concierge-scrubber@" ];
+        ++ map confinedAs [ "concierge" "concierge-mailer" "concierge-scrubber@" "push-relay" ];
     };
 
   client = {

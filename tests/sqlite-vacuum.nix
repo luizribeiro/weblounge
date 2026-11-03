@@ -13,8 +13,8 @@ in
   };
 
   testVacuumsLeaveTheNetworkTargetsTheirOwnersWaitFor = {
-    expr = map (unit: lib.filter (lib.hasSuffix ".target") (afterOf unit)) [ "concierge-vacuum" "concierge-mailer-vacuum" ];
-    expected = [ [ ] [ ] ];
+    expr = map (unit: lib.filter (lib.hasSuffix ".target") (afterOf unit)) [ "concierge-vacuum" "concierge-mailer-vacuum" "push-relay-vacuum" ];
+    expected = [ [ ] [ ] [ ] ];
   };
 
   testVacuumsRaiseNoOrderingWarnings = {

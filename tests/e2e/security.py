@@ -232,7 +232,7 @@ with subtest("sudo and PAM's password checker are the only setuid binaries"):
 with subtest("default.yaml's example oper and WebIRC gateway, with published credentials, are left out"):
     credenza.fail("grep -qE '^opers:|webirc' /etc/ergo.yaml")
 
-with subtest("ergo, concierge and its other units, nginx, bender and the vacuum jobs run sandboxed"):
+with subtest("ergo, concierge and its other units, the push relay, nginx, bender and the vacuum jobs run sandboxed"):
     for unit in [
         "ergochat",
         "concierge",
@@ -240,10 +240,12 @@ with subtest("ergo, concierge and its other units, nginx, bender and the vacuum 
         "concierge-remind",
         "concierge-expire-uploads",
         "concierge-mailer",
+        "push-relay",
         "nginx",
         "louro",
         "concierge-vacuum",
         "concierge-mailer-vacuum",
+        "push-relay-vacuum",
         "ergochat-vacuum",
     ]:
         credenza.succeed(f"systemd-analyze security --threshold=20 --no-pager {unit}.service")
@@ -252,9 +254,9 @@ with subtest("ergo, concierge and its other units, nginx, bender and the vacuum 
 internet_host = "198.51.100.2"
 
 
-def mailer_reaches(address: str, port: int) -> bool:
+def reaches(unit: str, address: str, port: int) -> bool:
     connect = shlex.quote(f"exec 3<>/dev/tcp/{address}/{port}")
-    status, _ = credenza.execute(f"as-concierge-mailer timeout 5 bash -c {connect}")
+    status, _ = credenza.execute(f"as-{unit} timeout 5 bash -c {connect}")
     return status == 0
 
 
@@ -263,10 +265,10 @@ with subtest("the mailer connects to port 465 alone, wherever it leads, and to r
         client.succeed(f"systemd-run --unit=listen-{port} nc -lk {port}")
         client.wait_for_open_port(port)
     credenza.succeed(f"timeout 5 bash -c 'exec 3<>/dev/tcp/{internet_host}/443'")
-    assert mailer_reaches(internet_host, 465)
-    assert not mailer_reaches(internet_host, 443)
-    assert not mailer_reaches(internet_host, 80)
-    assert mailer_reaches("127.0.0.53", 53)
+    assert reaches("concierge-mailer", internet_host, 465)
+    assert not reaches("concierge-mailer", internet_host, 443)
+    assert not reaches("concierge-mailer", internet_host, 80)
+    assert reaches("concierge-mailer", "127.0.0.53", 53)
     elements = credenza.succeed("nft list set inet weblounge_egress concierge_mailer")
     assert "concierge-mailer.service" in elements, elements
 
@@ -275,15 +277,37 @@ with subtest("the mailer stops with its egress rules, and they come back when it
     credenza.fail("systemctl is-active concierge-mailer")
     credenza.succeed("systemctl start concierge-mailer")
     credenza.succeed("systemctl is-active weblounge-egress")
-    assert not mailer_reaches(internet_host, 443)
+    assert not reaches("concierge-mailer", internet_host, 443)
 
 with subtest("the mailer reaches nothing on credenza but resolved, and no private network"):
     [private] = re.findall(r"inet (192\.168\.[\d.]+)/", client.succeed("ip -4 -o addr show dev eth1"))
     for address, port in [("127.0.0.1", 8089), ("127.0.0.1", 8080), (private, 465)]:
-        assert not mailer_reaches(address, port), (address, port)
+        assert not reaches("concierge-mailer", address, port), (address, port)
     credenza.succeed("as-concierge-mailer getent hosts _gateway")
     bind = shlex.quote("import socket; socket.socket().bind(('0.0.0.0', 9001))")
     credenza.fail(f"as-concierge-mailer {tools['python3']} -c {bind}")
+
+with subtest("the push relay connects to port 443 alone out there, and on credenza to concierge and resolved"):
+    assert reaches("push-relay", internet_host, 443)
+    assert reaches("push-relay", "127.0.0.1", 8080)
+    assert reaches("push-relay", "127.0.0.53", 53)
+    for address, port in [
+        (internet_host, 80),
+        (internet_host, 465),
+        ("127.0.0.1", 8089),
+        ("127.0.0.1", 8097),
+        (private, 443),
+    ]:
+        assert not reaches("push-relay", address, port), (address, port)
+    bind = shlex.quote("import socket; socket.socket().bind(('127.0.0.1', 9001))")
+    credenza.fail(f"as-push-relay {tools['python3']} -c {bind}")
+
+with subtest("the push relay sees its state, the store and /etc, and none of credenza's other state"):
+    credenza.succeed("as-push-relay test -w /var/lib/push-relay/push-relay.sqlite3")
+    for path in ["/run/secrets", "/var/lib/concierge", "/var/lib/concierge-outbox", "/var/log", in_ram]:
+        credenza.fail(f"as-push-relay test -e {path}")
+    credenza.succeed("as-push-relay test -r /etc/ssl/certs/ca-certificates.crt")
+    credenza.succeed("systemd-analyze security --threshold=11 --no-pager push-relay.service")
 
 with subtest("the mailer sees the outbox, the store and /etc, and none of credenza's other state"):
     assert credenza.succeed("as-concierge-mailer ls /var/lib").split() == ["concierge-outbox"]

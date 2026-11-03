@@ -7,6 +7,7 @@ let
     ergo-api = listener: { weblounge.ergo.settings.api.listener = lib.mkForce listener; };
     ergo-websocket = listener: { weblounge.ergo.websocketListener = lib.mkForce listener; };
     concierge = listener: { weblounge.concierge.listen = lib.mkForce listener; };
+    push-relay = listener: { weblounge.pushRelay.listen = lib.mkForce listener; };
   };
 
   rejects = setListener: listener:
