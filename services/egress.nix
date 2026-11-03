@@ -1,8 +1,9 @@
 # Confines a service's outbound connections to a few TCP ports, wherever
-# they lead, and name lookups through resolved's stub on loopback. A rule
-# naming a unit's cgroup or user resolves it as the rule loads, which is
-# before the unit runs, so systemd puts each unit's cgroup in an nftables
-# set as it starts (NFTSet=), and the rules match the set.
+# they lead, a few ports on loopback, and name lookups through resolved's
+# stub; it may still answer connections made to it, as to a listener. A
+# rule naming a unit's cgroup or user resolves it as the rule loads, which
+# is before the unit runs, so systemd puts each unit's cgroup in an
+# nftables set as it starts (NFTSet=), and the rules match the set.
 { config, lib, pkgs, ... }:
 
 let
@@ -10,6 +11,8 @@ let
   table = "weblounge_egress";
   nft = lib.getExe pkgs.nftables;
   services = config.weblounge.egressPorts;
+  loopbackPorts = config.weblounge.egressLoopbackPorts;
+  portSet = ports: "{ ${lib.concatMapStringsSep ", " toString ports} }";
   # systemd takes no dashes in the names NFTSet= refers to.
   setOf = service: lib.replaceStrings [ "-" ] [ "_" ] service;
 
@@ -24,8 +27,10 @@ let
         }
 
         chain ${setOf service} {
-          tcp dport { ${lib.concatMapStringsSep ", " toString ports} } accept
+          ct state established,related accept
+          tcp dport ${portSet ports} accept
           ip daddr 127.0.0.53 meta l4proto { tcp, udp } th dport 53 accept
+          ${lib.optionalString (loopbackPorts ? ${service}) "ip daddr 127.0.0.1 tcp dport ${portSet loopbackPorts.${service}} accept"}
           reject
         }
       '') services)}
@@ -54,6 +59,12 @@ in
     type = lib.types.attrsOf (lib.types.nonEmptyListOf lib.types.port);
     default = { };
     description = "Services, by unit name, and the only TCP ports each may connect to.";
+  };
+
+  options.weblounge.egressLoopbackPorts = lib.mkOption {
+    type = lib.types.attrsOf (lib.types.nonEmptyListOf lib.types.port);
+    default = { };
+    description = "Services in egressPorts, by unit name, and the TCP ports on 127.0.0.1 each may connect to besides.";
   };
 
   config = lib.mkIf (services != { }) {
