@@ -12,7 +12,7 @@ let
   opsEvent = lib.getExe opsEvents;
   queue = "/run/ops-events/queue";
 
-  keyServices = [ "ergochat" "concierge" "nginx" "concierge-mailer" ];
+  keyServices = [ "ergochat" "concierge" "nginx" "concierge-mailer" "push-relay" ];
   certificateUnits = lib.concatMap
     (cert: [ "acme-${cert}" "acme-order-renew-${cert}" ])
     (lib.attrNames config.security.acme.certs);
