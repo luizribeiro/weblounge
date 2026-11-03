@@ -119,6 +119,13 @@ in
     description = "Where concierge listens for nginx, as host:port.";
   };
 
+  options.weblounge.concierge.introspectionUrl = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = "http://${cfg.listen}/oauth/introspect";
+    description = "Where the clients in concierge's INTROSPECTION_CLIENTS ask whose a token is, on loopback.";
+  };
+
   config = {
     weblounge.loopbackListeners.Concierge = cfg.listen;
     weblounge.concierge.webClients.CONCIERGE_WEBCHAT_URL = config.weblounge.origin config.weblounge.ergo.serverName;
@@ -149,7 +156,7 @@ in
     weblounge.ergo.settings.accounts.oauth2 = {
       enabled = true;
       autocreate = false;
-      introspection-url = "http://${cfg.listen}/oauth/introspect";
+      introspection-url = cfg.introspectionUrl;
       client-id = "ergo";
       client-secret = "";
     };
