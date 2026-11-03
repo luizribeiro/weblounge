@@ -60,6 +60,30 @@ with subtest("creating a device checks the member's session token with concierge
     assert create_device("-H", "Authorization: Bearer not-a-session-token") == "401"
     assert create_device() == "401"
 
+
+def allowed_origin(path: str, origin: str) -> str | None:
+    """The origin a browser preflight from origin for a POST to path is allowed, if any."""
+    preflight = ["-X", "OPTIONS", "-o", "/dev/null", "-D", "-", "-H", f"Origin: {origin}"]
+    asks = [
+        "-H",
+        "Access-Control-Request-Method: POST",
+        "-H",
+        "Access-Control-Request-Headers: authorization,content-type",
+    ]
+    for line in https(push, path, *preflight, *asks).splitlines():
+        name, _, value = line.partition(":")
+        if name.lower() == "access-control-allow-origin":
+            return value.strip()
+    return None
+
+
+with subtest("the device API lets the beta client's origin call it from a browser, and no other"):
+    beta = "https://beta.weblounge.org"
+    assert allowed_origin("/v1/devices", beta) == beta
+    assert allowed_origin("/v1/devices", "https://weblounge.org.example") is None
+    assert allowed_origin("/v1/r/some-route", beta) is None
+
+
 credenza_from_client = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
 push_body = ["--data-binary", "a-push"]
 

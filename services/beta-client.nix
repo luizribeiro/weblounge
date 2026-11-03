@@ -35,11 +35,13 @@ let
     config.weblounge.nginx.securityHeadersWith policy { Cache-Control = cacheControl; };
 in
 {
-  imports = [ ./concierge.nix ./ergo.nix ./files.nix ./nginx.nix ];
+  imports = [ ./concierge.nix ./ergo.nix ./files.nix ./nginx.nix ./push-relay.nix ];
 
   weblounge.ergo.settings.server.websockets.allowed-origins = [ origin ];
 
   weblounge.concierge.webClients.CONCIERGE_BETA_CLIENT_URL = origin;
+
+  weblounge.pushRelay.allowedOrigins = [ origin ];
 
   services.nginx.virtualHosts.${hostName} = lib.mkMerge [
     (config.weblounge.nginx.errorPages { "404" = "404.html"; })

@@ -24,6 +24,12 @@ in
     description = "Where the push relay listens for nginx, as host:port.";
   };
 
+  options.weblounge.pushRelay.allowedOrigins = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "The web clients' origins, which the relay lets register devices and routes.";
+  };
+
   config = {
     weblounge.loopbackListeners."The push relay" = cfg.listen;
 
@@ -50,6 +56,7 @@ in
         PUSH_RELAY_LISTEN = cfg.listen;
         PUSH_RELAY_STATE_DIR = "/var/lib/${stateDirectory}";
         PUSH_RELAY_ORIGIN = config.weblounge.origin hostName;
+        PUSH_RELAY_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.allowedOrigins;
         PUSH_RELAY_VAPID_KEY_FILE = "%d/push-relay-vapid-key";
         PUSH_RELAY_CONCIERGE_URL = config.weblounge.concierge.introspectionUrl;
         PUSH_RELAY_CONCIERGE_SECRET_FILE = "%d/push-relay-introspection-secret";
