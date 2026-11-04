@@ -42,6 +42,8 @@ with subtest("its state directory is 0700 and its database 0600, owned as other 
     assert owner != "0" and modes == [f"700 {owner}", f"600 {owner}"], (owner, modes)
 
 with subtest("push.weblounge.org answers through nginx with the relay's own answers"):
+    credenza.wait_for_unit("nginx.service")
+    credenza.wait_for_open_port(443)
     assert https(push, "/healthz") == "ok\n"
     assert https(push, "/no-such-path", *status_only) == "404"
     assert https(push, "/v1/r/no-such-route", *status_only, "--data-binary", "x") == "404"
