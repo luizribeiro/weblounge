@@ -603,11 +603,11 @@
         "weblounge-client-previous": "weblounge-client-previous"
       },
       "locked": {
-        "lastModified": 1793817320,
-        "narHash": "sha256-aP8oo89Xa4pl1aBq0WQjd4U8G/sCQz+GYIwnKAFBeRM=",
+        "lastModified": 1793826240,
+        "narHash": "sha256-Q201UwXOAlZAbppORchpf3RcmFLVnzg2VUnfLrRHjl4=",
         "owner": "luizribeiro",
         "repo": "weblounge-client",
-        "rev": "b052c6f9fca3cdc5769b989ff1c5bb4c18ab937e",
+        "rev": "3252cde0a0221c58dc7f54e78efeb49cf226efd5",
         "type": "github"
       },
       "original": {
