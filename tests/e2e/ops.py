@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import credenza, subtest
-    from helpers import Account, add_member, ops_lines, register, wait_for_bender, wait_for_ops_line
+    from helpers import Account, ops_lines, register, wait_for_bender, wait_for_ops_line
 
 olive: Account = {"account": "olive", "password": "watches-the-ops-channel"}
 booted = r"credenza booted after \d+s \(kernel \d+\.\d+\S*\)"
@@ -28,9 +28,7 @@ def louro_status_as_service(*properties: str) -> str:
     return f"systemd-run --wait --pipe --quiet {flags} -E LOURO_SOCKET=/run/louro/louro.sock louro status"
 
 
-with subtest("once luiz is a member, bender sits in #ops"):
-    add_member("luiz", "plain-old-vanilla")
-    credenza.succeed("systemctl restart bender-account.service louro.service")
+with subtest("bender, a house account, sits in #ops before anyone is a member"):
     register(**olive)
     wait_for_bender()
 

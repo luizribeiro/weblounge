@@ -3,6 +3,10 @@
 vmTest {
   browsers.bots-browser = ./clients/bots-browser.py;
   credenza = { lib, ... }: {
+    # luiz founded #lounge on credenza before bender existed. bender is
+    # outside the bots' ban, so at boot it would join #lounge first and
+    # hold its ops; the test starts it once luiz has registered it.
+    systemd.services.louro.wantedBy = lib.mkForce [ ];
     # What a deploy that changes concierge switches credenza to.
     specialisation.changed-concierge.configuration = {
       systemd.services.concierge.serviceConfig.Environment = [ "CONCIERGE_DEPLOYED_AGAIN=1" ];

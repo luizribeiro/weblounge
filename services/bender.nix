@@ -1,16 +1,16 @@
 # bender, the network's own bot: louro holds its connection to the Ergo
 # next to it, and lets members of the louro group speak in #ops through it.
+# It's a house account, so nobody may take its name.
 { config, lib, ... }:
 
 let
   nick = "bender";
-  owner = "luiz";
-  account = "${nick}-account";
-  secret = config.weblounge.secrets."${nick}-password";
+  account = config.weblounge.ergo.houseAccounts.${nick};
+  secret = config.weblounge.secrets.${account.password};
   ca = config.weblounge.selfSignedCa;
 in
 {
-  imports = [ ./concierge.nix ./ergo.nix ./sandbox.nix ./secrets.nix ];
+  imports = [ ./concierge.nix ./ergo.nix ./house-accounts.nix ./sandbox.nix ./secrets.nix ];
 
   services.louro = {
     enable = true;
@@ -32,38 +32,19 @@ in
   # louro's commands find the socket by it, as root runs them by hand.
   environment.variables.LOURO_SOCKET = config.services.louro.socket;
 
-  # The account puts the password back in Ergo before every start of louro.
-  weblounge.secrets."${nick}-password" = {
-    ephemeral = true;
-    loadedBy = [ account ];
-  };
+  weblounge.ergo.houseAccounts.${nick}.vhost = "weblounge/${nick}";
 
-  systemd.services.${account} = {
-    description = "Register ${nick}'s account, or set its password";
-    wants = [ "concierge.service" "ergochat.service" ];
-    after = [ "concierge.service" "ergochat.service" ];
-    # concierge-admin's command runs as concierge's own user, which can't
-    # open the credential, so the password reaches it on standard input.
-    script = config.weblounge.ergo.untilItAnswers ''
-      cat "$CREDENTIALS_DIRECTORY/${nick}-password" \
-        | ${lib.getExe config.weblounge.concierge.admin} bot ensure ${owner} ${nick} --password-file -
-    '';
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    # Its script calls concierge-admin, which changes with every change to
-    # concierge; restarting it on deploy would take bender down with it.
-    # It only needs to run before louro starts.
-    restartIfChanged = false;
-  };
+  # Its script runs concierge, which changes with every change to
+  # concierge; restarting it on deploy would take bender down with it, as
+  # louro requires it. It only needs to run before louro starts.
+  systemd.services.${account.unit}.restartIfChanged = false;
 
   systemd.services.louro = {
-    requires = [ "${account}.service" ];
+    requires = [ "${account.unit}.service" ];
     # Its account's order after ergo doesn't hold when a deploy restarts
     # ergo and louro but not the account.
     wants = [ "ergochat.service" ];
-    after = [ "${account}.service" "ergochat.service" ];
+    after = [ "${account.unit}.service" "ergochat.service" ];
     # rustls trusts SSL_CERT_FILE in place of the system's CAs.
     environment = lib.optionalAttrs (ca != null) { SSL_CERT_FILE = "%d/ca"; };
     serviceConfig = config.weblounge.loopbackOnly // {

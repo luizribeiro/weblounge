@@ -41,9 +41,22 @@ in
   };
 
   testConciergeAndItsAdminCommandsReserveTheHouseAccounts = {
-    expr = lib.elem "CONCIERGE_HOUSE_ACCOUNTS=concierge,example"
+    expr = lib.elem "CONCIERGE_HOUSE_ACCOUNTS=bender,concierge,example"
       (credenzaWith { example.vhost = "weblounge/example"; }).config.systemd.services.concierge.serviceConfig.Environment;
     expected = true;
+  };
+
+  testBenderIsAHouseAccountThatDeploysLeaveConnected = {
+    expr = {
+      ensures = lib.hasInfix "ensure-house-account bender weblounge/bender" config.systemd.services.bender-account.script;
+      inherit (config.systemd.services.bender-account) restartIfChanged;
+      louroRequires = config.systemd.services.louro.requires;
+    };
+    expected = {
+      ensures = true;
+      restartIfChanged = false;
+      louroRequires = [ "bender-account.service" ];
+    };
   };
 
   testValidHouseAccountsPass = {

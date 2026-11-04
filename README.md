@@ -154,12 +154,13 @@ set mode `+B` on themselves.
 
 `templates/bot` is a Go bot to start from (`nix flake init -t
 github:luizribeiro/weblounge#bot`); its README covers running it with and
-without NixOS. bender, our own bot, doesn't run it: on credenza,
+without NixOS. bender, our own bot, doesn't run it, and isn't a
+member's bot but a house account: on credenza,
 [louro](https://github.com/luizribeiro/louro) holds bender's connection,
 in #bots and #ops, and answers nothing. louro may speak in #ops alone,
-and only members of the `louro` group may use its socket. Before each
-start, `bender-account.service` registers bender as luiz's bot, or puts
-back its generated password, so it stays down until luiz is a member.
+and only members of the `louro` group may use its socket. bender
+connects from `bender!~u@weblounge/bender`, outside the bots' ban, so
+Ergo joins it to #lounge too, where louro neither reads nor speaks.
 
 Bots connect from their owner's vhost, `<bot>!~u@weblounge/bot/<owner>`,
 where members show `<nick>!~u@weblounge`; Ergo's API sets it through
@@ -170,13 +171,26 @@ marks it as a migration, and running it again changes nothing. Bots stay
 out of #lounge, which everyone auto-joins, through its one ban
 `+b *!*@weblounge/bot/*`, which luiz sets as the channel's founder.
 
+## House accounts
+
+A house account is one of the network's own, neither a member nor a
+member's bot: concierge, which the greeter connects as, and bender. The
+service that connects as one declares it,
+`weblounge.ergo.houseAccounts.<name>.vhost = "weblounge/<name>"`, which
+gives it a generated `<name>-password` in RAM and
+`<name>-account.service`. That oneshot holds Ergo's API token and runs
+`concierge ensure-house-account <name> <vhost>` before the service
+starts: it registers the account or puts the password back, and sets its
+vhost and always-on. Concierge reads the names from
+`CONCIERGE_HOUSE_ACCOUNTS`: nobody may sign up or make a bot under them,
+and `member reconcile` expects them in Ergo alone.
+
 ## The greeter
 
-`concierge`, weblounge's resident bot, is an account of the network's own,
-neither a member nor a member's bot: nobody may take the name, and `member
-reconcile` expects it. `crates/greeter` connects as it, in bot mode,
-from `concierge!~u@weblounge/concierge`, outside the bots' ban, so it
-sits in #lounge. Every invite a member made records an arrival when
+`concierge`, weblounge's resident bot, is a house account.
+`crates/greeter` connects as it, in bot mode, from
+`concierge!~u@weblounge/concierge`, outside the bots' ban, so it sits
+in #lounge. Every invite a member made records an arrival when
 it's redeemed (root invites, which bootstrap the network, don't), and
 every few seconds the greeter WHOISes the newcomers it hasn't seen
 connected yet. At first sight it welcomes them in #lounge, DMs their

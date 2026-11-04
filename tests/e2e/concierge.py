@@ -289,25 +289,25 @@ with subtest("concierge-admin member reset-password ends the member's website se
     assert browser.sign_in("dana", new_password).startswith("303 ")
 
 with subtest("a bot made with concierge-admin logs in to IRC with SASL, but not to the members' site"):
-    bot_password = concierge_admin("bot", "create", "dana", "bender", "--note", "answers !ping").strip()
+    bot_password = concierge_admin("bot", "create", "dana", "rosie", "--note", "answers !ping").strip()
     assert re.fullmatch("[a-z2-9]{26}", bot_password), bot_password
     listed = concierge_admin("bot", "list", "dana")
-    assert re.fullmatch(r"bender Dana \d{4}-\d\d-\d\d answers !ping\n", listed), listed
-    session = irc(account="bender", password=bot_password)
+    assert re.fullmatch(r"rosie Dana \d{4}-\d\d-\d\d answers !ping\n", listed), listed
+    session = irc(account="rosie", password=bot_password)
     assert " 903 " in session, session
-    body, _ = ergo_api("ns/saget", accountName="bender")
+    body, _ = ergo_api("ns/saget", accountName="rosie")
     settings = json.loads(body)
     assert (settings["alwaysOn"], settings["autoAway"]) == ("off", "off"), body
-    refused = Browser("bender").sign_in("bender", bot_password)
+    refused = Browser("rosie").sign_in("rosie", bot_password)
     assert refused == "401 ", refused
     tab = browser.get("/bots", "-f")
-    assert "<strong>bender</strong>" in tab and "answers !ping" in tab, tab
+    assert "<strong>rosie</strong>" in tab and "answers !ping" in tab, tab
 
 with subtest("concierge-admin bot delete erases the bot's account in Ergo"):
-    deleted = concierge_admin("bot", "delete", "bender")
-    assert deleted == "removed bot bender\n", deleted
-    client.fail(irc_command(account="bender", password=bot_password))
-    body, _ = ergo_api("ns/info", accountName="bender")
+    deleted = concierge_admin("bot", "delete", "rosie")
+    assert deleted == "removed bot rosie\n", deleted
+    client.fail(irc_command(account="rosie", password=bot_password))
+    body, _ = ergo_api("ns/info", accountName="rosie")
     assert json.loads(body) == {"success": False}, body
     assert concierge_admin("bot", "list") == ""
 
