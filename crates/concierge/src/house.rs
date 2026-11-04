@@ -13,8 +13,6 @@ use crate::{
     config::HouseAccountConfig, db::Db, name::HouseName, nick, password_rules, vhost::Vhost,
 };
 
-pub const ACCOUNT: &str = "concierge";
-
 /// The systemd credential `name`'s generated password reaches what
 /// connects as it in.
 pub fn password_credential(name: &HouseName) -> String {

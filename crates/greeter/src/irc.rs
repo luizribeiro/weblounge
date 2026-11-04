@@ -7,7 +7,7 @@ use std::sync::{
 };
 
 use anyhow::Context;
-use concierge::{config::IrcServer, house};
+use concierge::{config::IrcServer, name::HouseName};
 use papo::{Away, Client, Event, Events, Refusal, Sasl};
 use secret::SecretString;
 
@@ -64,27 +64,33 @@ impl Connection {
 
 /// How the greeter connects. papo reconnects by itself, until a refusal
 /// it takes for permanent, such as a wrong password.
-pub fn builder(server: &IrcServer, password: &SecretString) -> papo::Builder {
+pub fn builder(server: &IrcServer, account: &HouseName, password: &SecretString) -> papo::Builder {
     as_the_house(
         Client::builder(format!("ircs://{}:{}", server.host, server.port)),
+        account,
         password,
     )
 }
 
-fn as_the_house(builder: papo::Builder, password: &SecretString) -> papo::Builder {
+fn as_the_house(
+    builder: papo::Builder,
+    account: &HouseName,
+    password: &SecretString,
+) -> papo::Builder {
     builder
-        .nick(house::ACCOUNT)
+        .nick(account.as_str())
         .realname(REALNAME)
-        .sasl(Sasl::plain(house::ACCOUNT, password.expose()))
+        .sasl(Sasl::plain(account.as_str(), password.expose()))
         .bot(true)
         .autojoin([LOUNGE])
 }
 
 pub async fn connect(
     server: &IrcServer,
+    account: &HouseName,
     password: &SecretString,
 ) -> anyhow::Result<(Client, Events)> {
-    builder(server, password)
+    builder(server, account, password)
         .connect()
         .await
         .with_context(|| format!("can't connect to {}:{}", server.host, server.port))
@@ -123,7 +129,8 @@ pub(crate) mod tests {
         // Over TLS, papo would load the system's CAs, which the build
         // sandbox lacks; the in-memory wire carries no TLS anyway.
         let plaintext = Client::builder("irc://irc.test:6667").allow_insecure_auth(true);
-        let builder = as_the_house(plaintext, &SecretString::from(PASSWORD))
+        let account = HouseName::new("concierge");
+        let builder = as_the_house(plaintext, &account, &SecretString::from(PASSWORD))
             .rate_limit(papo::RateLimit::unlimited())
             .reconnect(papo::Reconnect::never());
         let (client, events, mut wire) = wire(builder);

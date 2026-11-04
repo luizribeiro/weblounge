@@ -253,6 +253,8 @@ pub struct GreeterConfig {
     pub irc_server: IrcServer,
     pub public_url: SiteOrigin,
     pub credentials_dir: PathBuf,
+    /// The house account it connects as.
+    pub account: HouseName,
     /// Who gets the Monday reminder to post the week's thread, if anyone.
     pub weekly_host: Option<MemberName>,
 }
@@ -269,13 +271,17 @@ impl GreeterConfig {
             irc_server: irc_server_in(require("CONCIERGE_IRC_SERVER")?)?,
             public_url: origin("CONCIERGE_PUBLIC_URL", require("CONCIERGE_PUBLIC_URL")?)?,
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
+            account: house_name_in(
+                "CONCIERGE_GREETER_ACCOUNT",
+                require("CONCIERGE_GREETER_ACCOUNT")?,
+            )?,
             weekly_host: var("CONCIERGE_GREETER_WEEKLY_HOST").map(MemberName::new),
         })
     }
 
     /// The house account's password, which its account unit set.
     pub fn read_password(&self) -> anyhow::Result<SecretString> {
-        let credential = house::password_credential(&HouseName::new(house::ACCOUNT));
+        let credential = house::password_credential(&self.account);
         read_credential(&self.credentials_dir, &credential)
     }
 }
@@ -312,6 +318,10 @@ impl HouseAccountConfig {
     pub fn read_password(&self, name: &HouseName) -> anyhow::Result<SecretString> {
         read_credential(&self.credentials_dir, &house::password_credential(name))
     }
+}
+
+fn house_name_in(name: &'static str, value: String) -> Result<HouseName, ConfigError> {
+    house::parse_name(&value).map_err(|_| invalid(name, value, "expected a house account's name"))
 }
 
 fn database_in(state_dir: &Path) -> PathBuf {
@@ -789,7 +799,7 @@ mod tests {
     }
 
     #[test]
-    fn greeting_needs_the_database_irc_the_public_url_and_a_password() {
+    fn greeting_needs_the_database_irc_the_public_url_and_an_account() {
         let vars = HashMap::from([
             ("STATE_DIRECTORY", "/var/lib/concierge"),
             ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
@@ -798,6 +808,7 @@ mod tests {
                 "CREDENTIALS_DIRECTORY",
                 "/run/credentials/concierge-greeter.service",
             ),
+            ("CONCIERGE_GREETER_ACCOUNT", "concierge"),
         ]);
         let greeter = |missing: Option<&str>| {
             GreeterConfig::from_vars(|name| {
@@ -816,6 +827,7 @@ mod tests {
                 },
                 public_url: origin("https://members.weblounge.org"),
                 credentials_dir: "/run/credentials/concierge-greeter.service".into(),
+                account: HouseName::new("concierge"),
                 weekly_host: None,
             })
         );
@@ -825,12 +837,33 @@ mod tests {
     }
 
     #[test]
+    fn the_greeter_connects_as_a_house_account_alone() {
+        let config = GreeterConfig::from_vars(|name| match name {
+            "STATE_DIRECTORY" => Some("/var/lib/concierge".into()),
+            "CONCIERGE_IRC_SERVER" => Some("irc.weblounge.org:6697".into()),
+            "CONCIERGE_PUBLIC_URL" => Some("https://members.weblounge.org".into()),
+            "CREDENTIALS_DIRECTORY" => Some("/run/credentials/concierge-greeter.service".into()),
+            "CONCIERGE_GREETER_ACCOUNT" => Some("the concierge".into()),
+            _ => None,
+        });
+        assert_eq!(
+            config,
+            Err(invalid(
+                "CONCIERGE_GREETER_ACCOUNT",
+                "the concierge".into(),
+                "expected a house account's name"
+            ))
+        );
+    }
+
+    #[test]
     fn the_greeter_reminds_the_weekly_host_it_is_given() {
         let config = GreeterConfig::from_vars(|name| match name {
             "STATE_DIRECTORY" => Some("/var/lib/concierge".into()),
             "CONCIERGE_IRC_SERVER" => Some("irc.weblounge.org:6697".into()),
             "CONCIERGE_PUBLIC_URL" => Some("https://members.weblounge.org".into()),
             "CREDENTIALS_DIRECTORY" => Some("/run/credentials/concierge-greeter.service".into()),
+            "CONCIERGE_GREETER_ACCOUNT" => Some("concierge".into()),
             "CONCIERGE_GREETER_WEEKLY_HOST" => Some("luiz".into()),
             _ => None,
         });
@@ -874,6 +907,7 @@ mod tests {
             irc_server: IrcServer::parse("irc.weblounge.org:6697").unwrap(),
             public_url: origin("https://members.weblounge.org"),
             credentials_dir: dir.path().into(),
+            account: HouseName::new("concierge"),
             weekly_host: None,
         };
         assert!(config.read_password().is_err());

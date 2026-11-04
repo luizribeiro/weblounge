@@ -7,7 +7,8 @@
 
 let
   cfg = config.weblounge.greeter;
-  account = config.weblounge.ergo.houseAccounts.concierge;
+  name = "concierge";
+  account = config.weblounge.ergo.houseAccounts.${name};
   ca = config.weblounge.selfSignedCa;
   inherit (config.weblounge) sandbox loopbackOnly;
   inherit (config.weblounge.concierge) database;
@@ -29,7 +30,7 @@ in
 
   config = lib.mkMerge [
     # Declared while the greeter is off too, so nobody takes its name.
-    { weblounge.ergo.houseAccounts.concierge.vhost = "weblounge/concierge"; }
+    { weblounge.ergo.houseAccounts.${name}.vhost = "weblounge/${name}"; }
 
     (lib.mkIf cfg.enable {
       weblounge.secrets.${account.password}.loadedBy = [ "concierge-greeter" ];
@@ -44,6 +45,7 @@ in
           after = [ "${account.unit}.service" "ergochat.service" ];
           # rustls trusts SSL_CERT_FILE in place of the system's CAs.
           environment = {
+            CONCIERGE_GREETER_ACCOUNT = name;
             CONCIERGE_IRC_SERVER = config.weblounge.ergo.localAddress;
             CONCIERGE_PUBLIC_URL = config.weblounge.concierge.publicUrl;
           } // lib.optionalAttrs (ca != null) { SSL_CERT_FILE = "%d/ca"; }
