@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       checks: ${{ steps.list.outputs.checks }}
+      deps: ${{ steps.list.outputs.deps }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix
@@ -39,13 +40,17 @@ jobs:
             --flake .#checks.x86_64-linux --check-cache-status \
             --workers 2 --max-memory-size 3072 > jobs.jsonl
           [ -s jobs.jsonl ]
-          checks=$(jq -sc 'map(select(.isCached | not) | .attr)' jobs.jsonl)
-          echo "checks=$checks" >> "$GITHUB_OUTPUT"
+          jq -sr 'map(select(.isCached | not) | .attr)
+            | "deps=\(index("toplevel-credenza") != null)",
+              "checks=\(. - ["toplevel-credenza"] | tojson)"' jobs.jsonl \
+            >> "$GITHUB_OUTPUT"
 
   # Builds what most checks share, the crates, the web client and their
-  # toolchains among it, once, into Cachix for the other jobs.
+  # toolchains among it, once, into Cachix for the other jobs. It is the
+  # toplevel-credenza check, so it runs when that isn't cached.
   deps:
     needs: list
+    if: needs.list.outputs.deps == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -103,7 +108,9 @@ jobs:
     steps:
       - env:
           RESULTS: >-
-            ${{ needs.list.result }} ${{ needs.deps.result }}
+            ${{ needs.list.result }}
+            ${{ needs.list.outputs.deps == 'false' && 'success'
+            || needs.deps.result }}
             ${{ needs.outputs.result }}
             ${{ needs.list.outputs.checks == '[]' && 'success'
             || needs.build.result }}
