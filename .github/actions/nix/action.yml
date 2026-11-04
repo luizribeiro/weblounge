@@ -5,12 +5,9 @@ description: >-
   pushing what it builds there when given a token
 
 inputs:
-  store-key:
-    description: Key of the cached Nix store to restore; none if empty
-    default: ""
-  save-store:
-    description: Save the store under store-key when the job ends
-    default: "false"
+  free-disk:
+    description: Remove the runner image's unused toolchains first
+    default: "true"
   # Each VM test boots two or more VMs; four at once outgrow the
   # runner's 16 GB, and it gets shut down mid-check.
   max-jobs:
@@ -32,9 +29,9 @@ runs:
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
 
-    # The restored store unpacks to more than some runners have free.
+    # A cold build of the host fills more than some runners have free.
     - name: Free disk space
-      if: inputs.store-key != ''
+      if: inputs.free-disk == 'true'
       shell: bash
       run: |
         df -h /
@@ -47,24 +44,6 @@ runs:
         extra_nix_config: |
           system-features = nixos-test benchmark big-parallel kvm
           max-jobs = ${{ inputs.max-jobs }}
-
-    # Falls back to the newest store when this key has none yet, so
-    # a changed input rebuilds only what depends on it.
-    - if: inputs.store-key != '' && inputs.save-store != 'true'
-      uses: nix-community/cache-nix-action/restore@v7
-      with:
-        primary-key: ${{ inputs.store-key }}
-        restore-prefixes-first-match: store-
-
-    - if: inputs.store-key != '' && inputs.save-store == 'true'
-      uses: nix-community/cache-nix-action@v7
-      with:
-        primary-key: ${{ inputs.store-key }}
-        restore-prefixes-first-match: store-
-        purge: true
-        purge-prefixes: store-
-        purge-last-accessed: P1D
-        purge-primary-key: never
 
     # Lets CI run before the cache exists, or while Cachix is down.
     - id: cachix
