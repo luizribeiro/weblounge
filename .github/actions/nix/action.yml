@@ -11,6 +11,11 @@ inputs:
   save-store:
     description: Save the store under store-key when the job ends
     default: "false"
+  # Each VM test boots two or more VMs; four at once outgrow the
+  # runner's 16 GB, and it gets shut down mid-check.
+  max-jobs:
+    description: How many builds Nix runs at once
+    default: "2"
   cachix-auth-token:
     description: Token to push to Cachix with; pull only if empty
     default: ""
@@ -39,11 +44,9 @@ runs:
 
     - uses: cachix/install-nix-action@v31
       with:
-        # Each VM test boots two or more VMs; four at once outgrow the
-        # runner's 16 GB, and it gets shut down mid-check.
         extra_nix_config: |
           system-features = nixos-test benchmark big-parallel kvm
-          max-jobs = 2
+          max-jobs = ${{ inputs.max-jobs }}
 
     # Falls back to the newest store when this key has none yet, so
     # a changed input rebuilds only what depends on it.

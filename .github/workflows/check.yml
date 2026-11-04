@@ -55,6 +55,7 @@ jobs:
           store-key: ${{ needs.list.outputs.store-key }}
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           save-store: "true"
+          max-jobs: auto
       - run: nix build -L --no-link .#checks.x86_64-linux.toplevel-credenza
 
   # What `nix flake check` evaluates besides the checks.
