@@ -159,8 +159,8 @@ member's bot but a house account: on credenza,
 [louro](https://github.com/luizribeiro/louro) holds bender's connection,
 in #bots and #ops, and answers nothing. louro may speak in #ops alone,
 and only members of the `louro` group may use its socket. bender
-connects from `bender!~u@weblounge/bender`, outside the bots' ban, so
-Ergo joins it to #lounge too, where louro neither reads nor speaks.
+connects from `bender!~u@weblounge/bot/bender`, like members' bots, so
+the bots' ban keeps it out of #lounge too.
 
 Bots connect from their owner's vhost, `<bot>!~u@weblounge/bot/<owner>`,
 where members show `<nick>!~u@weblounge`; Ergo's API sets it through

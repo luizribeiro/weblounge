@@ -40,12 +40,13 @@ def host_of(nick):
     return host
 
 
-def wait_for_bender_in_bots_and_lounge():
-    """Once bender has rejoined after a reconnect, it's in #bots, and, outside the bots' ban like
-    concierge, in #lounge, which Ergo joins everyone to."""
-    names = irc_command("NAMES #bots", "NAMES #lounge", **alice)
-    for channel in ["#bots", "#lounge"]:
-        client.wait_until_succeeds(names + f" | grep ' 353 alice = {channel} :.*bender' >/dev/null", timeout=60)
+def wait_for_bender_in_bots_alone():
+    """Once bender has rejoined after a reconnect, it's in #bots, and the bots' ban keeps it out
+    of #lounge, which Ergo joins everyone else to."""
+    in_bots = irc_command("NAMES #bots", **alice) + " | grep ' 353 alice = #bots :.*bender' >/dev/null"
+    client.wait_until_succeeds(in_bots, timeout=60)
+    session = irc("NAMES #lounge", **alice)
+    assert not re.search(r" 353 alice = #lounge :.*\bbender\b", session), session
 
 
 def assert_kept_out_of_lounge():
@@ -63,10 +64,11 @@ def bots_browser(owner: Account, action, name):
     return client.succeed(command).strip().splitlines()[-1]
 
 
-with subtest("luiz becomes a member and founds #lounge, as on credenza, before bender is in it"):
+with subtest("as on credenza, luiz founds #lounge and bans bots' hosts from it before bender connects"):
     add_member(**luiz)
-    session = irc("CS REGISTER #lounge", **luiz)
+    session = irc("CS REGISTER #lounge", "MODE #lounge +b *!*@weblounge/bot/*", "MODE #lounge b", **luiz)
     assert "Channel #lounge successfully registered" in session, session
+    assert re.search(r" 367 luiz #lounge \*!\*@weblounge/bot/\* ", session), session
 
 with subtest("bender, a house account, logs in as nobody's bot"):
     credenza.succeed("systemctl start louro.service")
@@ -79,7 +81,7 @@ with subtest("louro logs bender in to #bots and #ops, marked as a bot, from its 
     for channel in ["#bots", "#ops"]:
         assert re.search(rf" 353 alice [=*@] {channel} :.*\bbender\b", session), (channel, session)
     assert " 335 alice bender " in session, session
-    assert re.search(r"^:\S+ 311 alice bender \S+ weblounge/bender ", session, re.M), session
+    assert re.search(r"^:\S+ 311 alice bender \S+ weblounge/bot/bender ", session, re.M), session
 
 with subtest("bender is on nobody's Bots tab, and luiz still has all three bots to make"):
     confirm_email("luiz")
@@ -141,16 +143,14 @@ with subtest("going back to secrets on disk, and deploying them to RAM again, ke
 with subtest("bots connect from their owner's vhost, members from the network's cloak"):
     add_member(**zoe)
     marvin["password"] = concierge_admin("bot", "create", "zoe", "marvin").strip()
-    assert host_of("bender") == "weblounge/bender"
+    assert host_of("bender") == "weblounge/bot/bender"
     assert host_of("alice") == "weblounge"
     session = irc("WHOIS marvin", **marvin)
     assert re.search(r"^:\S+ 311 marvin marvin ~u weblounge/bot/zoe ", session, re.M), session
 
-with subtest("once #lounge's founder bans bots' hosts, bots stay out of it but still join #bots; bender is outside it"):
-    session = irc("MODE #lounge +b *!*@weblounge/bot/*", "MODE #lounge b", **luiz)
-    assert re.search(r" 367 luiz #lounge \*!\*@weblounge/bot/\* ", session), session
+with subtest("the bots' ban keeps bots, bender among them, out of #lounge, but not out of #bots"):
     credenza.succeed("systemctl restart louro.service")
-    wait_for_bender_in_bots_and_lounge()
+    wait_for_bender_in_bots_alone()
     assert_kept_out_of_lounge()
     session = irc(**zoe)
     assert re.search(r"^:zoe!~u@weblounge JOIN #lounge", session, re.M), session
@@ -158,15 +158,15 @@ with subtest("once #lounge's founder bans bots' hosts, bots stay out of it but s
 with subtest("vhosts and the ban survive an Ergo restart"):
     credenza.succeed("systemctl restart ergochat.service louro.service")
     credenza.wait_for_open_port(8089)
-    wait_for_bender_in_bots_and_lounge()
-    assert host_of("bender") == "weblounge/bender"
+    wait_for_bender_in_bots_alone()
+    assert host_of("bender") == "weblounge/bot/bender"
     assert_kept_out_of_lounge()
 
 with subtest("apply-vhosts gives bots from before vhosts theirs, and leaves bender's alone"):
     body, _ = ergo_api("hs/set", accountName="marvin", vhost="")
     assert json.loads(body) == {"success": True}, body
     assert concierge_admin("bot", "apply-vhosts") == "marvin\n"
-    assert host_of("bender") == "weblounge/bender"
+    assert host_of("bender") == "weblounge/bot/bender"
     assert_kept_out_of_lounge()
 
 robbie: Account = {"account": "robbie", "password": ""}

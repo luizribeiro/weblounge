@@ -48,7 +48,7 @@ in
 
   testBenderIsAHouseAccountThatDeploysLeaveConnected = {
     expr = {
-      ensures = lib.hasInfix "ensure-house-account bender weblounge/bender" config.systemd.services.bender-account.script;
+      ensures = lib.hasInfix "ensure-house-account bender weblounge/bot/bender" config.systemd.services.bender-account.script;
       inherit (config.systemd.services.bender-account) restartIfChanged;
       louroRequires = config.systemd.services.louro.requires;
     };

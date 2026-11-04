@@ -137,9 +137,9 @@ mod tests {
 
     #[test]
     fn ensures_a_house_account_by_its_name_and_vhost() {
-        let (name, vhost) = ensure_house_account(&["bender", "weblounge/bender"]).unwrap();
+        let (name, vhost) = ensure_house_account(&["bender", "weblounge/bot/bender"]).unwrap();
         assert_eq!(name.as_str(), "bender");
-        assert_eq!(vhost.as_str(), "weblounge/bender");
+        assert_eq!(vhost.as_str(), "weblounge/bot/bender");
     }
 
     #[test]

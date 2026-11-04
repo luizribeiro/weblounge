@@ -3,9 +3,8 @@
 vmTest {
   browsers.bots-browser = ./clients/bots-browser.py;
   credenza = { lib, ... }: {
-    # luiz founded #lounge on credenza before bender existed. bender is
-    # outside the bots' ban, so at boot it would join #lounge first and
-    # hold its ops; the test starts it once luiz has registered it.
+    # On credenza, luiz founded #lounge and banned bots' hosts before
+    # bender existed; the test starts bender once it has done the same.
     systemd.services.louro.wantedBy = lib.mkForce [ ];
     # What a deploy that changes concierge switches credenza to.
     specialisation.changed-concierge.configuration = {
