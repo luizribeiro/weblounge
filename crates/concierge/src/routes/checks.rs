@@ -94,7 +94,7 @@ async fn availability(
     if !app.lookups.allows(address.0, Instant::now()) {
         return StatusCode::TOO_MANY_REQUESTS.into_response();
     }
-    let status = match Nick::parse(nick) {
+    let status = match Nick::parse(nick, &app.house_accounts) {
         Err(_) => Availability::Invalid,
         Ok(nick) => match taken(app, &nick, claimant).await {
             Ok(true) => Availability::Taken,

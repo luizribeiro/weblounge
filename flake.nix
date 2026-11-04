@@ -83,6 +83,7 @@
           inherit pkgs;
           gitHooks = gitHooks.${pkgs.stdenv.hostPlatform.system};
           ergoSettings = weblounge.hosts.credenza.config.weblounge.ergo.settings;
+          inherit (weblounge.hosts.credenza.config.weblounge.ergo) houseAccountNames;
         };
       });
     };

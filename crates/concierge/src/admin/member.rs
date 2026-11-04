@@ -6,7 +6,7 @@ use super::{Admin, bot, erase_reminder, print_once};
 use crate::{
     db,
     name::MemberName,
-    nick, password,
+    password,
     verification_mail::{self, Kind},
 };
 
@@ -131,7 +131,7 @@ async fn reconcile(admin: &Admin) -> anyhow::Result<String> {
         .await?
         .into_iter()
         .map(|account| String::from(account.account_name.as_str()))
-        .filter(|name| !nick::is_system_account(name))
+        .filter(|name| !admin.config.house_accounts.contains(name))
         .map(|name| (name.to_ascii_lowercase(), name))
         .collect();
     let members = admin.db.member_accounts().await?;

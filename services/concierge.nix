@@ -73,7 +73,7 @@ let
   };
 in
 {
-  imports = [ ./ergo.nix ./files.nix ./loopback.nix ./nginx.nix ./sandbox.nix ./secrets.nix ./sqlite-vacuum.nix ];
+  imports = [ ./ergo.nix ./files.nix ./house-accounts.nix ./loopback.nix ./nginx.nix ./sandbox.nix ./secrets.nix ./sqlite-vacuum.nix ];
 
   options.weblounge.concierge.publicUrl = lib.mkOption {
     type = lib.types.str;
@@ -205,6 +205,7 @@ in
             "CONCIERGE_ALWAYS_ON_DEFAULT=${multiclient.always-on}"
             "CONCIERGE_AUTO_AWAY_DEFAULT=${multiclient.auto-away}"
             "CONCIERGE_HISTORY_EXPIRE_TIME=${historyExpireTime}"
+            "CONCIERGE_HOUSE_ACCOUNTS=${config.weblounge.ergo.houseAccountNames}"
           ];
         };
       }

@@ -223,6 +223,7 @@ async fn mistakes_come_back_with_what_was_typed_but_the_passwords() {
             "Nicks start with a letter.",
         ),
         (signup("NickServ", NEW_PASSWORD, NEW_PASSWORD), "reserved"),
+        (signup("Concierge", NEW_PASSWORD, NEW_PASSWORD), "reserved"),
         (
             signup("bob", "short-one", "short-one"),
             "at least 12 characters",

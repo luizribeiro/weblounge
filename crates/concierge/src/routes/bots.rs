@@ -293,6 +293,7 @@ fn bots(app: &App) -> Bots<'_> {
         ergo: &app.ergo,
         history_expiry: app.history_expiry,
         uploads: &app.uploads,
+        house_accounts: &app.house_accounts,
     }
 }
 

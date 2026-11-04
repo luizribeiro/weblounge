@@ -26,6 +26,7 @@ use crate::{
     clients::{self, Client},
     db::{self, Claim, Invite, NewMember, Redemption},
     email::{self, Email},
+    house::HouseAccounts,
     invite_code, invite_rules,
     name::MemberName,
     nick::{self, Nick},
@@ -120,7 +121,7 @@ pub async fn redeem(
         .and_then(|invite| invite.created_by.as_ref())
         .map(MemberName::as_str);
     let refuse = |form| render_with(StatusCode::UNPROCESSABLE_ENTITY, &page(&app, inviter, form));
-    let account = match validate(&signup, invite.is_some()) {
+    let account = match validate(&signup, invite.is_some(), &app.house_accounts) {
         Ok(account) => account,
         Err(form) => return refuse(*form),
     };
@@ -326,9 +327,13 @@ async fn name_held(app: &App, name: &MemberName) -> sqlx::Result<bool> {
 }
 
 /// Checks `signup` against every rule, including that its invite is open.
-fn validate(signup: &Signup, invite_open: bool) -> Result<NewAccount, Box<SignupForm<'_>>> {
+fn validate<'a>(
+    signup: &'a Signup,
+    invite_open: bool,
+    house: &HouseAccounts,
+) -> Result<NewAccount, Box<SignupForm<'a>>> {
     let code_error = (!invite_open).then(unusable_code);
-    let nick = Nick::parse(&signup.nick);
+    let nick = Nick::parse(&signup.nick, house);
     let email = Email::parse(&signup.email);
     let password = password_rules::check(signup.password.expose(), signup.confirmation.expose());
     match (code_error, nick, email, password) {

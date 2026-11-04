@@ -54,12 +54,20 @@ let
   ];
 in
 {
-  imports = [ ./concierge.nix ./ergo.nix ./sandbox.nix ./secrets.nix ];
+  # concierge.nix, whose database the oneshots open, imports this.
+  imports = [ ./ergo.nix ./sandbox.nix ./secrets.nix ];
 
   options.weblounge.ergo.houseAccounts = lib.mkOption {
     type = lib.types.attrsOf (lib.types.submodule houseAccount);
     default = { };
     description = "The network's own accounts, by name, which nobody may sign up or make a bot under.";
+  };
+
+  options.weblounge.ergo.houseAccountNames = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = lib.concatStringsSep "," (lib.attrNames cfg);
+    description = "The house accounts' names, separated by commas, as concierge's CONCIERGE_HOUSE_ACCOUNTS takes them.";
   };
 
   config = {

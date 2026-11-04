@@ -9,7 +9,8 @@ use secret::SecretString;
 
 pub use crate::routes::presence::Presence;
 use crate::{
-    history, house,
+    history,
+    house::{self, HouseAccounts},
     name::{HouseName, MemberName},
     oauth::{INTROSPECTION_CLIENTS, IntrospectionSecrets},
     origin::{self, FilesOrigin, Origin, SiteOrigin, WebchatOrigin},
@@ -50,6 +51,8 @@ pub struct Config {
     /// How long Ergo keeps chat history, in seconds: its
     /// `history.restrictions.expire-time`.
     pub history_expiry: i64,
+    /// The network's own accounts, from `weblounge.ergo.houseAccounts`.
+    pub house_accounts: HouseAccounts,
 }
 
 /// The databases `concierge migrate` brings up to date: concierge's own in
@@ -149,6 +152,7 @@ impl Config {
                     "expected an Ergo duration longer than 0, such as 2w or 14d",
                 )
             })?,
+            house_accounts: house_accounts_in(require("CONCIERGE_HOUSE_ACCOUNTS")?)?,
         })
     }
 
@@ -320,6 +324,16 @@ impl HouseAccountConfig {
     }
 }
 
+fn house_accounts_in(names: String) -> Result<HouseAccounts, ConfigError> {
+    HouseAccounts::parse(&names).map_err(|_| {
+        invalid(
+            "CONCIERGE_HOUSE_ACCOUNTS",
+            names,
+            "expected house accounts' names, separated by commas",
+        )
+    })
+}
+
 fn house_name_in(name: &'static str, value: String) -> Result<HouseName, ConfigError> {
     house::parse_name(&value).map_err(|_| invalid(name, value, "expected a house account's name"))
 }
@@ -396,7 +410,7 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD};
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 16] = [
+    const PRODUCTION: [(&str, &str); 17] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
@@ -409,6 +423,7 @@ mod tests {
         ("CONCIERGE_ALWAYS_ON_DEFAULT", "opt-out"),
         ("CONCIERGE_AUTO_AWAY_DEFAULT", "opt-out"),
         ("CONCIERGE_HISTORY_EXPIRE_TIME", "2w"),
+        ("CONCIERGE_HOUSE_ACCOUNTS", "bender,concierge"),
         (
             "CONCIERGE_ASSETS",
             "/nix/store/asqgxh40xn390yzqhq97lkbqf5sslbyr-weblounge-web/members",
@@ -471,7 +486,26 @@ mod tests {
                     auto_away: true,
                 },
                 history_expiry: 14 * 24 * 60 * 60,
+                house_accounts: HouseAccounts::parse("bender,concierge").unwrap(),
             })
+        );
+    }
+
+    #[test]
+    fn reads_the_house_accounts_which_may_be_none() {
+        let house = |names| {
+            parse_with(&[("CONCIERGE_HOUSE_ACCOUNTS", Some(names))])
+                .map(|config| config.house_accounts)
+        };
+        assert_eq!(house(""), Ok(HouseAccounts::default()));
+        let error = house("concierge,2pac").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            r#"CONCIERGE_HOUSE_ACCOUNTS="concierge,2pac" is invalid: expected house accounts' names, separated by commas"#
+        );
+        assert_eq!(
+            parse_with(&[("CONCIERGE_HOUSE_ACCOUNTS", None)]),
+            Err(ConfigError::Missing("CONCIERGE_HOUSE_ACCOUNTS"))
         );
     }
 

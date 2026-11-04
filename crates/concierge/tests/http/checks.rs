@@ -90,6 +90,7 @@ async fn says_whether_a_nick_is_free_and_nothing_more() {
         ("DALEK", "taken"),
         ("2pac", "invalid"),
         ("NickServ", "invalid"),
+        ("Concierge", "invalid"),
         ("", "invalid"),
     ] {
         assert_eq!(

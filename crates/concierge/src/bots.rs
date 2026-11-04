@@ -7,6 +7,7 @@ use ergo_api::{Client, Erasure, Passphrase, Preference, Registration, SettingsCh
 use crate::{
     bot_rules,
     db::{self, Bot, BotInsertion, Db, NewBot},
+    house::HouseAccounts,
     name::{BotName, MemberName},
     nick::{self, InvalidNick, Nick},
     password,
@@ -24,6 +25,8 @@ pub struct Bots<'a> {
     pub history_expiry: i64,
     /// Where bots' uploads are, which go with them.
     pub uploads: &'a Store,
+    /// The names nobody may make a bot under.
+    pub house_accounts: &'a HouseAccounts,
 }
 
 /// Why a bot wasn't created, in terms its owner can act on.
@@ -88,7 +91,7 @@ impl Bots<'_> {
         password: &Passphrase,
         max_live: Option<i64>,
     ) -> anyhow::Result<Result<BotName, Refusal>> {
-        let nick = match Nick::parse(name) {
+        let nick = match Nick::parse(name, self.house_accounts) {
             Ok(nick) => nick,
             Err(invalid) => return Ok(Err(Refusal::InvalidName(invalid))),
         };

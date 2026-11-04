@@ -3,6 +3,8 @@
 
 use std::fmt;
 
+use crate::house::HouseAccounts;
+
 pub const MAX_LENGTH: usize = 32;
 const SPECIALS: [char; 2] = ['-', '_'];
 /// The services Ergo runs, and the ones it keeps free for networks that run
@@ -10,12 +12,6 @@ const SPECIALS: [char; 2] = ['-', '_'];
 const SERVICES: [&str; 8] = [
     "NickServ", "ChanServ", "HostServ", "HistServ", "MemoServ", "BotServ", "OperServ", "Global",
 ];
-/// The accounts the network runs itself, which are neither members nor
-/// bots: the house account the greeter connects as. Nobody may sign up
-/// or make a bot under them, and `member reconcile` expects them in Ergo
-/// alone.
-pub const SYSTEM_ACCOUNTS: [&str; 1] = ["concierge"];
-
 /// The rule in words, for forms to show next to the field.
 pub const RULE: &str = "Up to 32 letters, digits, hyphens and underscores, starting with a letter.";
 
@@ -62,9 +58,11 @@ impl fmt::Display for InvalidNick {
 impl std::error::Error for InvalidNick {}
 
 impl Nick {
-    pub fn parse(nick: &str) -> Result<Self, InvalidNick> {
+    /// `nick`, if it follows [`RULE`] and is neither a service's nor one
+    /// of `house`.
+    pub fn parse(nick: &str, house: &HouseAccounts) -> Result<Self, InvalidNick> {
         check_shape(nick)?;
-        if SERVICES.iter().any(|name| name.eq_ignore_ascii_case(nick)) || is_system_account(nick) {
+        if SERVICES.iter().any(|name| name.eq_ignore_ascii_case(nick)) || house.contains(nick) {
             return Err(InvalidNick::Reserved);
         }
         Ok(Self(nick.to_owned()))
@@ -73,13 +71,6 @@ impl Nick {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-/// Whether `account` is one of [`SYSTEM_ACCOUNTS`], in any case.
-pub fn is_system_account(account: &str) -> bool {
-    SYSTEM_ACCOUNTS
-        .iter()
-        .any(|name| name.eq_ignore_ascii_case(account))
 }
 
 /// Whether `nick` follows [`RULE`], reserved or not.
@@ -128,15 +119,23 @@ mod tests {
             "Zed__",
             &"x".repeat(MAX_LENGTH),
         ] {
-            assert_eq!(Nick::parse(nick).unwrap().as_str(), nick);
+            assert_eq!(
+                Nick::parse(nick, &HouseAccounts::default())
+                    .unwrap()
+                    .as_str(),
+                nick
+            );
         }
     }
 
     #[test]
     fn rejects_empty_and_overlong_nicks() {
-        assert_eq!(Nick::parse(""), Err(InvalidNick::Empty));
         assert_eq!(
-            Nick::parse(&"x".repeat(MAX_LENGTH + 1)),
+            Nick::parse("", &HouseAccounts::default()),
+            Err(InvalidNick::Empty)
+        );
+        assert_eq!(
+            Nick::parse(&"x".repeat(MAX_LENGTH + 1), &HouseAccounts::default()),
             Err(InvalidNick::TooLong)
         );
     }
@@ -145,7 +144,7 @@ mod tests {
     fn nicks_start_with_a_letter() {
         for nick in ["2pac", "_alice", "-bob"] {
             assert_eq!(
-                Nick::parse(nick),
+                Nick::parse(nick, &HouseAccounts::default()),
                 Err(InvalidNick::StartsWithoutALetter),
                 "{nick}"
             );
@@ -165,7 +164,11 @@ mod tests {
             ("ali?e", '?'),
             ("#lounge", '#'),
         ] {
-            assert_eq!(Nick::parse(nick), Err(InvalidNick::Forbidden(c)), "{nick}");
+            assert_eq!(
+                Nick::parse(nick, &HouseAccounts::default()),
+                Err(InvalidNick::Forbidden(c)),
+                "{nick}"
+            );
         }
     }
 
@@ -179,33 +182,53 @@ mod tests {
             ("a^", '^'),
             ("a{b}", '{'),
         ] {
-            assert_eq!(Nick::parse(nick), Err(InvalidNick::Forbidden(c)), "{nick}");
+            assert_eq!(
+                Nick::parse(nick, &HouseAccounts::default()),
+                Err(InvalidNick::Forbidden(c)),
+                "{nick}"
+            );
         }
     }
 
     #[test]
     fn rejects_anything_beyond_ascii() {
-        assert_eq!(Nick::parse("zoë"), Err(InvalidNick::Forbidden('ë')));
-        assert_eq!(Nick::parse("аlice"), Err(InvalidNick::Forbidden('а')));
+        assert_eq!(
+            Nick::parse("zoë", &HouseAccounts::default()),
+            Err(InvalidNick::Forbidden('ë'))
+        );
+        assert_eq!(
+            Nick::parse("аlice", &HouseAccounts::default()),
+            Err(InvalidNick::Forbidden('а'))
+        );
     }
 
     #[test]
     fn rejects_the_services_names_in_any_case() {
         for nick in ["NickServ", "nickserv", "CHANSERV", "global"] {
-            assert_eq!(Nick::parse(nick), Err(InvalidNick::Reserved), "{nick}");
+            assert_eq!(
+                Nick::parse(nick, &HouseAccounts::default()),
+                Err(InvalidNick::Reserved),
+                "{nick}"
+            );
         }
-        assert!(Nick::parse("NickServer").is_ok());
+        assert!(Nick::parse("NickServer", &HouseAccounts::default()).is_ok());
     }
 
     #[test]
-    fn rejects_the_networks_own_accounts_in_any_case() {
-        for nick in ["concierge", "Concierge", "CONCIERGE"] {
-            assert_eq!(Nick::parse(nick), Err(InvalidNick::Reserved), "{nick}");
-            assert!(is_system_account(nick), "{nick}");
+    fn rejects_the_house_accounts_in_any_case() {
+        let house = HouseAccounts::parse("concierge,bender").unwrap();
+        for nick in ["concierge", "Concierge", "BENDER"] {
+            assert_eq!(
+                Nick::parse(nick, &house),
+                Err(InvalidNick::Reserved),
+                "{nick}"
+            );
+            assert!(
+                Nick::parse(nick, &HouseAccounts::default()).is_ok(),
+                "{nick}"
+            );
         }
-        assert!(Nick::parse("concierge2").is_ok());
-        assert!(!is_system_account("concierge2"));
-        assert!(!is_system_account("NickServ"));
+        assert!(Nick::parse("bender2", &house).is_ok());
     }
 
     #[test]
@@ -237,7 +260,7 @@ mod tests {
         for nick in samples {
             assert_eq!(
                 pattern.is_match(nick),
-                Nick::parse(nick).is_ok(),
+                Nick::parse(nick, &HouseAccounts::default()).is_ok(),
                 "{nick:?}"
             );
         }

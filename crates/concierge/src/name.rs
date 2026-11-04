@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn a_nick_becomes_a_name_under_its_spelling() {
-        let name = BotName::from(Nick::parse("Bender").unwrap());
+        let name = BotName::from(Nick::parse("Bender", &Default::default()).unwrap());
         assert_eq!(name.as_str(), "Bender");
     }
 

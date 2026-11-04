@@ -42,6 +42,7 @@ use concierge::{
     config::{IrcServer, Presence},
     db::{self, Db, NewInvite, NewMember},
     email::Email,
+    house::HouseAccounts,
     invite_rules,
     name::MemberName,
     oauth::{INTROSPECTION_CLIENTS, IntrospectionSecrets, WebClients},
@@ -149,6 +150,7 @@ impl Site {
                 auto_away: true,
             },
             history_expiry: HISTORY_EXPIRY,
+            house_accounts: HouseAccounts::parse("concierge").unwrap(),
             uploads: Store {
                 directory: scrubber.uploads.clone(),
                 scrubber: scrubber.socket.clone(),

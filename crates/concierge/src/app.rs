@@ -18,6 +18,7 @@ use crate::{
     config::{IrcServer, Presence},
     cors, csrf,
     db::Db,
+    house::HouseAccounts,
     oauth::{IntrospectionSecrets, WebClients},
     origin::{FilesOrigin, SiteOrigin},
     rate_limit::{AddressLimiter, Limiter, MailLimiter, UploadLimiter},
@@ -60,6 +61,8 @@ pub struct App {
     pub presence_defaults: Presence,
     /// How long Ergo keeps chat history, in seconds.
     pub history_expiry: i64,
+    /// The names nobody may sign up or make a bot under.
+    pub house_accounts: HouseAccounts,
     /// Where uploads are handed to the scrubber, and stored.
     pub uploads: Store,
     /// Where uploads are served from.

@@ -40,6 +40,12 @@ in
     };
   };
 
+  testConciergeAndItsAdminCommandsReserveTheHouseAccounts = {
+    expr = lib.elem "CONCIERGE_HOUSE_ACCOUNTS=concierge,example"
+      (credenzaWith { example.vhost = "weblounge/example"; }).config.systemd.services.concierge.serviceConfig.Environment;
+    expected = true;
+  };
+
   testValidHouseAccountsPass = {
     expr = failedAssertions { example.vhost = "weblounge/example"; };
     expected = [ ];

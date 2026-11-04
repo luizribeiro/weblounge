@@ -110,6 +110,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         irc_server: config.irc_server.clone(),
         presence_defaults: config.presence_defaults,
         history_expiry: config.history_expiry,
+        house_accounts: config.house_accounts.clone(),
         uploads: config.uploads.clone(),
         files_url: config.files_url.clone(),
     };

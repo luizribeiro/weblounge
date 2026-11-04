@@ -13,6 +13,31 @@ use crate::{
     config::HouseAccountConfig, db::Db, name::HouseName, nick, password_rules, vhost::Vhost,
 };
 
+/// The house accounts' names, which nobody may sign up or make a bot
+/// under, and `member reconcile` expects in Ergo alone.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HouseAccounts(Vec<HouseName>);
+
+impl HouseAccounts {
+    /// The names in `names`, separated by commas: systemd's
+    /// `Environment=` splits a unit's variables at spaces.
+    pub fn parse(names: &str) -> Result<Self, nick::InvalidNick> {
+        if names.is_empty() {
+            return Ok(Self::default());
+        }
+        names
+            .split(',')
+            .map(parse_name)
+            .collect::<Result<_, _>>()
+            .map(Self)
+    }
+
+    /// Whether `name` is a house account's, in any case.
+    pub fn contains(&self, name: &str) -> bool {
+        self.0.contains(&HouseName::new(name))
+    }
+}
+
 /// The systemd credential `name`'s generated password reaches what
 /// connects as it in.
 pub fn password_credential(name: &HouseName) -> String {
@@ -99,6 +124,26 @@ pub async fn ensure(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn knows_the_house_accounts_in_any_case() {
+        let house = HouseAccounts::parse("concierge,bender").unwrap();
+        for name in ["concierge", "Bender", "CONCIERGE"] {
+            assert!(house.contains(name), "{name}");
+        }
+        for name in ["concierge2", "luiz", "NickServ", ""] {
+            assert!(!house.contains(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn there_may_be_no_house_accounts_but_each_is_a_name() {
+        assert_eq!(HouseAccounts::parse(""), Ok(HouseAccounts::default()));
+        assert_eq!(
+            HouseAccounts::parse("concierge,2pac"),
+            Err(nick::InvalidNick::StartsWithoutALetter)
+        );
+    }
 
     #[test]
     fn a_house_accounts_password_is_in_the_credential_named_after_it() {

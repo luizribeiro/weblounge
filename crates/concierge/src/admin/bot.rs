@@ -77,6 +77,7 @@ impl Admin {
             ergo: &self.ergo,
             history_expiry: self.config.history_expiry,
             uploads: &self.config.uploads,
+            house_accounts: &self.config.house_accounts,
         }
     }
 }

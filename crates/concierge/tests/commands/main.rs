@@ -19,6 +19,7 @@ use concierge::{
     config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
     db::{self, Db, NewMember, NewSession},
     email::Email,
+    house::HouseAccounts,
     name::MemberName,
     origin::Origin,
     secret_hash::SessionHash,
@@ -81,6 +82,7 @@ impl Fixture {
                 auto_away: true,
             },
             history_expiry: HISTORY_EXPIRY,
+            house_accounts: HouseAccounts::parse("concierge").unwrap(),
         };
         Db::migrate(&config.database_path()).await.unwrap();
         let migrated = Outbox::migrate(&config.outbox_path).await.unwrap();

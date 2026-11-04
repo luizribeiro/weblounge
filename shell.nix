@@ -1,4 +1,4 @@
-{ pkgs, gitHooks, ergoSettings }:
+{ pkgs, gitHooks, ergoSettings, houseAccountNames }:
 
 pkgs.mkShell ({
   shellHook = gitHooks.shellHook + ''
@@ -31,4 +31,5 @@ pkgs.mkShell ({
   CONCIERGE_AUTO_AWAY_DEFAULT = ergoSettings.accounts.multiclient.auto-away;
 
   CONCIERGE_HISTORY_EXPIRE_TIME = ergoSettings.history.restrictions.expire-time;
+  CONCIERGE_HOUSE_ACCOUNTS = houseAccountNames;
 } // pkgs.weblounge.concierge.ergoContractTestEnv)
