@@ -54,7 +54,8 @@ let
   ];
 in
 {
-  # concierge.nix, whose database the oneshots open, imports this.
+  # The oneshots open concierge's database, from concierge.nix, which
+  # imports this file; importing it back would make a cycle.
   imports = [ ./ergo.nix ./sandbox.nix ./secrets.nix ];
 
   options.weblounge.ergo.houseAccounts = lib.mkOption {
