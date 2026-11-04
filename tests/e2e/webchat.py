@@ -344,8 +344,6 @@ with subtest("in a browser, gamja offers desktop notifications atop every buffer
     client.copy_from_vm("/tmp/screens", "notifications")
 
 with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web client's login and bender take them"):
-    add_member("luiz", "plain-old-vanilla")
-    credenza.succeed("systemctl restart bender-account.service louro.service")
     in_ram = [
         f"/run/weblounge-secrets/{name}" for name in ["ergo-api-token", "oauth-introspection-secret", "bender-password"]
     ]

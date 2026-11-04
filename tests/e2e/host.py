@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import credenza, mail, subtest, tools
-    from helpers import add_member, ergo_api_token, unit_file_problems
+    from helpers import ergo_api_token, unit_file_problems
 
 # As in host.nix, whose stand-in certificate order fails its first attempt
 # and names its certificate here.
@@ -68,8 +68,6 @@ with subtest("systemd knows every setting in credenza's units, so no sandbox opt
 
 with subtest("the deploy checks pass on a healthy credenza, and name a unit that failed"):
     mail.wait_for_open_port(465)
-    add_member("luiz", "plain-old-vanilla")
-    credenza.succeed("systemctl restart bender-account.service louro.service")
     credenza.succeed("/run/current-system/deploy-checks-host")
     credenza.succeed("systemd-run --unit=doomed false")
     status, report = credenza.execute("DEPLOY_CHECKS_TIMEOUT=3 /run/current-system/deploy-checks-host 2>&1")

@@ -30,7 +30,6 @@ def boots_into() -> str:
 
 credenza.wait_for_unit("multi-user.target")
 add_member(**luiz)
-credenza.succeed("systemctl restart bender-account.service louro.service")
 client.succeed("ssh-keygen -q -t ed25519 -N '' -f /root/.ssh/id_ed25519")
 credenza.succeed(
     "install -d -m 700 -o luiz /home/luiz/.ssh",
