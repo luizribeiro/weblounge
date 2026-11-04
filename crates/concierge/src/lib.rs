@@ -41,4 +41,5 @@ pub mod upload_rules;
 pub mod uploads;
 pub mod verification_mail;
 pub mod verification_rules;
+pub mod vhost;
 pub mod welcome_rules;

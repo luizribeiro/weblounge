@@ -1,8 +1,9 @@
 use std::fs;
 
 use concierge::{
-    config::{GREETER_PASSWORD_CREDENTIAL, GreeterAccountConfig},
+    config::HouseAccountConfig,
     house::{self, Ensured},
+    vhost::Vhost,
 };
 use ergo_api::Preference;
 
@@ -10,18 +11,21 @@ use crate::Fixture;
 
 const PASSWORD: &str = "0f3a9c51d2e84b7f6a0c19e2d4b5a7c8";
 
-/// Runs `concierge ensure-greeter-account` with `password` in its
-/// credential, as systemd hands the generated one over.
+/// Runs `concierge ensure-house-account concierge weblounge/concierge`
+/// with `password` in its credential, as systemd hands the generated one
+/// over.
 async fn ensure_account(fixture: &Fixture, password: &str) -> anyhow::Result<Ensured> {
     let config = &fixture.config;
-    let credential = config.credentials_dir.join(GREETER_PASSWORD_CREDENTIAL);
+    let credential = config.credentials_dir.join("concierge-password");
     fs::write(credential, format!("{password}\n")).unwrap();
-    let config = GreeterAccountConfig {
+    let config = HouseAccountConfig {
         database: config.database_path(),
         ergo_api: config.ergo_api.clone(),
         credentials_dir: config.credentials_dir.clone(),
     };
-    house::ensure_account(&config).await
+    let name = house::parse_name("concierge").unwrap();
+    let vhost = Vhost::parse("weblounge/concierge").unwrap();
+    house::ensure_account(&config, &name, &vhost).await
 }
 
 /// Whether concierge is set up the way the greeter needs it.
@@ -69,7 +73,7 @@ async fn refuses_while_a_member_or_a_bot_holds_the_name() {
 
         assert_eq!(
             error.to_string(),
-            "a member or a bot holds concierge, the greeter's name"
+            "a member or a bot holds concierge, a house account's name"
         );
         assert!(!fixture.signs_in_to_ergo("concierge", PASSWORD).await);
     }

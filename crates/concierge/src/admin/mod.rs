@@ -14,8 +14,10 @@ use outbox::Outbox;
 use crate::{
     config::Config,
     db::{Db, Member},
-    name::MemberName,
+    house,
+    name::{HouseName, MemberName},
     status,
+    vhost::Vhost,
 };
 
 /// The members' site of weblounge.org, and the admin commands behind it.
@@ -33,11 +35,16 @@ pub enum Command {
     /// Delete the uploads in CONCIERGE_UPLOADS past their days, and files
     /// there no upload stands for.
     ExpireUploads,
-    /// Create concierge, the house account the greeter connects as, with
-    /// the password in the concierge-greeter-password credential, or set
-    /// its password to it, and give it its vhost and always-on. Meant to
-    /// run before the greeter starts, every time.
-    EnsureGreeterAccount,
+    /// Create a house account, one of the network's own, with the password
+    /// in its <name>-password credential, or set its password to it, and
+    /// give it its vhost and always-on. Meant to run before what connects
+    /// as it starts, every time.
+    EnsureHouseAccount {
+        #[arg(value_parser = |name: &str| house::parse_name(name))]
+        name: HouseName,
+        #[arg(value_parser = |vhost: &str| Vhost::parse(vhost))]
+        vhost: Vhost,
+    },
     #[command(flatten)]
     Admin(AdminCommand),
 }
@@ -114,4 +121,31 @@ fn print_once(password: &Passphrase) -> String {
 /// What's left to do once concierge let go of `account`.
 fn erase_reminder(account: &MemberName) -> String {
     format!("An oper must still run /NS ERASE {account}\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ensure_house_account(args: &[&str]) -> Result<(HouseName, Vhost), clap::Error> {
+        let args = ["concierge", "ensure-house-account"].iter().chain(args);
+        match Command::try_parse_from(args)? {
+            Command::EnsureHouseAccount { name, vhost } => Ok((name, vhost)),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn ensures_a_house_account_by_its_name_and_vhost() {
+        let (name, vhost) = ensure_house_account(&["bender", "weblounge/bender"]).unwrap();
+        assert_eq!(name.as_str(), "bender");
+        assert_eq!(vhost.as_str(), "weblounge/bender");
+    }
+
+    #[test]
+    fn refuses_names_and_vhosts_ergo_wouldnt_take() {
+        for args in [["2pac", "weblounge/2pac"], ["bender", "weblounge bender"]] {
+            assert!(ensure_house_account(&args).is_err(), "{args:?}");
+        }
+    }
 }

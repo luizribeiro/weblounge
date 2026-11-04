@@ -101,7 +101,7 @@ with subtest("both greeter units run sandboxed as concierge, and only the accoun
         credenza.succeed(f"systemd-analyze security --threshold=20 --no-pager {unit}.service")
         assert credenza.succeed(f"systemctl show -P User {unit}").strip() == "concierge"
     held = credenza.succeed("ls /run/credentials/concierge-greeter.service").split()
-    assert held == ["ca", "concierge-greeter-password"], held
+    assert held == ["ca", "concierge-password"], held
     credenza.succeed("systemctl cat concierge-greeter-account | grep -q '^LoadCredential=ergo-api-token:'")
 
 with subtest("a root invite, which bootstraps the network, gets no welcome"):

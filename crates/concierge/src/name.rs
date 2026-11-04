@@ -1,9 +1,10 @@
-//! The names of the accounts concierge knows the kind of: members' and
-//! bots'. A [`Nick`] is a name someone asked for, checked against the
-//! rules for new names; a [`MemberName`] or a [`BotName`] is the name of
-//! an account known to be of that kind, as the database or Ergo spells
-//! it, so one kind's can't be handed to what acts on the other's. Both
-//! are Ergo accounts, and turn into its [`AccountName`] for its API.
+//! The names of the accounts concierge knows the kind of: members',
+//! bots' and the house's. A [`Nick`] is a name someone asked for, checked
+//! against the rules for new names; a [`MemberName`], a [`BotName`] or a
+//! [`HouseName`] is the name of an account known to be of that kind, as
+//! the database, Ergo or the host's configuration spells it, so one
+//! kind's can't be handed to what acts on another's. All are Ergo
+//! accounts, and turn into its [`AccountName`] for its API.
 
 use std::{
     fmt,
@@ -32,8 +33,13 @@ pub enum Member {}
 #[derive(Debug, Clone)]
 pub enum Bot {}
 
+/// A house account, one of the network's own.
+#[derive(Debug, Clone)]
+pub enum House {}
+
 pub type MemberName = Name<Member>;
 pub type BotName = Name<Bot>;
+pub type HouseName = Name<House>;
 
 impl<K> Name<K> {
     /// `name`, known to be the name of an account of the kind `K`.

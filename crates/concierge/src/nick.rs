@@ -63,16 +63,7 @@ impl std::error::Error for InvalidNick {}
 
 impl Nick {
     pub fn parse(nick: &str) -> Result<Self, InvalidNick> {
-        let first = nick.chars().next().ok_or(InvalidNick::Empty)?;
-        if let Some(c) = nick.chars().find(|&c| !allowed(c)) {
-            return Err(InvalidNick::Forbidden(c));
-        }
-        if nick.len() > MAX_LENGTH {
-            return Err(InvalidNick::TooLong);
-        }
-        if !first.is_ascii_alphabetic() {
-            return Err(InvalidNick::StartsWithoutALetter);
-        }
+        check_shape(nick)?;
         if SERVICES.iter().any(|name| name.eq_ignore_ascii_case(nick)) || is_system_account(nick) {
             return Err(InvalidNick::Reserved);
         }
@@ -89,6 +80,21 @@ pub fn is_system_account(account: &str) -> bool {
     SYSTEM_ACCOUNTS
         .iter()
         .any(|name| name.eq_ignore_ascii_case(account))
+}
+
+/// Whether `nick` follows [`RULE`], reserved or not.
+pub fn check_shape(nick: &str) -> Result<(), InvalidNick> {
+    let first = nick.chars().next().ok_or(InvalidNick::Empty)?;
+    if let Some(c) = nick.chars().find(|&c| !allowed(c)) {
+        return Err(InvalidNick::Forbidden(c));
+    }
+    if nick.len() > MAX_LENGTH {
+        return Err(InvalidNick::TooLong);
+    }
+    if !first.is_ascii_alphabetic() {
+        return Err(InvalidNick::StartsWithoutALetter);
+    }
+    Ok(())
 }
 
 fn allowed(c: char) -> bool {

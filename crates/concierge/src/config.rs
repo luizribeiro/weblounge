@@ -9,8 +9,8 @@ use secret::SecretString;
 
 pub use crate::routes::presence::Presence;
 use crate::{
-    history,
-    name::MemberName,
+    history, house,
+    name::{HouseName, MemberName},
     oauth::{INTROSPECTION_CLIENTS, IntrospectionSecrets},
     origin::{self, FilesOrigin, Origin, SiteOrigin, WebchatOrigin},
     uploads::Store,
@@ -275,23 +275,23 @@ impl GreeterConfig {
 
     /// The house account's password, which its account unit set.
     pub fn read_password(&self) -> anyhow::Result<SecretString> {
-        read_credential(&self.credentials_dir, GREETER_PASSWORD_CREDENTIAL)
+        let credential = house::password_credential(&HouseName::new(house::ACCOUNT));
+        read_credential(&self.credentials_dir, &credential)
     }
 }
 
-pub const GREETER_PASSWORD_CREDENTIAL: &str = "concierge-greeter-password";
-
-/// What `concierge ensure-greeter-account` needs: concierge's database,
+/// What `concierge ensure-house-account` needs: concierge's database,
 /// which says whether a member or bot holds the name, Ergo's API with its
-/// token, and the house account's password, which it hands the greeter.
+/// token, and the house account's password, which it hands what connects
+/// as it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GreeterAccountConfig {
+pub struct HouseAccountConfig {
     pub database: PathBuf,
     pub ergo_api: Url,
     pub credentials_dir: PathBuf,
 }
 
-impl GreeterAccountConfig {
+impl HouseAccountConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         Self::from_vars(|name| std::env::var(name).ok())
     }
@@ -309,8 +309,8 @@ impl GreeterAccountConfig {
         ergo_client(&self.ergo_api, &self.credentials_dir)
     }
 
-    pub fn read_password(&self) -> anyhow::Result<SecretString> {
-        read_credential(&self.credentials_dir, GREETER_PASSWORD_CREDENTIAL)
+    pub fn read_password(&self, name: &HouseName) -> anyhow::Result<SecretString> {
+        read_credential(&self.credentials_dir, &house::password_credential(name))
     }
 }
 
@@ -838,16 +838,16 @@ mod tests {
     }
 
     #[test]
-    fn ensuring_the_greeters_account_needs_the_database_and_credentials_alone() {
+    fn ensuring_a_house_account_needs_the_database_and_credentials_alone() {
         let vars = HashMap::from([
             ("STATE_DIRECTORY", "/var/lib/concierge"),
             (
                 "CREDENTIALS_DIRECTORY",
-                "/run/credentials/concierge-greeter-account.service",
+                "/run/credentials/concierge-account.service",
             ),
         ]);
         let account = |missing: Option<&str>| {
-            GreeterAccountConfig::from_vars(|name| {
+            HouseAccountConfig::from_vars(|name| {
                 (Some(name) != missing)
                     .then(|| vars.get(name).map(|value| (*value).to_owned()))
                     .flatten()
@@ -855,10 +855,10 @@ mod tests {
         };
         assert_eq!(
             account(None),
-            Ok(GreeterAccountConfig {
+            Ok(HouseAccountConfig {
                 database: "/var/lib/concierge/concierge.db".into(),
                 ergo_api: "http://127.0.0.1:8089".parse().unwrap(),
-                credentials_dir: "/run/credentials/concierge-greeter-account.service".into(),
+                credentials_dir: "/run/credentials/concierge-account.service".into(),
             })
         );
         for name in vars.keys() {
@@ -878,7 +878,7 @@ mod tests {
         };
         assert!(config.read_password().is_err());
         let generated = "0f3a9c51d2e84b7f6a0c19e2d4b5a7c8";
-        let path = dir.path().join(GREETER_PASSWORD_CREDENTIAL);
+        let path = dir.path().join("concierge-password");
         std::fs::write(path, format!("{generated}\n")).unwrap();
         assert_eq!(config.read_password().unwrap().expose(), generated);
     }

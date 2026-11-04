@@ -7,7 +7,7 @@ use concierge::{
     app::{self, App},
     assets::Assets,
     background::Background,
-    config::{Config, Databases, ExpiryConfig, GreeterAccountConfig, RemindConfig},
+    config::{Config, Databases, ExpiryConfig, HouseAccountConfig, RemindConfig},
     db::{self, Db},
     house,
     oauth::WebClients,
@@ -29,9 +29,10 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve => serve(Config::from_env()?).await,
         Command::Remind => remind(&RemindConfig::from_env()?).await,
         Command::ExpireUploads => expire_uploads(&ExpiryConfig::from_env()?).await,
-        Command::EnsureGreeterAccount => {
-            let ensured = house::ensure_account(&GreeterAccountConfig::from_env()?).await?;
-            eprintln!("{ensured} {}", house::ACCOUNT);
+        Command::EnsureHouseAccount { name, vhost } => {
+            let config = HouseAccountConfig::from_env()?;
+            let ensured = house::ensure_account(&config, &name, &vhost).await?;
+            eprintln!("{ensured} {name}");
             Ok(())
         }
         Command::Admin(command) => admin::run(command, &Config::from_env()?)

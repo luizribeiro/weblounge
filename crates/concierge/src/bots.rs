@@ -12,6 +12,7 @@ use crate::{
     password,
     registration::{self, LOST_REPLY_CHECKS},
     uploads::Store,
+    vhost,
 };
 
 /// What bot changes work with.
@@ -234,10 +235,8 @@ fn vhost(owner: &MemberName) -> String {
 
 const VHOST_PREFIX: &str = "weblounge/bot/";
 
-/// Ergo's default `accounts.vhosts.max-length`, which owners' names stay
-/// within.
-const ERGO_VHOST_MAX_LENGTH: usize = 64;
-const _: () = assert!(VHOST_PREFIX.len() + nick::MAX_LENGTH <= ERGO_VHOST_MAX_LENGTH);
+/// Owners' names keep their bots' vhosts within Ergo's limit.
+const _: () = assert!(VHOST_PREFIX.len() + nick::MAX_LENGTH <= vhost::MAX_LENGTH);
 
 #[cfg(test)]
 mod tests {

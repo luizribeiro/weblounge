@@ -8,7 +8,7 @@
 let
   cfg = config.weblounge.greeter;
   account = "concierge-greeter-account";
-  password = "concierge-greeter-password";
+  password = "concierge-password";
   ca = config.weblounge.selfSignedCa;
   inherit (config.weblounge) sandbox loopbackOnly;
   inherit (config.weblounge.concierge) database;
@@ -43,7 +43,7 @@ in
         after = [ "ergochat.service" ];
         environment.CONCIERGE_ERGO_API = "http://${config.weblounge.ergo.settings.api.listener}";
         script = config.weblounge.ergo.untilItAnswers
-          "${lib.getExe pkgs.weblounge.concierge} ensure-greeter-account";
+          "${lib.getExe pkgs.weblounge.concierge} ensure-house-account concierge weblounge/concierge";
         serviceConfig = sandbox // loopbackOnly // {
           Type = "oneshot";
           RemainAfterExit = true;
