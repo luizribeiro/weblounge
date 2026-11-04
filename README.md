@@ -186,9 +186,9 @@ each step is recorded once Ergo echoed it, and the records go two
 weeks after joining, along with those of a removed member's invitees.
 
 It parses what the network sends it, so it holds concierge's database
-and its account's password alone. `concierge-greeter-account.service`,
-which holds Ergo's API token, puts the generated password back before
-every start. VM tests turn the greeter off, but for `welcome.py`.
+and its account's password alone. `concierge-account.service`, its
+house account's oneshot, holds Ergo's API token and puts the generated
+password back before every start. VM tests turn the greeter off, but for `welcome.py`.
 
 ## Uploads
 

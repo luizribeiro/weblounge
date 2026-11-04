@@ -26,7 +26,7 @@ if TYPE_CHECKING:
         wait_for_concierge_sql,
     )
 
-greeter_units = ["concierge-greeter-account", "concierge-greeter"]
+greeter_units = ["concierge-account", "concierge-greeter"]
 olive: Account = {"account": "olive", "password": "watches-the-lounge"}
 luiz: Account = {"account": "luiz", "password": "plain-old-vanilla"}
 luizs_browser = Browser("luiz")
@@ -102,7 +102,7 @@ with subtest("both greeter units run sandboxed as concierge, and only the accoun
         assert credenza.succeed(f"systemctl show -P User {unit}").strip() == "concierge"
     held = credenza.succeed("ls /run/credentials/concierge-greeter.service").split()
     assert held == ["ca", "concierge-password"], held
-    credenza.succeed("systemctl cat concierge-greeter-account | grep -q '^LoadCredential=ergo-api-token:'")
+    credenza.succeed("systemctl cat concierge-account | grep -q '^LoadCredential=ergo-api-token:'")
 
 with subtest("a root invite, which bootstraps the network, gets no welcome"):
     add_member(**luiz, admin=True)
