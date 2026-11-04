@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import json
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
         members,
         not_found_page,
         pkce,
+        push,
         session_token,
     )
 
@@ -115,7 +117,7 @@ with subtest("Ergo refuses WebSockets from pages on other origins"):
     assert status == "403", status
 
 beta = "beta.weblounge.org"
-beta_connects = f"connect-src 'self' wss://{beta}/socket https://{members} https://{files_host}/upload;"
+beta_connects = f"connect-src 'self' wss://{beta}/socket https://{members} https://{files_host}/upload https://{push};"
 
 
 def beta_headers(path: str) -> str:
@@ -137,7 +139,10 @@ with subtest("beta.weblounge.org serves the beta web client, set up to sign memb
             "redirect_uri": f"https://{beta}/",
             "session_token_endpoint": f"https://{members}/oauth/session-token",
         },
+        "push": {"relay": f"https://{push}", "relay_vapid": config["push"]["relay_vapid"]},
     }, config
+    vapid_key = base64.urlsafe_b64decode(config["push"]["relay_vapid"] + "==")
+    assert len(vapid_key) == 65 and vapid_key[0] == 4, "relay_vapid is not an uncompressed P-256 point"
 
 
 def beta_asset(referrer: str, pattern: str) -> str:

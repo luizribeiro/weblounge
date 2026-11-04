@@ -7,6 +7,7 @@ let
   socket = ergo.websocketUrl hostName;
   members = config.weblounge.concierge.publicUrl;
   upload = "${config.weblounge.origin config.weblounge.files.hostName}/upload";
+  inherit (config.weblounge) pushRelay;
 
   clientConfig = pkgs.writeText "weblounge-client-config.json" (builtins.toJSON {
     mode = "hosted";
@@ -21,6 +22,10 @@ let
       redirect_uri = "${origin}/";
       session_token_endpoint = "${members}/oauth/session-token";
     };
+    push = {
+      relay = pushRelay.publicUrl;
+      relay_vapid = pushRelay.vapidPublicKey;
+    };
   });
 
   # The client's engine is wasm, compiled in a SharedWorker.
@@ -29,7 +34,7 @@ let
     worker-src = "'self'";
     font-src = "'self'";
     manifest-src = "'self'";
-    connect-src = "'self' ${socket} ${members} ${upload}";
+    connect-src = "'self' ${socket} ${members} ${upload} ${pushRelay.publicUrl}";
   };
   headersWith = cacheControl:
     config.weblounge.nginx.securityHeadersWith policy { Cache-Control = cacheControl; };
