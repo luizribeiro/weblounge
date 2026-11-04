@@ -50,4 +50,9 @@ in
       pushRelayOrigin = "https://push.weblounge.localhost:10443";
     };
   };
+
+  testErgoReachesThePushRelayAtThePublicAddress = {
+    expr = config.networking.hosts.${config.weblounge.publicIPv4} or [ ];
+    expected = [ "push.weblounge.org" ];
+  };
 }

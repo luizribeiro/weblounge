@@ -97,6 +97,10 @@ in
       };
     };
 
+    # The host's own name resolves to loopback here, and so would this one,
+    # a CNAME to it; Ergo refuses to push to loopback addresses.
+    networking.hosts.${config.weblounge.publicIPv4} = [ hostName ];
+
     # Homes are held per route, and each but this host per address too: our
     # Ergo pushes for every member from its public address. Devices are
     # held per address.
