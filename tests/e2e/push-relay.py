@@ -6,9 +6,8 @@ if TYPE_CHECKING:
     from test_driver.machine import QemuMachine
 
     from driver import client, credenza, subtest
-    from helpers import Browser, add_member, https, session_token
+    from helpers import Browser, add_member, https, push, session_token
 
-push = "push.weblounge.org"
 state = "/var/lib/private/push-relay"
 listen = "127.0.0.1:8098"
 status_only = ["-o", "/dev/null", "-w", "%{http_code}"]

@@ -138,6 +138,7 @@ def wait_for_members(timeout: int = 300) -> None:
 
 
 files_host = "files.weblounge.org"
+push = "push.weblounge.org"
 outcome = ["-o", "/dev/null", "-w", "%{http_code} %{redirect_url}"]
 # The scrubber's test images, on the client.
 fixtures = "/etc/upload-fixtures"

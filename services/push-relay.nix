@@ -24,6 +24,21 @@ in
     description = "Where the push relay listens for nginx, as host:port.";
   };
 
+  options.weblounge.pushRelay.publicUrl = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = config.weblounge.origin hostName;
+    description = "The push relay's origin, which web clients register devices with.";
+  };
+
+  # Derived from the push-relay-vapid-key secret; browsers check pushes against it.
+  options.weblounge.pushRelay.vapidPublicKey = lib.mkOption {
+    type = lib.types.str;
+    readOnly = true;
+    default = "BE-uu3eaHi7ikKStoHi-Gv2XQYPiIprG4idoy0-U2hAyjsk9dQlULNvwJnv90HCm1nZJStmf72-fmnUCNmaBUng";
+    description = "The relay's VAPID public key, as unpadded base64url.";
+  };
+
   options.weblounge.pushRelay.allowedOrigins = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [ ];
@@ -55,7 +70,7 @@ in
       environment = {
         PUSH_RELAY_LISTEN = cfg.listen;
         PUSH_RELAY_STATE_DIR = "/var/lib/${stateDirectory}";
-        PUSH_RELAY_ORIGIN = config.weblounge.origin hostName;
+        PUSH_RELAY_ORIGIN = cfg.publicUrl;
         PUSH_RELAY_ALLOWED_ORIGINS = lib.concatStringsSep "," cfg.allowedOrigins;
         PUSH_RELAY_VAPID_KEY_FILE = "%d/push-relay-vapid-key";
         PUSH_RELAY_CONCIERGE_URL = config.weblounge.concierge.introspectionUrl;
