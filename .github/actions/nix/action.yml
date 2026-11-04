@@ -1,6 +1,8 @@
 ---
 name: nix
-description: Install Nix with KVM, restoring the store a deps job saved
+description: >-
+  Install Nix with KVM, substituting from the weblounge Cachix cache and
+  pushing what it builds there when given a token
 
 inputs:
   store-key:
@@ -9,6 +11,9 @@ inputs:
   save-store:
     description: Save the store under store-key when the job ends
     default: "false"
+  cachix-auth-token:
+    description: Token to push to Cachix with; pull only if empty
+    default: ""
 
 runs:
   using: composite
@@ -57,3 +62,17 @@ runs:
         purge-prefixes: store-
         purge-last-accessed: P1D
         purge-primary-key: never
+
+    # Lets CI run before the cache exists, or while Cachix is down.
+    - id: cachix
+      shell: bash
+      run: |
+        if curl -sfo /dev/null https://weblounge.cachix.org/nix-cache-info; then
+          echo "available=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - if: steps.cachix.outputs.available == 'true'
+      uses: cachix/cachix-action@v17
+      with:
+        name: weblounge
+        authToken: ${{ inputs.cachix-auth-token }}

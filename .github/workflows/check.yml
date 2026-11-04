@@ -53,6 +53,7 @@ jobs:
       - uses: ./.github/actions/nix
         with:
           store-key: ${{ needs.list.outputs.store-key }}
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
           save-store: "true"
       - run: nix build -L --no-link .#checks.x86_64-linux.toplevel-credenza
 
@@ -67,6 +68,7 @@ jobs:
       - uses: ./.github/actions/nix
         with:
           store-key: ${{ needs.list.outputs.store-key }}
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - name: Evaluate packages and formatter
         run: |
           nix eval --json .#packages.x86_64-linux \
@@ -90,6 +92,7 @@ jobs:
       - uses: ./.github/actions/nix
         with:
           store-key: ${{ needs.list.outputs.store-key }}
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - run: nix build -L --no-link .#checks.x86_64-linux.${{ matrix.check }}
 
   # The one status to require: it passes only if every job above did.
