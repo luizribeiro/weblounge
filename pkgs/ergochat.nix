@@ -23,6 +23,10 @@ ergochat.overrideAttrs (finalAttrs: old: {
     # Members manage their accounts through concierge, which Ergo's own
     # NickServ and HostServ commands would bypass. Not offered upstream yet.
     ./ergochat-disable-service-commands.patch
+    # With allow-truncation on, a DM or highlight too long for one line
+    # got no push at all; ours refuses such lines, so this is a safeguard.
+    # We plan to offer it upstream.
+    ./ergochat-webpush-truncate.patch
     # Maintenance PINGs and MARKREADs went out at high urgency, which costs
     # phones battery. Upstream's PR #2471; drop it once a release has it.
     (fetchpatch {

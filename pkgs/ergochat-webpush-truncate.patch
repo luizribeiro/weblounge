@@ -1,0 +1,75 @@
+diff --git a/irc/webpush/webpush.go b/irc/webpush/webpush.go
+index dc0fb2b..f7d3d99 100644
+--- a/irc/webpush/webpush.go
++++ b/irc/webpush/webpush.go
+@@ -109,9 +109,10 @@ func MakePushMessage(command, nuh, accountName, target string, msg utils.SplitMe
+ }
+ 
+ // MakePushLine serializes an arbitrary IRC message as a web push message;
+-// we assume tags were already filtered.
++// we assume tags were already filtered. Overlong messages are truncated
++// (respecting UTF8 boundaries) to fit in 512 bytes.
+ func MakePushLine(pushMessage ircmsg.Message) ([]byte, error) {
+-	if line, err := pushMessage.LineBytesStrict(false, 512); err == nil {
++	if line, err := pushMessage.LineBytesStrict(false, 512); err == nil || err == ircmsg.ErrorBodyTooLong {
+ 		// strip final \r\n
+ 		return line[:len(line)-2], nil
+ 	} else {
+diff --git a/irc/webpush/webpush_test.go b/irc/webpush/webpush_test.go
+index dfc51b0..cda31b9 100644
+--- a/irc/webpush/webpush_test.go
++++ b/irc/webpush/webpush_test.go
+@@ -4,6 +4,7 @@ import (
+ 	"strings"
+ 	"testing"
+ 	"time"
++	"unicode/utf8"
+ 
+ 	"github.com/ergochat/irc-go/ircmsg"
+ 
+@@ -56,3 +57,45 @@ func TestBuildPushMessage(t *testing.T) {
+ 		t.Fatal("bad line")
+ 	}
+ }
++
++func TestBuildPushMessageTruncation(t *testing.T) {
++	now, err := time.Parse(utils.IRCv3TimestampFormat, "2025-01-12T01:05:04.422Z")
++	if err != nil {
++		panic(err)
++	}
++
++	// mix 1-, 2- and 4-byte codepoints so that the cut can land inside one
++	for _, message := range []string{
++		strings.Repeat("a", 1000),
++		strings.Repeat("é", 500),
++		"a" + strings.Repeat("😀", 250),
++		"ab" + strings.Repeat("😀", 250),
++	} {
++		lineBytes, err := MakePushMessage("PRIVMSG", "shivaram!~u@kca7nfgniet7q.irc", "shivaram", "slingamn", utils.SplitMessage{
++			Message: message,
++			Msgid:   "t8st5bb4b9qhed3zs3pwspinca",
++			Time:    now,
++		})
++		if err != nil {
++			t.Fatal(err)
++		}
++		line := string(lineBytes)
++		parsed, err := ircmsg.ParseLineStrict(line, false, 512)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if ok, msgid := parsed.GetTag("msgid"); !ok || msgid != "t8st5bb4b9qhed3zs3pwspinca" {
++			t.Fatalf("bad msgid tag %s", msgid)
++		}
++		if parsed.Source != "shivaram!~u@kca7nfgniet7q.irc" || parsed.Command != "PRIVMSG" || len(parsed.Params) != 2 || parsed.Params[0] != "slingamn" {
++			t.Fatalf("bad line: %s", line)
++		}
++		body := line[strings.IndexByte(line, ' ')+1:]
++		if len(body) > 510 || len(body) < 510-(utf8.UTFMax-1) {
++			t.Fatalf("push line body is %d bytes", len(body))
++		}
++		if truncated := parsed.Params[1]; !utf8.ValidString(truncated) || !strings.HasPrefix(message, truncated) {
++			t.Fatalf("bad truncation of message: %q", truncated)
++		}
++	}
++}
