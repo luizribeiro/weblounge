@@ -30,10 +30,16 @@ jobs:
       - uses: ./.github/actions/nix
         with:
           free-disk: "false"
+      # Lists only the checks whose results no cache has. A worker can
+      # take 4.6 GB evaluating a VM test, so two fit in the 16 GB. A check
+      # that fails to evaluate has no isCached and gets a job to show why.
       - id: list
         run: |
-          checks=$(nix eval --json .#checks.x86_64-linux \
-            --apply builtins.attrNames)
+          nix run --inputs-from . nixpkgs#nix-eval-jobs -- \
+            --flake .#checks.x86_64-linux --check-cache-status \
+            --workers 2 --max-memory-size 3072 > jobs.jsonl
+          [ -s jobs.jsonl ]
+          checks=$(jq -sc 'map(select(.isCached | not) | .attr)' jobs.jsonl)
           echo "checks=$checks" >> "$GITHUB_OUTPUT"
 
   # Builds what most checks share, the crates, the web client and their
@@ -71,7 +77,9 @@ jobs:
 
   build:
     needs: [list, deps]
-    if: ${{ !cancelled() && needs.list.result == 'success' }}
+    if: >-
+      ${{ !cancelled() && needs.list.result == 'success'
+      && needs.list.outputs.checks != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -86,14 +94,19 @@ jobs:
           cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
       - run: nix build -L --no-link .#checks.x86_64-linux.${{ matrix.check }}
 
-  # The one status to require: it passes only if every job above did.
+  # The one status to require: it passes only if every job above did, or
+  # was skipped because its checks were all cached.
   check:
     needs: [list, deps, outputs, build]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          RESULTS: >-
+            ${{ needs.list.result }} ${{ needs.deps.result }}
+            ${{ needs.outputs.result }}
+            ${{ needs.list.outputs.checks == '[]' && 'success'
+            || needs.build.result }}
         run: |
           echo "$RESULTS"
           for result in $RESULTS; do
