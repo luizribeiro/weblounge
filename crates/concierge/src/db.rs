@@ -1652,7 +1652,7 @@ pub(crate) mod tests {
              INSERT INTO sessions (token_hash, account, created_at, expires_at) VALUES (x'00', 'alice', 6, 70);
              INSERT INTO oauth_tokens (token_hash, session_hash, client_id, created_at, expires_at)
              VALUES (x'01', x'00', 'gamja', 6, 70);
-             INSERT INTO bots (account, owner, created_at) VALUES ('bender', 'alice', 8);",
+             INSERT INTO bots (account, owner, created_at) VALUES ('hal', 'alice', 8);",
         )
         .await;
 
@@ -1682,7 +1682,7 @@ pub(crate) mod tests {
                  VALUES (x'00', 'alice', 6, 70);
                  INSERT INTO oauth_tokens (token_hash, session_hash, client_id, created_at, expires_at)
                  VALUES (x'01', x'00', 'gamja', 6, 70);
-                 INSERT INTO bots (account, owner, created_at) VALUES ('bender', 'alice', 8);"
+                 INSERT INTO bots (account, owner, created_at) VALUES ('hal', 'alice', 8);"
             ),
         )
         .await;
@@ -1690,7 +1690,7 @@ pub(crate) mod tests {
         migrating_keeps_alice_bob_and_what_refers_to_them(&path).await;
     }
 
-    /// Migrates the database at `path`, where alice runs bender, holds a
+    /// Migrates the database at `path`, where alice runs hal, holds a
     /// session with a token and made the invite "open", and bob, whom she
     /// invited, was removed; checks all of it is still there.
     async fn migrating_keeps_alice_bob_and_what_refers_to_them(path: &Path) {
@@ -1731,6 +1731,29 @@ pub(crate) mod tests {
         .await
         .unwrap_err();
         assert!(error.to_string().contains("FOREIGN KEY"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn bender_stops_being_luizs_bot_and_his_others_stay() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concierge.db");
+        written_by_version(
+            &path,
+            20261101120000,
+            "INSERT INTO members (account, email, joined_at) VALUES ('luiz', 'luiz@example.org', 0);
+             INSERT INTO bots (account, owner, note, created_at) VALUES ('bender', 'luiz', NULL, 1);
+             INSERT INTO bots (account, owner, created_at, removed_at) VALUES ('dalek', 'luiz', 2, 3);
+             INSERT INTO bots (account, owner, created_at) VALUES ('hal', 'luiz', 4);",
+        )
+        .await;
+
+        let db = Db::migrate(&path).await.unwrap();
+
+        assert!(db.bot("bender").await.unwrap().is_none());
+        let live = db.bots(Some(&MemberName::new("luiz"))).await.unwrap();
+        let live: Vec<_> = live.iter().map(|bot| bot.account.as_str()).collect();
+        assert_eq!(live, ["hal"]);
+        assert!(db.bot("dalek").await.unwrap().unwrap().removed_at.is_some());
     }
 
     #[tokio::test]
