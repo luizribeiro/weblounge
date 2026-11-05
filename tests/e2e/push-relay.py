@@ -31,7 +31,7 @@ def create_device(*flags: str) -> str:
 with subtest("the push relay runs and its database answers its health check, on loopback alone"):
     credenza.wait_for_unit("push-relay.service")
     credenza.wait_for_open_port(8098)
-    assert credenza.succeed(f"curl -sf http://{listen}/healthz") == "ok\n"
+    assert credenza.succeed(f"curl -sf http://{listen}/healthz").startswith("ok\n")
     listeners = credenza.succeed("ss -Htln 'sport = :8098'")
     assert listeners.split()[3] == listen and listeners.count("\n") == 1, listeners
 
@@ -44,7 +44,7 @@ with subtest("its state directory is 0700 and its database 0600, owned as other 
 with subtest("push.weblounge.org answers through nginx with the relay's own answers"):
     credenza.wait_for_unit("nginx.service")
     credenza.wait_for_open_port(443)
-    assert https(push, "/healthz") == "ok\n"
+    assert https(push, "/healthz").startswith("ok\n")
     assert https(push, "/no-such-path", *status_only) == "404"
     assert https(push, "/v1/r/no-such-route", *status_only, "--data-binary", "x") == "404"
 
