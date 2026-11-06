@@ -64,6 +64,11 @@
   # systemd's own sysctl.d sets 2, which dumps set-user-ID programs too.
   boot.kernel.sysctl."fs.suid_dumpable" = 0;
 
+  # Logs name members and what they did; a month covers any debugging.
+  services.journald.extraConfig = ''
+    MaxRetentionSec=30day
+  '';
+
   # Setuid root binaries nobody here runs are only ways up for an attacker.
   security.wrappers = lib.genAttrs
     [ "fusermount" "fusermount3" "mount" "umount" "newgidmap" "newuidmap" "newgrp" "sg" "su" ]

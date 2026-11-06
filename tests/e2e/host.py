@@ -57,6 +57,11 @@ with subtest("credenza neither follows nor sends ICMP redirects, on any interfac
     assert len(settings) > 6 and all(line.endswith(" = 0") for line in settings), settings
 
 
+with subtest("the journal forgets entries after 30 days"):
+    journald = credenza.succeed("systemd-analyze cat-config systemd/journald.conf")
+    assert "MaxRetentionSec=30day" in journald.splitlines(), journald
+
+
 with subtest("systemd knows every setting in credenza's units, so no sandbox option is silently dropped"):
     credenza.succeed(
         "printf '[Service]\\nExecStart=/run/current-system/sw/bin/true\\nProtecSystem=strict\\n' > /tmp/typo.service"
