@@ -116,6 +116,10 @@ with subtest("nginx holds homes to a rate per address, but for credenza's own, w
     from_here = set(statuses(credenza, "127.0.0.1", routes, *push_body))
     assert from_here == {"404"}, from_here
 
+with subtest("the relay accepts a burst of credenza's own pushes without running out of files"):
+    statuses(credenza, "127.0.0.1", [f"/v1/r/burst-{n}" for n in range(300)], *push_body, *all_at_once)
+    credenza.fail("journalctl -u push-relay --no-pager -o cat | grep -F 'Too many open files'")
+
 with subtest("nginx holds each route to a rate, credenza's own pushes too"):
     answers = statuses(credenza, "127.0.0.1", ["/v1/r/one-route"] * 150, *push_body, *all_at_once)
     assert "404" in answers and "429" in answers, answers

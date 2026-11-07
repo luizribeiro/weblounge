@@ -90,10 +90,11 @@ in
         SocketBindAllow = "tcp:${toString (portOf cfg.listen)}";
         SocketBindDeny = "any";
 
-        # A connection to each push service and nginx's, with room to spare.
+        # nginx holds no home from credenza to a rate, so our Ergo can open
+        # a connection per push at once; each also needs the database.
         MemoryMax = "128M";
         TasksMax = 32;
-        LimitNOFILE = 256;
+        LimitNOFILE = 2048;
       };
     };
 
