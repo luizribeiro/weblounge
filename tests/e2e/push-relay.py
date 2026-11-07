@@ -87,6 +87,9 @@ with subtest("the device API lets the beta client's origin call it from a browse
 
 credenza_from_client = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()
 push_body = ["--data-binary", "a-push"]
+# The relay answers about 15 a second in a VM, under the homes' rate, so
+# their pushes must reach nginx together for it to be the one refusing.
+all_at_once = ["--parallel", "--parallel-max", "300"]
 
 with subtest("nginx holds the device API to its rate per address"):
     answers = statuses(client, credenza_from_client, ["/healthz"] * 40)
@@ -94,9 +97,11 @@ with subtest("nginx holds the device API to its rate per address"):
 
 with subtest("nginx holds homes to a rate per address, but for credenza's own, where Ergo pushes from"):
     routes = [f"/v1/r/route-{n}" for n in range(300)]
-    assert "429" in statuses(client, credenza_from_client, routes, *push_body)
-    assert set(statuses(credenza, "127.0.0.1", routes, *push_body)) == {"404"}
+    from_client = statuses(client, credenza_from_client, routes, *push_body, *all_at_once)
+    assert "429" in from_client, from_client
+    from_here = set(statuses(credenza, "127.0.0.1", routes, *push_body))
+    assert from_here == {"404"}, from_here
 
 with subtest("nginx holds each route to a rate, credenza's own pushes too"):
-    answers = statuses(credenza, "127.0.0.1", ["/v1/r/one-route"] * 150, *push_body)
-    assert answers[0] == "404" and "429" in answers, answers
+    answers = statuses(credenza, "127.0.0.1", ["/v1/r/one-route"] * 150, *push_body, *all_at_once)
+    assert "404" in answers and "429" in answers, answers
