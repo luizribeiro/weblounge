@@ -13,12 +13,17 @@ listen = "127.0.0.1:8098"
 status_only = ["-o", "/dev/null", "-w", "%{http_code}"]
 
 
-def statuses(machine: "QemuMachine", address: str, paths: list[str], *flags: str) -> list[str]:
-    """What push.weblounge.org answers each path, asked in turn over one connection to nginx at address."""
+def responses(machine: "QemuMachine", address: str, paths: list[str], *flags: str, written: str) -> list[str]:
+    """What push.weblounge.org answers each path, as curl writes it out, asked in turn over one
+    connection to nginx at address."""
     urls = [f"https://{push}{path}" for path in paths]
     resolve = ["--resolve", f"{push}:443:{address}"]
-    outputs = ["-w", "%{http_code}\\n", *["-o", "/dev/null"] * len(urls)]
-    return machine.succeed(shlex.join(["curl", "-sk", *resolve, *outputs, *flags, *urls])).split()
+    outputs = ["-w", f"{written}\\n", *["-o", "/dev/null"] * len(urls)]
+    return machine.succeed(shlex.join(["curl", "-sk", *resolve, *outputs, *flags, *urls])).splitlines()
+
+
+def statuses(machine: "QemuMachine", address: str, paths: list[str], *flags: str) -> list[str]:
+    return responses(machine, address, paths, *flags, written="%{http_code}")
 
 
 def create_device(*flags: str) -> str:
@@ -94,6 +99,15 @@ all_at_once = ["--parallel", "--parallel-max", "300"]
 with subtest("nginx holds the device API to its rate per address"):
     answers = statuses(client, credenza_from_client, ["/healthz"] * 40)
     assert answers[0] == "200" and "429" in answers, answers
+
+with subtest("nginx's refusals tell the beta client when to try again, readably from its origin"):
+    written = "%{http_code} %header{access-control-allow-origin} %header{retry-after}"
+    beta_origin = ["-H", "Origin: https://beta.weblounge.org"]
+    refused = responses(client, credenza_from_client, ["/healthz"] * 40, *beta_origin, written=written)
+    assert "429 https://beta.weblounge.org 1" in refused, refused
+    other_origin = ["-H", "Origin: https://weblounge.org.example"]
+    refused = responses(client, credenza_from_client, ["/healthz"] * 40, *other_origin, written=written)
+    assert "429  1" in refused and not any("example" in answer for answer in refused), refused
 
 with subtest("nginx holds homes to a rate per address, but for credenza's own, where Ergo pushes from"):
     routes = [f"/v1/r/route-{n}" for n in range(300)]

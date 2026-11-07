@@ -117,6 +117,10 @@ in
       limit_req_zone $uri zone=push_relay_routes:4m rate=5r/s;
       limit_req_zone $push_relay_home zone=push_relay_homes:2m rate=20r/s;
       limit_req_zone $binary_remote_addr zone=push_relay_devices:2m rate=1r/s;
+      map $http_origin $push_relay_cors_origin {
+        default "";
+        ${lib.concatMapStrings (origin: "\"${origin}\" $http_origin;\n") cfg.allowedOrigins}
+      }
     '';
 
     services.nginx.virtualHosts.${hostName} = {
@@ -126,7 +130,17 @@ in
       extraConfig = ''
         client_max_body_size 4k;
         limit_req_status 429;
+        error_page 429 = @push_relay_limited;
       '';
+      # nginx answers these itself, so it adds the relay's CORS headers
+      # for browsers, and tells clients when to try again.
+      locations."@push_relay_limited".extraConfig = config.weblounge.nginx.securityHeadersWith { }
+        {
+          Access-Control-Allow-Origin = "$push_relay_cors_origin";
+          Access-Control-Expose-Headers = "Retry-After";
+          Vary = "Origin";
+          Retry-After = "1";
+        } + "return 429;";
       locations."/v1/r/" = proxy // {
         extraConfig = ''
           limit_req zone=push_relay_routes burst=100 nodelay;
