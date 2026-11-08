@@ -39,9 +39,9 @@ let
     inherit (hosts.credenza.config.weblounge.ergo) settings;
   };
 
-  zone = import ../dns/zone.nix { inherit lib hosts; };
+  zones = [ (import ../dns/zone.nix { inherit lib hosts; }) ];
 
-  weblounge = { inherit overlay hosts hostModules testErgo zone; };
+  weblounge = { inherit overlay hosts hostModules testErgo zones; };
 
   filesIn = suffix: dir: lib.mapAttrs' (file: _: lib.nameValuePair (lib.removeSuffix suffix file) (dir + "/${file}"))
     (lib.filterAttrs (file: type: type == "regular" && lib.hasSuffix suffix file) (builtins.readDir dir));

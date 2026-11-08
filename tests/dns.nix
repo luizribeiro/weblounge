@@ -11,10 +11,14 @@ let
       services.nginx.virtualHosts.${name}.serverAliases = [ ];
     };
   };
+
+  zoneFor = domain: lib.findFirst (zone: zone.domain == domain)
+    (throw "no zone for ${domain}")
+    weblounge.zones;
 in
 {
   testZoneHasTheHostsNamesAndMailPolicy = {
-    expr = weblounge.zone;
+    expr = zoneFor "weblounge.org";
     expected = {
       domain = "weblounge.org";
       ttl = 3600;
