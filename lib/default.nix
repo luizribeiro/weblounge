@@ -39,7 +39,9 @@ let
     inherit (hosts.credenza.config.weblounge.ergo) settings;
   };
 
-  zones = [ (import ../dns/zone.nix { inherit lib hosts; }) ];
+  zones =
+    let main = import ../dns/zone.nix { inherit lib hosts; };
+    in [ main (import ../dns/parked.nix { domain = "wbl.ng"; inherit (main) ttl; }) ];
 
   weblounge = { inherit overlay hosts hostModules testErgo zones; };
 

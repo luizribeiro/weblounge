@@ -43,6 +43,24 @@ in
     };
   };
 
+  testParkedDomainRefusesAllMail = {
+    expr = zoneFor "wbl.ng";
+    expected = {
+      domain = "wbl.ng";
+      ttl = 3600;
+      records = [
+        [ "MX" "@" 0 "." ]
+        [ "TXT" "@" "v=spf1 -all" ]
+        [ "TXT" "_dmarc" "v=DMARC1; p=reject" ]
+      ];
+    };
+  };
+
+  testEveryDomainHasOneZone = {
+    expr = map (zone: zone.domain) weblounge.zones;
+    expected = [ "weblounge.org" "wbl.ng" ];
+  };
+
   testNameOutsideTheDomainIsRefused = {
     expr = (builtins.tryEval (builtins.deepSeq (zoneServing "weblounge.example").records null)).success;
     expected = false;

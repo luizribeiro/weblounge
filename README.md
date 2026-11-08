@@ -334,6 +334,10 @@ new virtual host gets its DNS without anyone writing a record. Mail for
 the domain goes through MXroute, whose MX, SPF, DKIM and DMARC records
 the zone also holds.
 
+deSEC also hosts `wbl.ng`, which serves nothing yet. `dns/parked.nix`
+gives it only records saying it sends no mail, so nobody can pass off
+mail as coming from it.
+
 ```sh
 just dns preview   # what would change at deSEC
 just dns push      # make deSEC match the repository
@@ -369,7 +373,7 @@ in `secrets/vm.yaml` with `secrets/vm-age.key`, committed on purpose.
 | `crates/`    | Rust code: concierge, its mailer, outbox and scrubber, ergo-api   |
 | `web/`       | Sources of everything the browser loads                           |
 | `templates/` | `nix flake init` templates; `bot` is the template bots start from |
-| `dns/`       | The DNS zone, generated from the hosts, and its dnscontrol config |
+| `dns/`       | The DNS zones, generated from the hosts, and their dnscontrol config |
 | `just/`      | `just vm …`, `just prod …`, `just dns …`, `just web …` and more   |
 | `scripts/`   | Helpers the recipes call                                          |
 
