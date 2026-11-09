@@ -28,7 +28,7 @@ in
   };
 
   credenza = { nodes, ... }: {
-    security.pki.certificateFiles = [ "${certificates}/minica.pem" ];
+    security.pki.certificateFiles = [ "${certificates}/ca.pem" ];
     weblounge.mail.server = server;
     # The test network is a private range, which the mailer may not reach.
     systemd.services.concierge-mailer.serviceConfig.IPAddressAllow = [ nodes.${server}.networking.primaryIPAddress ];
