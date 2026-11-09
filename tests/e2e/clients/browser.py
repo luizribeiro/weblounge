@@ -1,6 +1,6 @@
 """Headless Chromium on the client, on members.weblounge.org, for the tests'
 Playwright scripts. Fails on any console error, which is where CSP
-violations go."""
+violations go, or uncaught page error."""
 
 import subprocess
 from contextlib import contextmanager
@@ -41,6 +41,23 @@ def open_settings(page):
     return page.locator(".dialog form")
 
 
+def console_error(message):
+    """The error's text and where the page logged it from."""
+    location = message.location
+    if not location.get("url"):
+        return message.text
+    return f"{message.text} (at {location['url']}:{location['lineNumber']}:{location['columnNumber']})"
+
+
+def page_error(error):
+    return f"uncaught {error.name}: {error.message}\n{error.stack}"
+
+
+def collect_errors(page, errors):
+    page.on("console", lambda message: message.type == "error" and errors.append(console_error(message)))
+    page.on("pageerror", lambda error: errors.append(page_error(error)))
+
+
 @contextmanager
 def browsing(expected_errors=(), notifications=False, webkit=False):
     """expected_errors: substrings of console errors the caller provokes.
@@ -60,12 +77,12 @@ def browsing(expected_errors=(), notifications=False, webkit=False):
         page = browser.new_page(ignore_https_errors=True)
         page.set_default_timeout(TIMEOUT_MS)
         expect.set_options(timeout=TIMEOUT_MS)
-        page.on("console", lambda message: message.type == "error" and errors.append(message.text))
+        collect_errors(page, errors)
         yield page
         browser.close()
     errors = [error for error in errors if not any(expected in error for expected in expected_errors)]
     if errors:
-        raise SystemExit("console errors:\n" + "\n".join(errors))
+        raise SystemExit("page errors:\n" + "\n".join(errors))
 
 
 @contextmanager
