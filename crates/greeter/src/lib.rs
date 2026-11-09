@@ -140,8 +140,8 @@ impl<I: Irc> Greeter<I> {
     }
 
     /// Sends `nick` a direct message, answering whether it went out. A
-    /// nick nobody holds, such as a member's with always-on off who isn't
-    /// connected, is tried again on later ticks until the plan gives up.
+    /// nick nobody holds is tried again on later ticks until the plan
+    /// gives up.
     async fn tell(&self, nick: &MemberName, text: &str) -> anyhow::Result<bool> {
         match self.irc.say(nick.as_str(), text).await {
             Ok(_) => Ok(true),

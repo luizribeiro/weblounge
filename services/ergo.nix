@@ -130,8 +130,8 @@ in
           exempted = [ ];
         };
         multiclient = {
-          always-on = "opt-out";
-          auto-away = "opt-out";
+          always-on = "mandatory";
+          auto-away = "mandatory";
         };
         # Concierge keeps the records of accounts and bots' vhosts, so
         # changes to them go through it. NS CERT stays: the certificate
@@ -186,6 +186,8 @@ in
     weblounge.secrets.oauth-introspection-secret.loadedBy = lib.mkIf oauth2 [ "ergochat" ];
 
     systemd.services.ergochat = {
+      # Ergo refuses to rehash a changed always-on, so changing it restarts Ergo.
+      restartTriggers = [ cfg.settings.accounts.multiclient.always-on ];
       wants = [ "acme-${serverName}.service" ];
       after = [ "acme-${serverName}.service" ];
       # Web push reaches whatever servers members' browsers name, so ergo

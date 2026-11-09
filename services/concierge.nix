@@ -7,6 +7,7 @@ let
   joinHostName = "join.${config.weblounge.domain}";
   concierge = lib.getExe pkgs.weblounge.concierge;
   historyExpireTime = config.weblounge.ergo.settings.history.restrictions.expire-time;
+  multiclient = config.weblounge.ergo.settings.accounts.multiclient;
 
   # concierge-admin runs with the rest of the unit's serviceConfig, so admin
   # commands see exactly the identity, state and secrets the service does.
@@ -128,6 +129,11 @@ in
   config = {
     weblounge.loopbackListeners.Concierge = cfg.listen;
     weblounge.concierge.webClients.CONCIERGE_WEBCHAT_URL = config.weblounge.origin config.weblounge.ergo.serverName;
+
+    assertions = [{
+      assertion = multiclient.always-on == "mandatory" && multiclient.auto-away == "mandatory";
+      message = "Concierge's help tells members they stay in their channels, away, with every app closed, so Ergo's always-on and auto-away must be mandatory.";
+    }];
 
     weblounge.secrets.session-key.loadedBy = [ "concierge" ];
     weblounge.secrets.ergo-api-token.loadedBy = [ "concierge" ];

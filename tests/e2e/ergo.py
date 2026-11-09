@@ -90,15 +90,17 @@ with subtest("the API changes a member's password, and only the new one logs in"
     renewed_session = irc(**renewed)
     assert " 903 " in renewed_session, renewed_session
 
-with subtest("the API reads and changes a member's always-on setting"):
-    body, _ = ergo_api("ns/saget", accountName=carol["account"])
-    assert json.loads(body)["alwaysOn"] == "default", body
-    body, _ = ergo_api("ns/saset", accountName=carol["account"], alwaysOn="off")
-    assert json.loads(body)["alwaysOn"] == "off", body
-    body, _ = ergo_api("ns/saget", accountName=carol["account"])
-    assert json.loads(body)["alwaysOn"] == "off", body
+with subtest("a member whose stored always-on and auto-away are off still stays in their channels, away"):
+    body, _ = ergo_api("ns/saset", accountName=carol["account"], alwaysOn="off", autoAway="off")
+    settings = json.loads(body)
+    assert (settings["alwaysOn"], settings["autoAway"]) == ("off", "off"), body
+    credenza.succeed("systemctl restart ergochat")
+    credenza.wait_for_open_port(6697)
+    seen = irc("NAMES #lounge", "WHOIS carol", **bob)
+    assert re.search(r" 353 bob = #lounge :.*\bcarol\b", seen), seen
+    assert " 301 bob carol " in seen, seen
 
-with subtest("every member's host shows as weblounge alone, always-on or not, so it can't lead back to an address"):
+with subtest("every member's host shows as weblounge alone, so it can't lead back to an address"):
     whois = irc("WHOIS alice", "WHOIS carol", **renewed)
     hosts = dict(re.findall(r" 311 carol (\S+) \S+ (\S+) ", whois))
     assert hosts == {"alice": "weblounge", "carol": "weblounge"}, whois
@@ -106,9 +108,9 @@ with subtest("every member's host shows as weblounge alone, always-on or not, so
 with subtest("a client that drops its connection mid-burst leaves no address in Ergo's log"):
     # Fakelag holds the rest of the burst's replies until after the reset, so Ergo's next write fails.
     irc(*["PING burst"] * 20, close="reset", **renewed)
-    # Carol isn't always-on, so she leaves the network once Ergo gives up on the connection.
+    # Carol is always-on, so auto-away marks her away once Ergo gives up on the connection.
     whois_carol = irc_command("WHOIS carol", **alice)
-    client.wait_until_succeeds(f"{whois_carol} | grep ' 401 alice carol ' >/dev/null", timeout=60)
+    client.wait_until_succeeds(f"{whois_carol} | grep ' 301 alice carol ' >/dev/null", timeout=60)
     assert_client_address_absent("journalctl -u ergochat")
 
 with subtest("a member may keep push subscriptions on ten devices, and no more"):
