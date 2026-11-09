@@ -6,7 +6,6 @@ let
   publicUrl = config.weblounge.origin hostName;
   joinHostName = "join.${config.weblounge.domain}";
   concierge = lib.getExe pkgs.weblounge.concierge;
-  multiclient = config.weblounge.ergo.settings.accounts.multiclient;
   historyExpireTime = config.weblounge.ergo.settings.history.restrictions.expire-time;
 
   # concierge-admin runs with the rest of the unit's serviceConfig, so admin
@@ -130,14 +129,6 @@ in
     weblounge.loopbackListeners.Concierge = cfg.listen;
     weblounge.concierge.webClients.CONCIERGE_WEBCHAT_URL = config.weblounge.origin config.weblounge.ergo.serverName;
 
-    # The account home's switches only make sense where members can choose.
-    assertions = lib.mapAttrsToList
-      (name: setting: {
-        assertion = lib.elem setting [ "opt-in" "opt-out" ];
-        message = "Concierge lets members switch Ergo's ${name}, so it must be opt-in or opt-out, not ${toString setting}.";
-      })
-      { inherit (multiclient) always-on auto-away; };
-
     weblounge.secrets.session-key.loadedBy = [ "concierge" ];
     weblounge.secrets.ergo-api-token.loadedBy = [ "concierge" ];
     weblounge.secrets.oauth-introspection-secret = {
@@ -202,8 +193,6 @@ in
             "CONCIERGE_IRC_SERVER=${config.weblounge.ergo.address}"
             "CONCIERGE_ERGO_API=http://${config.weblounge.ergo.settings.api.listener}"
             "CONCIERGE_ASSETS=${pkgs.weblounge.web}/members"
-            "CONCIERGE_ALWAYS_ON_DEFAULT=${multiclient.always-on}"
-            "CONCIERGE_AUTO_AWAY_DEFAULT=${multiclient.auto-away}"
             "CONCIERGE_HISTORY_EXPIRE_TIME=${historyExpireTime}"
             "CONCIERGE_HOUSE_ACCOUNTS=${config.weblounge.ergo.houseAccountNames}"
           ];

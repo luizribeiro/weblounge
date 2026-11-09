@@ -102,23 +102,20 @@ async fn an_article_leads_back_to_help_and_ends_with_where_to_ask_next() {
 }
 
 #[tokio::test]
-async fn multiple_devices_says_where_to_turn_always_on_off_and_how_long_history_lasts() {
+async fn multiple_devices_says_how_long_history_lasts_and_nothing_turns_staying_off() {
     let page = Site::start_with(|app| app.history_expiry = 3 * 24 * 60 * 60)
         .await
         .help_page("/help/multiple-devices")
         .await;
 
     assert!(
-        page.contains(r#"<li>Go to the <a href="/account#irc-settings">Account</a> tab.</li>"#),
-        "{page}"
-    );
-    assert!(
         page.contains(
-            "<li>Under <strong>IRC while you&#39;re away</strong>, untick \
-             <strong>Always on</strong> or <strong>Auto-away</strong>.</li>"
+            "<li>You stay in your channels even when every app is closed, \
+             and people see you as away.</li>"
         ),
         "{page}"
     );
+    assert!(!page.contains("Turn this off"), "{page}");
     assert!(
         page.contains("<li>Messages are deleted from the server after 3 days.</li>"),
         "{page}"

@@ -10,7 +10,6 @@ pub mod invites;
 pub mod oauth;
 pub mod pages;
 pub mod password;
-pub mod presence;
 pub mod reset;
 pub mod signin;
 pub mod upload;
@@ -146,7 +145,6 @@ impl Tab {
 pub struct Flash {
     pub saved: Option<String>,
     pub password: Option<String>,
-    pub irc: Option<String>,
     /// A link to confirm the email went out.
     pub sent: Option<String>,
 }

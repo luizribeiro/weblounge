@@ -15,7 +15,6 @@ mod invites;
 mod oauth;
 mod pages;
 mod password;
-mod presence;
 mod reset;
 mod security;
 mod session_token;
@@ -39,7 +38,7 @@ use concierge::{
     app::{self, App},
     assets::Assets,
     background::Background,
-    config::{IrcServer, Presence},
+    config::IrcServer,
     db::{self, Db, NewInvite, NewMember},
     email::Email,
     house::HouseAccounts,
@@ -145,10 +144,6 @@ impl Site {
                     .map(|client| (client.id, introspection_secret(client.id).into())),
             ),
             irc_server: irc_server(),
-            presence_defaults: Presence {
-                always_on: true,
-                auto_away: true,
-            },
             history_expiry: HISTORY_EXPIRY,
             house_accounts: HouseAccounts::parse("concierge").unwrap(),
             uploads: Store {

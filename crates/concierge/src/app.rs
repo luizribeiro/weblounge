@@ -15,7 +15,7 @@ use crate::{
     assets::{self, Assets},
     auth,
     background::Background,
-    config::{IrcServer, Presence},
+    config::IrcServer,
     cors, csrf,
     db::Db,
     house::HouseAccounts,
@@ -57,8 +57,6 @@ pub struct App {
     pub introspection_secrets: IntrospectionSecrets,
     /// Where members point their IRC clients.
     pub irc_server: IrcServer,
-    /// What Ergo turns on for members who haven't chosen.
-    pub presence_defaults: Presence,
     /// How long Ergo keeps chat history, in seconds.
     pub history_expiry: i64,
     /// The names nobody may sign up or make a bot under.
@@ -116,14 +114,7 @@ pub fn router(app: App) -> Router {
             "/password",
             post(routes::password::change).layer(map_response(routes::no_store)),
         )
-        .route(
-            "/irc",
-            get(|| async { Redirect::permanent("/account#irc-settings") }),
-        )
-        .route(
-            "/irc-settings",
-            post(routes::presence::update).layer(map_response(routes::no_store)),
-        )
+        .route("/irc", get(|| async { Redirect::permanent("/account") }))
         .route(
             "/invites",
             get(routes::invites::show)

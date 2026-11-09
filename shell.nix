@@ -26,9 +26,9 @@ pkgs.mkShell ({
     typescript
   ]);
   RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
-  # `just concierge dev` gives its Ergo these too, so both follow the network.
-  CONCIERGE_ALWAYS_ON_DEFAULT = ergoSettings.accounts.multiclient.always-on;
-  CONCIERGE_AUTO_AWAY_DEFAULT = ergoSettings.accounts.multiclient.auto-away;
+  # `just concierge dev` gives its Ergo these, so it follows the network.
+  DEV_ERGO_ALWAYS_ON = ergoSettings.accounts.multiclient.always-on;
+  DEV_ERGO_AUTO_AWAY = ergoSettings.accounts.multiclient.auto-away;
 
   CONCIERGE_HISTORY_EXPIRE_TIME = ergoSettings.history.restrictions.expire-time;
   CONCIERGE_HOUSE_ACCOUNTS = houseAccountNames;

@@ -1,5 +1,4 @@
-//! The Account tab: the member's password, email, news setting and how
-//! Ergo treats them while no client is open.
+//! The Account tab: the member's password, email and news setting.
 
 use askama::Template;
 use axum::{
@@ -14,7 +13,6 @@ use serde::Deserialize;
 use super::{
     Flash, Layout, Tab, internal_error,
     password::{self, Refused},
-    presence::Presence,
     render_with,
     verify::{self, Due, Mailed, Unconfirmed},
 };
@@ -43,10 +41,6 @@ struct Account<'a> {
     password: PasswordForm,
     email_max_length: usize,
     email_pattern: &'a str,
-    /// The IRC settings, or why they can't be shown.
-    presence: Result<Presence, &'static str>,
-    defaults: Presence,
-    irc_error: Option<&'static str>,
 }
 
 impl Account<'_> {
@@ -91,7 +85,6 @@ pub struct Forms<'a> {
     flash: Flash,
     settings: Option<SettingsForm<'a>>,
     password: PasswordForm,
-    irc_error: Option<&'static str>,
     /// Why no verification link went out.
     link_error: Option<String>,
 }
@@ -100,13 +93,6 @@ impl Forms<'_> {
     pub fn password(password: PasswordForm) -> Self {
         Self {
             password,
-            ..Self::default()
-        }
-    }
-
-    pub fn irc_error(error: &'static str) -> Self {
-        Self {
-            irc_error: Some(error),
             ..Self::default()
         }
     }
@@ -242,13 +228,6 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         email_error: None,
         password_error: None,
     });
-    let presence = match app.ergo.settings(member.account.as_str()).await {
-        Ok(settings) => Ok(Presence::of(&settings, app.presence_defaults)),
-        Err(error) => {
-            eprintln!("Reading IRC settings failed: {error}");
-            Err("Can't reach the chat server.")
-        }
-    };
     let page = Account {
         layout: Layout::new(app, Some(member.account.as_str())).on(Tab::Account),
         nick: member.account.as_str(),
@@ -260,9 +239,6 @@ pub async fn page(app: &App, member: &Member, status: StatusCode, forms: Forms<'
         password: forms.password,
         email_max_length: email::MAX_LENGTH,
         email_pattern: email::HTML_PATTERN,
-        irc_error: forms.irc_error.filter(|_| presence.is_ok()),
-        presence,
-        defaults: app.presence_defaults,
     };
     render_with(status, &page)
 }

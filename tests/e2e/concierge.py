@@ -225,20 +225,15 @@ with subtest("a member changes their password: IRC takes only the new one, and t
     session = irc(account="Dana", password=password)
     assert " 903 " in session, session
 
-with subtest("a member turns always-on off on the Account tab, and Ergo has it"):
-    saved = browser.post("/irc-settings", "auto_away=on")
-    assert saved == f"303 https://{members}/account?irc#irc-settings", saved
-    body, _ = ergo_api("ns/saget", accountName="Dana")
-    settings = json.loads(body)
-    assert (settings["alwaysOn"], settings["autoAway"]) == ("off", "default"), body
-    tab = browser.get("/account?irc", "-f")
-    assert '<input name="always_on" type="checkbox">' in tab, tab
-    assert '<input name="auto_away" type="checkbox" checked>' in tab, tab
-    assert "Both on by default." in tab, tab
+with subtest("the Account tab offers no IRC settings: Ergo keeps everyone always-on and auto-away"):
+    tab = browser.get("/account", "-f")
+    assert "IRC while you" not in tab and 'name="always_on"' not in tab, tab
+    refused = browser.post("/irc-settings", "always_on=on")
+    assert refused == "404 ", refused
 
-with subtest("in a browser, the Account tab's Save buttons and the email's password field follow changes"):
+with subtest("in a browser, at a phone's width and a desktop's, the Account tab fits and Save follows changes"):
     result = client.succeed(f"account-browser dana {shlex.quote(password)} 2>&1")
-    assert "save buttons and the email's password field follow changes" in result, result
+    assert "the Account tab fits, and its save button and password field follow changes" in result, result
 
 with subtest("the invite tree lists a new member under whoever invited them"):
     confirm_email("Dana")

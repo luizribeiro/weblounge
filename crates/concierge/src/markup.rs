@@ -70,14 +70,14 @@ mod tests {
     #[test]
     fn marks_code_strong_and_links_between_text() {
         assert_eq!(
-            spans("Run `/join #name` on the [Account](/account#irc-settings) tab, then **Save**."),
+            spans("Run `/join #name` on the [Account](/account) tab, then **Save**."),
             [
                 Text("Run "),
                 Code("/join #name"),
                 Text(" on the "),
                 Link {
                     label: "Account",
-                    href: "/account#irc-settings"
+                    href: "/account"
                 },
                 Text(" tab, then "),
                 Strong("Save"),
@@ -89,8 +89,8 @@ mod tests {
     #[test]
     fn marks_at_either_end_leave_no_empty_text() {
         assert_eq!(
-            spans("`+B` and **IRC while you're away**"),
-            [Code("+B"), Text(" and "), Strong("IRC while you're away")]
+            spans("`+B` and **Save**"),
+            [Code("+B"), Text(" and "), Strong("Save")]
         );
     }
 

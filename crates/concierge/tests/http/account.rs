@@ -69,6 +69,32 @@ fn by_deadline(deadline: i64) -> String {
 }
 
 #[tokio::test]
+async fn offers_no_irc_settings_and_shows_with_ergo_down() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    site.ergo.fail_next(Failure::UnknownError);
+
+    let response = site.get("/account", Some(&cookie)).await;
+
+    assert_eq!(response.status(), 200);
+    let page = body_text(response).await;
+    assert!(page.contains("Change password"), "{page}");
+    assert!(!page.contains("IRC while you"), "{page}");
+    assert!(!page.contains("/irc-settings"), "{page}");
+}
+
+#[tokio::test]
+async fn the_old_irc_tab_leads_to_the_account_tab() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let response = site.get("/irc", Some(&cookie)).await;
+    assert_eq!(response.status(), 308);
+    assert_eq!(location(&response), "/account");
+}
+
+#[tokio::test]
 async fn an_unconfirmed_email_says_when_it_is_due_and_offers_a_new_link() {
     let (page, deadline) = account_tab_mailed(Some(26 * HOUR)).await;
     assert_eq!(

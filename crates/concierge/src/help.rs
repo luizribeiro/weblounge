@@ -140,14 +140,6 @@ fn multiple_devices(facts: &Facts) -> Article {
                     "When you come back, your app can catch up on what you missed.".into(),
                 ],
             ),
-            Section::steps(
-                Some("Turn this off"),
-                [
-                    "Go to the [Account](/account#irc-settings) tab.".into(),
-                    "Under **IRC while you're away**, untick **Always on** or **Auto-away**.".into(),
-                    "Select **Save**.".into(),
-                ],
-            ),
         ],
         keep_in_mind: vec![
             format!(

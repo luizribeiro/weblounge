@@ -16,7 +16,7 @@ use std::{fs, path::Path};
 use clap::Parser;
 use concierge::{
     admin::{self, Command},
-    config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, Presence, SESSION_KEY_CREDENTIAL},
+    config::{Config, ERGO_API_TOKEN_CREDENTIAL, IrcServer, SESSION_KEY_CREDENTIAL},
     db::{self, Db, NewMember, NewSession},
     email::Email,
     house::HouseAccounts,
@@ -77,10 +77,6 @@ impl Fixture {
             state_dir: state.path().into(),
             outbox_path: outbox.path().join("outbox.db"),
             credentials_dir: credentials.path().into(),
-            presence_defaults: Presence {
-                always_on: true,
-                auto_away: true,
-            },
             history_expiry: HISTORY_EXPIRY,
             house_accounts: HouseAccounts::parse("concierge").unwrap(),
         };

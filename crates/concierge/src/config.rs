@@ -7,7 +7,6 @@ use common::config::{invalid, read_credential, required};
 use ergo_api::{Client, Url};
 use secret::SecretString;
 
-pub use crate::routes::presence::Presence;
 use crate::{
     history,
     house::{self, HouseAccounts},
@@ -45,9 +44,6 @@ pub struct Config {
     /// The outbox's database, which the mailer sends from.
     pub outbox_path: PathBuf,
     pub credentials_dir: PathBuf,
-    /// Ergo's multiclient always-on and auto-away, as what members get
-    /// until they choose.
-    pub presence_defaults: Presence,
     /// How long Ergo keeps chat history, in seconds: its
     /// `history.restrictions.expire-time`.
     pub history_expiry: i64,
@@ -104,16 +100,6 @@ impl Config {
         let webchat_url = require("CONCIERGE_WEBCHAT_URL")?;
         let join_url = var("CONCIERGE_JOIN_URL");
         let irc_server = require("CONCIERGE_IRC_SERVER")?;
-        let multiclient_default = |name| {
-            let value = require(name)?;
-            parse_multiclient_default(&value).ok_or_else(|| {
-                invalid(
-                    name,
-                    value,
-                    "expected opt-in or opt-out; members can't choose under mandatory or disabled",
-                )
-            })
-        };
         let history_expiry = require("CONCIERGE_HISTORY_EXPIRE_TIME")?;
         let public_url = origin("CONCIERGE_PUBLIC_URL", public_url)?;
         let join_url = join_url
@@ -141,10 +127,6 @@ impl Config {
             state_dir: require("STATE_DIRECTORY")?.into(),
             outbox_path: require("CONCIERGE_OUTBOX")?.into(),
             credentials_dir: require("CREDENTIALS_DIRECTORY")?.into(),
-            presence_defaults: Presence {
-                always_on: multiclient_default("CONCIERGE_ALWAYS_ON_DEFAULT")?,
-                auto_away: multiclient_default("CONCIERGE_AUTO_AWAY_DEFAULT")?,
-            },
             history_expiry: history::parse_expire_time(&history_expiry).ok_or_else(|| {
                 invalid(
                     "CONCIERGE_HISTORY_EXPIRE_TIME",
@@ -377,16 +359,6 @@ fn invite_links(public_url: &str, join_url: Option<&str>) -> String {
     }
 }
 
-/// Whether an Ergo multiclient setting, such as `always-on`, turns the
-/// feature on for members who haven't chosen.
-fn parse_multiclient_default(setting: &str) -> Option<bool> {
-    match setting {
-        "opt-out" => Some(true),
-        "opt-in" => Some(false),
-        _ => None,
-    }
-}
-
 fn parse_http_url(url: &str) -> Option<Url> {
     Url::parse(url).ok().filter(|url| url.scheme() == "http")
 }
@@ -410,7 +382,7 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD};
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 17] = [
+    const PRODUCTION: [(&str, &str); 15] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
@@ -420,8 +392,6 @@ mod tests {
         ("CONCIERGE_UPLOADS", "/var/lib/concierge-files"),
         ("CONCIERGE_SCRUBBER", "/run/concierge-scrubber.sock"),
         ("CONCIERGE_IRC_SERVER", "irc.weblounge.org:6697"),
-        ("CONCIERGE_ALWAYS_ON_DEFAULT", "opt-out"),
-        ("CONCIERGE_AUTO_AWAY_DEFAULT", "opt-out"),
         ("CONCIERGE_HISTORY_EXPIRE_TIME", "2w"),
         ("CONCIERGE_HOUSE_ACCOUNTS", "bender,concierge"),
         (
@@ -481,10 +451,6 @@ mod tests {
                 state_dir: "/var/lib/concierge".into(),
                 outbox_path: "/var/lib/concierge-outbox/outbox.db".into(),
                 credentials_dir: "/run/credentials/concierge.service".into(),
-                presence_defaults: Presence {
-                    always_on: true,
-                    auto_away: true,
-                },
                 history_expiry: 14 * 24 * 60 * 60,
                 house_accounts: HouseAccounts::parse("bender,concierge").unwrap(),
             })
@@ -529,35 +495,6 @@ mod tests {
         assert_eq!(
             parse_with(&[("CONCIERGE_HISTORY_EXPIRE_TIME", None)]),
             Err(ConfigError::Missing("CONCIERGE_HISTORY_EXPIRE_TIME"))
-        );
-    }
-
-    #[test]
-    fn opt_in_means_off_until_a_member_chooses() {
-        let config = parse_with(&[("CONCIERGE_AUTO_AWAY_DEFAULT", Some("opt-in"))]);
-        assert_eq!(
-            config.map(|config| config.presence_defaults),
-            Ok(Presence {
-                always_on: true,
-                auto_away: false,
-            })
-        );
-    }
-
-    #[test]
-    fn refuses_multiclient_settings_members_cannot_choose_under() {
-        for setting in ["mandatory", "disabled", "true", "Opt-Out", ""] {
-            let error = parse_with(&[("CONCIERGE_ALWAYS_ON_DEFAULT", Some(setting))]).unwrap_err();
-            assert_eq!(
-                error.to_string(),
-                format!(
-                    "CONCIERGE_ALWAYS_ON_DEFAULT={setting:?} is invalid: expected opt-in or opt-out; members can't choose under mandatory or disabled"
-                )
-            );
-        }
-        assert_eq!(
-            parse_with(&[("CONCIERGE_AUTO_AWAY_DEFAULT", None)]),
-            Err(ConfigError::Missing("CONCIERGE_AUTO_AWAY_DEFAULT"))
         );
     }
 
