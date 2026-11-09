@@ -119,24 +119,6 @@ pub struct AccountSummary {
     pub email: Option<String>,
 }
 
-/// `/v1/ns/saget`: an account's settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SaGet {
-    pub account_name: AccountName,
-}
-endpoint!(SaGet, "/v1/ns/saget" => Settings);
-
-/// `/v1/ns/saset`: changes the given settings and answers with all of them.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SaSet {
-    pub account_name: AccountName,
-    #[serde(flatten)]
-    pub changes: SettingsChanges,
-}
-endpoint!(SaSet, "/v1/ns/saset" => Settings);
-
 /// `/v1/hs/set`: sets an account's vhost, or clears it when empty. Ours,
 /// patched into Ergo.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,49 +128,6 @@ pub struct HsSet {
     pub vhost: String,
 }
 endpoint!(HsSet, "/v1/hs/set" => Ack);
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Settings {
-    pub always_on: Preference,
-    pub auto_away: Preference,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-    pub replay_joins: ReplayJoins,
-}
-
-/// Settings to change; those left `None` stay as they are.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsChanges {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub always_on: Option<Preference>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub auto_away: Option<Preference>,
-    /// An empty address removes the account's email.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub replay_joins: Option<ReplayJoins>,
-}
-
-/// An account's choice for a feature the server configures a default for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Preference {
-    /// Whatever the server's configuration says.
-    Default,
-    Off,
-    On,
-}
-
-/// Whether legacy clients get JOINs and the like replayed as messages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ReplayJoins {
-    CommandsOnly,
-    On,
-}
 
 #[cfg(test)]
 mod tests {
@@ -234,22 +173,6 @@ mod tests {
         assert_eq!(
             format!("{request:?}"),
             r#"CheckAuth { account_name: AccountName("alice"), passphrase: <redacted> }"#
-        );
-    }
-
-    #[test]
-    fn saset_sends_only_the_settings_that_change() {
-        let request = SaSet {
-            account_name: "alice".into(),
-            changes: SettingsChanges {
-                always_on: Some(Preference::Off),
-                email: Some("alice@example.org".into()),
-                ..Default::default()
-            },
-        };
-        assert_eq!(
-            serde_json::to_value(request).unwrap(),
-            json!({"accountName": "alice", "alwaysOn": "off", "email": "alice@example.org"})
         );
     }
 
@@ -302,23 +225,6 @@ mod tests {
                     email: None,
                 },
             ]
-        );
-    }
-
-    #[test]
-    fn decodes_ergos_settings() {
-        let settings: Settings = decode(
-            r#"{"success":true,"alwaysOn":"default","autoAway":"on","email":"a@example.org","replayJoins":"commands-only"}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            settings,
-            Settings {
-                always_on: Preference::Default,
-                auto_away: Preference::On,
-                email: Some("a@example.org".into()),
-                replay_joins: ReplayJoins::CommandsOnly,
-            }
         );
     }
 }
