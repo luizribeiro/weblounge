@@ -9,7 +9,7 @@ let
 in
 vmTest {
   credenza = {
-    security.pki.certificateFiles = [ "${certificates}/minica.pem" ];
+    security.pki.certificateFiles = [ "${certificates}/ca.pem" ];
     networking.hosts.${pushAddress} = [ pushService ];
     networking.interfaces.eth1.ipv4.routes = [{ address = pushAddress; prefixLength = 32; }];
   };
