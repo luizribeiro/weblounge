@@ -88,9 +88,6 @@ endpoint!(Info, "/v1/ns/info" => Account);
 pub struct Account {
     /// The account's canonical spelling.
     pub account_name: AccountName,
-    /// The account's email address, if it has one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
     /// When the account was registered, in ISO 8601.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registered_at: Option<String>,
@@ -114,9 +111,6 @@ pub struct AccountList {
 pub struct AccountSummary {
     /// The account's canonical spelling.
     pub account_name: AccountName,
-    /// The account's email address, if it has one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
 }
 
 /// `/v1/hs/set`: sets an account's vhost, or clears it when empty. Ours,
@@ -186,7 +180,6 @@ mod tests {
             account,
             Account {
                 account_name: "Alice".into(),
-                email: None,
                 registered_at: Some("2026-10-14T03:23:57.810Z".into()),
                 channels: vec!["#lounge".into()],
             }
@@ -200,7 +193,6 @@ mod tests {
             account,
             Account {
                 account_name: "Alice".into(),
-                email: None,
                 registered_at: None,
                 channels: Vec::new(),
             }
@@ -208,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn decodes_ergos_account_list_with_its_undocumented_emails() {
+    fn decodes_ergos_account_list_ignoring_its_undocumented_emails() {
         let list: AccountList = decode(
             r#"{"success":true,"accounts":[{"success":true,"accountName":"Alice","email":"a@example.org"},{"success":true,"accountName":"bob"}],"totalCount":2}"#,
         )
@@ -218,11 +210,9 @@ mod tests {
             [
                 AccountSummary {
                     account_name: "Alice".into(),
-                    email: Some("a@example.org".into()),
                 },
                 AccountSummary {
                     account_name: "bob".into(),
-                    email: None,
                 },
             ]
         );

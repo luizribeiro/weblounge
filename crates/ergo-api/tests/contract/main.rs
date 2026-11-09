@@ -171,7 +171,6 @@ async fn describes_and_lists_accounts(ergo: impl Backend) {
     )
     .await;
     let alice = client.info("alice").await.unwrap().unwrap();
-    assert_eq!(alice.email, None);
     assert!(alice.registered_at.is_some(), "{alice:?}");
     assert_eq!(client.info("carol").await.unwrap(), None);
     let error = client.info("").await.unwrap_err();
@@ -184,11 +183,9 @@ async fn describes_and_lists_accounts(ergo: impl Backend) {
         [
             AccountSummary {
                 account_name: "Bob".into(),
-                email: None,
             },
             AccountSummary {
                 account_name: "alice".into(),
-                email: None,
             },
         ]
     );

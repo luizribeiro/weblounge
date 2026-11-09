@@ -311,7 +311,6 @@ async fn info(State(state): State<Shared>, Json(request): Json<Info>) -> Respons
     with_named_account(&state, &request.account_name, bare_refusal, |account| {
         succeeded(Account {
             account_name: account.name.clone(),
-            email: None,
             registered_at: Some(TIMESTAMP.into()),
             channels: Vec::new(),
         })
@@ -324,7 +323,6 @@ async fn list(State(state): State<Shared>) -> Response {
         .values()
         .map(|account| AccountSummary {
             account_name: account.name.clone(),
-            email: None,
         })
         .collect();
     succeeded(AccountList { accounts })

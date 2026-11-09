@@ -328,7 +328,6 @@ mod tests {
             accounts,
             [AccountSummary {
                 account_name: "Alice".into(),
-                email: None
             }]
         );
         assert_sent(&stub, "/v1/ns/list", Value::Null);
