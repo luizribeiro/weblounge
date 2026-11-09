@@ -232,8 +232,6 @@ async fn making_a_bot_shows_its_password_once_in_a_dialog() {
         site.ergo.vhost("bender").as_deref(),
         Some("weblounge/bot/alice")
     );
-    let settings = site.ergo.client().settings("bender").await.unwrap();
-    assert_eq!(settings.always_on, ergo_api::Preference::Off);
 
     let later = bots_tab(&site, &cookie).await;
     assert!(passwords(&later).is_empty(), "{later}");

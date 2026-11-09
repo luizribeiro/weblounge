@@ -7,7 +7,7 @@
 use std::fmt;
 
 use anyhow::Context;
-use ergo_api::{Client, Passphrase, Preference, Registration, SettingsChanges};
+use ergo_api::{Client, Passphrase, Registration};
 
 use crate::{
     config::HouseAccountConfig, db::Db, name::HouseName, nick, password_rules, vhost::Vhost,
@@ -86,9 +86,8 @@ pub async fn ensure_account(
 }
 
 /// Registers `name` with `password`, or sets its password to it, and
-/// gives it `vhost` and always-on, so restarting what connects as it
-/// shows no quit or join. Refuses while a member or a bot holds the
-/// name, which only one from before it was reserved could.
+/// gives it `vhost`. Refuses while a member or a bot holds the name,
+/// which only one from before it was reserved could.
 pub async fn ensure(
     db: &Db,
     ergo: &Client,
@@ -111,13 +110,6 @@ pub async fn ensure(
     ergo.set_vhost(name, vhost.as_str())
         .await
         .with_context(|| format!("Ergo didn't give {name} its vhost"))?;
-    let always_on = SettingsChanges {
-        always_on: Some(Preference::On),
-        ..Default::default()
-    };
-    ergo.update_settings(name, always_on)
-        .await
-        .with_context(|| format!("Ergo didn't keep {name} always on"))?;
     Ok(ensured)
 }
 

@@ -221,7 +221,7 @@ fn make_a_bot(facts: &Facts) -> Article {
         keep_in_mind: vec![
             format!("You can have up to {} bots once you've confirmed your email.", bot_rules::MAX_LIVE),
             "A bot's name is its nick for good.".into(),
-            "Bots aren't always-on: a bot you stop leaves its channels.".into(),
+            "A bot you stop stays in its channels, shown as away, like a member who closes their app.".into(),
         ],
         related: &[CHANNEL, IMAGE],
     }

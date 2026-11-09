@@ -37,8 +37,8 @@ pub enum Command {
     ExpireUploads,
     /// Create a house account, one of the network's own, with the password
     /// in its <name>-password credential, or set its password to it, and
-    /// give it its vhost and always-on. Meant to run before what connects
-    /// as it starts, every time.
+    /// give it its vhost. Meant to run before what connects as it starts,
+    /// every time.
     EnsureHouseAccount {
         #[arg(value_parser = |name: &str| house::parse_name(name))]
         name: HouseName,

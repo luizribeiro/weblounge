@@ -2,7 +2,7 @@
 //! commands and the Bots tab both go through these.
 
 use anyhow::Context;
-use ergo_api::{Client, Erasure, Passphrase, Preference, Registration, SettingsChanges};
+use ergo_api::{Client, Erasure, Passphrase, Registration};
 
 use crate::{
     bot_rules,
@@ -126,7 +126,7 @@ impl Bots<'_> {
         if !registered.with_context(|| format!("Ergo didn't create {account}"))? {
             return Ok(Err(Refusal::Taken));
         }
-        self.set_up(&account, owner).await.with_context(|| {
+        self.set_vhost(&account, owner).await.with_context(|| {
             format!(
                 "{account} was created, but not set up; bot reset-password {account} tries again"
             )
@@ -174,14 +174,14 @@ impl Bots<'_> {
         Ok(opened.is_some())
     }
 
-    /// Sets the live bot `account` of `owner` up again and gives it a new
+    /// Gives the live bot `account` of `owner` its vhost again and a new
     /// generated password, answering it.
     pub async fn reset_password(
         &self,
         account: &BotName,
         owner: &MemberName,
     ) -> anyhow::Result<Passphrase> {
-        self.set_up(account, owner).await?;
+        self.set_vhost(account, owner).await?;
         password::set_generated(self.ergo, account).await
     }
 
@@ -200,33 +200,11 @@ impl Bots<'_> {
         Ok(())
     }
 
-    /// Turns the bot's always-on and auto-away off and gives it its owner's
-    /// vhost.
-    pub async fn set_up(&self, account: &BotName, owner: &MemberName) -> anyhow::Result<()> {
-        self.stay_offline_when_stopped(account).await?;
-        self.set_vhost(account, owner).await
-    }
-
     pub async fn set_vhost(&self, account: &BotName, owner: &MemberName) -> anyhow::Result<()> {
         self.ergo
             .set_vhost(account, vhost(owner))
             .await
             .with_context(|| format!("Ergo didn't give {account} its vhost"))
-    }
-
-    /// Turns the bot's always-on and auto-away off, so a stopped bot leaves
-    /// the channels instead of lingering in them.
-    async fn stay_offline_when_stopped(&self, account: &BotName) -> anyhow::Result<()> {
-        let changes = SettingsChanges {
-            always_on: Some(Preference::Off),
-            auto_away: Some(Preference::Off),
-            ..Default::default()
-        };
-        self.ergo
-            .update_settings(account, changes)
-            .await
-            .with_context(|| format!("Ergo didn't turn {account}'s always-on and auto-away off"))?;
-        Ok(())
     }
 }
 

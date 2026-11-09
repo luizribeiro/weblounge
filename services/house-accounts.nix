@@ -1,8 +1,8 @@
 # House accounts: Ergo accounts of the network's own, neither members nor
 # members' bots. Each gets a generated password in RAM and a
 # <name>-account oneshot, which holds Ergo's API token, registers the
-# account or puts the password back, and gives it its vhost and
-# always-on; whatever connects as it starts after it, with the password.
+# account or puts the password back, and gives it its vhost; whatever
+# connects as it starts after it, with the password.
 { config, lib, pkgs, ... }:
 
 let

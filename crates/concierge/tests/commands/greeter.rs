@@ -5,7 +5,6 @@ use concierge::{
     house::{self, Ensured},
     vhost::Vhost,
 };
-use ergo_api::Preference;
 
 use crate::Fixture;
 
@@ -30,14 +29,12 @@ async fn ensure_account(fixture: &Fixture, password: &str) -> anyhow::Result<Ens
 
 /// Whether concierge is set up the way the greeter needs it.
 async fn set_up(fixture: &Fixture, password: &str) -> bool {
-    let settings = fixture.ergo.client().settings("concierge").await.unwrap();
     fixture.signs_in_to_ergo("concierge", password).await
         && fixture.ergo.vhost("concierge").as_deref() == Some("weblounge/concierge")
-        && settings.always_on == Preference::On
 }
 
 #[tokio::test]
-async fn creates_the_house_account_with_its_password_vhost_and_always_on() {
+async fn creates_the_house_account_with_its_password_and_vhost() {
     let fixture = Fixture::start().await;
 
     let ensured = ensure_account(&fixture, PASSWORD).await.unwrap();

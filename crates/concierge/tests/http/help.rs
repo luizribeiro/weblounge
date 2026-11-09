@@ -161,6 +161,7 @@ async fn make_a_bot_shows_the_members_own_bot_host_and_how_many_bots_they_may_ha
         &format!(
             "<li>You can have up to {MAX_LIVE} bots once you&#39;ve confirmed your email.</li>"
         ),
+        "<li>A bot you stop stays in its channels, shown as away, like a member who closes their app.</li>",
     ] {
         assert!(page.contains(line), "{line}\n{page}");
     }

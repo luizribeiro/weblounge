@@ -30,8 +30,8 @@ pub enum BotCommand {
     /// List the bots, of one member or of everyone: name, owner, creation
     /// date and note.
     List { owner: Option<String> },
-    /// Give a bot a new generated password, and print it once. Turns its
-    /// always-on and auto-away off and sets its vhost again too.
+    /// Give a bot a new generated password, and print it once. Sets its
+    /// vhost again too.
     ResetPassword { name: String },
     /// Erase a bot's account, disconnecting it, and mark it deleted. Its
     /// owner may reuse its name at once; others once the chat history has
@@ -113,7 +113,7 @@ async fn ensure(
         bot.account,
         bot.owner
     );
-    admin.bots().set_up(&bot.account, &bot.owner).await?;
+    admin.bots().set_vhost(&bot.account, &bot.owner).await?;
     password::set(&admin.ergo, &bot.account, &password).await?;
     Ok(format!("updated {}\n", bot.account))
 }

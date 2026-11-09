@@ -297,7 +297,7 @@ with subtest("a bot made with concierge-admin logs in to IRC with SASL, but not 
     assert " 903 " in session, session
     body, _ = ergo_api("ns/saget", accountName="rosie")
     settings = json.loads(body)
-    assert (settings["alwaysOn"], settings["autoAway"]) == ("off", "off"), body
+    assert (settings["alwaysOn"], settings["autoAway"]) == ("default", "default"), body
     refused = Browser("rosie").sign_in("rosie", bot_password)
     assert refused == "401 ", refused
     tab = browser.get("/bots", "-f")

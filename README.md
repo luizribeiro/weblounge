@@ -181,7 +181,7 @@ gives it a generated `<name>-password` in RAM and
 `<name>-account.service`. That oneshot holds Ergo's API token and runs
 `concierge ensure-house-account <name> <vhost>` before the service
 starts: it registers the account or puts the password back, and sets its
-vhost and always-on. Concierge reads the names from
+vhost. Concierge reads the names from
 `CONCIERGE_HOUSE_ACCOUNTS`: nobody may sign up or make a bot under them,
 and `member reconcile` expects them in Ergo alone.
 
