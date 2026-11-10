@@ -1,7 +1,6 @@
 use crate::{
     Account, AccountName, AccountSummary, CheckAuth, Client, Erase, Error, ErrorCode, HsSet, Info,
-    List, Passphrase, Passwd, Result, SaGet, SaRegister, SaSet, ServerStatus, Settings,
-    SettingsChanges, Status,
+    List, Passphrase, Passwd, Result, SaRegister, ServerStatus, Status,
 };
 
 /// What came of [`Client::register`].
@@ -104,27 +103,6 @@ impl Client {
         Ok(self.call(&List).await?.accounts)
     }
 
-    /// An account's settings.
-    pub async fn settings(&self, account_name: impl Into<AccountName>) -> Result<Settings> {
-        let request = SaGet {
-            account_name: account_name.into(),
-        };
-        self.call(&request).await
-    }
-
-    /// Applies `changes` to an account's settings and returns all of them.
-    pub async fn update_settings(
-        &self,
-        account_name: impl Into<AccountName>,
-        changes: SettingsChanges,
-    ) -> Result<Settings> {
-        let request = SaSet {
-            account_name: account_name.into(),
-            changes,
-        };
-        self.call(&request).await
-    }
-
     /// Sets an account's vhost, the host everyone sees it connect from.
     pub async fn set_vhost(
         &self,
@@ -157,7 +135,7 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::{Preference, ReplayJoins, UserCounts, stub::Stub};
+    use crate::{UserCounts, stub::Stub};
 
     fn passphrase() -> Passphrase {
         "q7Hx-2mZp_9vLcT4wRfB".parse().unwrap()
@@ -350,47 +328,8 @@ mod tests {
             accounts,
             [AccountSummary {
                 account_name: "Alice".into(),
-                email: None
             }]
         );
         assert_sent(&stub, "/v1/ns/list", Value::Null);
-    }
-
-    #[tokio::test]
-    async fn settings_answers_with_the_accounts_settings() {
-        let stub = Stub::answering(
-            200,
-            r#"{"success":true,"alwaysOn":"on","autoAway":"default","replayJoins":"on"}"#,
-        )
-        .await;
-        let settings = stub.client().settings("alice").await.unwrap();
-        assert_eq!(settings.replay_joins, ReplayJoins::On);
-        assert_sent(&stub, "/v1/ns/saget", json!({"accountName": "alice"}));
-    }
-
-    #[tokio::test]
-    async fn update_settings_sends_the_changes_and_answers_with_every_setting() {
-        let stub = Stub::answering(
-            200,
-            r#"{"success":true,"alwaysOn":"off","autoAway":"default","replayJoins":"commands-only"}"#,
-        )
-        .await;
-        let changes = SettingsChanges {
-            always_on: Some(Preference::Off),
-            ..Default::default()
-        };
-
-        let settings = stub
-            .client()
-            .update_settings("alice", changes)
-            .await
-            .unwrap();
-
-        assert_eq!(settings.always_on, Preference::Off);
-        assert_sent(
-            &stub,
-            "/v1/ns/saset",
-            json!({"accountName": "alice", "alwaysOn": "off"}),
-        );
     }
 }

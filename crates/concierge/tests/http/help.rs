@@ -139,6 +139,7 @@ async fn start_a_channel_gives_the_commands_to_start_register_and_close_one() {
          That makes you its founder (~).</li>",
         "<li>Run <code>/mode #name +i</code>, so people can join only when invited.</li>",
         "<li>Invite someone with <code>/invite nick #name</code>.</li>",
+        "<li>You stay in your channels, and keep your @, even with every app closed.</li>",
     ] {
         assert!(page.contains(line), "{line}\n{page}");
     }

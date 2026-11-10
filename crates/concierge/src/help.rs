@@ -181,7 +181,7 @@ fn start_a_channel() -> Article {
         ],
         keep_in_mind: vec![
             "To leave a channel out of `/list` too, run `/mode #name +s`.".into(),
-            "With always-on, you stay in your channels, and keep your @, while you're away.".into(),
+            "You stay in your channels, and keep your @, even with every app closed.".into(),
         ],
         related: &[DEVICES, BOT],
     }

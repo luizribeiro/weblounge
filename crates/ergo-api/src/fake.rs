@@ -23,8 +23,8 @@ use tokio::{net::TcpListener, task::JoinHandle};
 
 use crate::{
     Account, AccountList, AccountName, AccountSummary, Ack, Authenticated, CheckAuth, Client,
-    Endpoint, Erase, ErrorCode, HsSet, Info, List, Passwd, Preference, ReplayJoins, SaGet,
-    SaRegister, SaSet, ServerStatus, Settings, Status, UserCounts,
+    Endpoint, Erase, ErrorCode, HsSet, Info, List, Passwd, SaRegister, ServerStatus, Status,
+    UserCounts,
 };
 
 const TOKEN: &str = "fake-ergo-token";
@@ -67,7 +67,6 @@ struct FakeState {
 struct FakeAccount {
     name: AccountName,
     passphrase: String,
-    settings: Settings,
     vhost: Option<String>,
 }
 
@@ -82,8 +81,6 @@ impl FakeErgo {
             .route(Erase::PATH, post(erase))
             .route(Info::PATH, post(info))
             .route(List::PATH, post(list))
-            .route(SaGet::PATH, post(saget))
-            .route(SaSet::PATH, post(saset))
             .route(HsSet::PATH, post(hs_set))
             .layer(middleware::from_fn_with_state(state.clone(), gatekeeper))
             .with_state(state.clone());
@@ -268,12 +265,6 @@ async fn saregister(State(state): State<Shared>, Json(request): Json<SaRegister>
         FakeAccount {
             name: request.account_name,
             passphrase: request.passphrase.expose().to_owned(),
-            settings: Settings {
-                always_on: Preference::Default,
-                auto_away: Preference::Default,
-                email: None,
-                replay_joins: ReplayJoins::CommandsOnly,
-            },
             vhost: None,
         },
     );
@@ -320,7 +311,6 @@ async fn info(State(state): State<Shared>, Json(request): Json<Info>) -> Respons
     with_named_account(&state, &request.account_name, bare_refusal, |account| {
         succeeded(Account {
             account_name: account.name.clone(),
-            email: account.settings.email.clone(),
             registered_at: Some(TIMESTAMP.into()),
             channels: Vec::new(),
         })
@@ -333,38 +323,9 @@ async fn list(State(state): State<Shared>) -> Response {
         .values()
         .map(|account| AccountSummary {
             account_name: account.name.clone(),
-            email: account.settings.email.clone(),
         })
         .collect();
     succeeded(AccountList { accounts })
-}
-
-async fn saget(State(state): State<Shared>, Json(request): Json<SaGet>) -> Response {
-    with_named_account(
-        &state,
-        &request.account_name,
-        account_does_not_exist,
-        |account| succeeded(&account.settings),
-    )
-}
-
-async fn saset(State(state): State<Shared>, Json(request): Json<SaSet>) -> Response {
-    with_named_account(
-        &state,
-        &request.account_name,
-        account_does_not_exist,
-        |account| {
-            let changes = request.changes;
-            let settings = &mut account.settings;
-            settings.always_on = changes.always_on.unwrap_or(settings.always_on);
-            settings.auto_away = changes.auto_away.unwrap_or(settings.auto_away);
-            settings.replay_joins = changes.replay_joins.unwrap_or(settings.replay_joins);
-            if let Some(email) = changes.email {
-                settings.email = Some(email).filter(|email| !email.is_empty());
-            }
-            succeeded(&*settings)
-        },
-    )
 }
 
 /// Ergo's default `accounts.vhosts.valid-regexp`, `^[0-9A-Za-z.\-_/]+$`.

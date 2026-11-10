@@ -2,7 +2,7 @@ use concierge::{
     db::{self, Bot, NewBot},
     name::{BotName, MemberName},
 };
-use ergo_api::{Preference, fake::Failure};
+use ergo_api::fake::Failure;
 
 use crate::{Fixture, HISTORY_EXPIRY};
 
@@ -92,21 +92,6 @@ mod create {
         );
         assert!(bot.created_at.abs_diff(db::now()) < 60);
         assert_eq!(bot.removed_at, None);
-    }
-
-    #[tokio::test]
-    async fn leaves_always_on_and_auto_away_to_the_network() {
-        let fixture = Fixture::with_owners().await;
-        fixture
-            .run(&["bot", "create", "luiz", "bender"])
-            .await
-            .unwrap();
-        let settings = fixture.ergo.client().settings("bender").await.unwrap();
-        assert_eq!(
-            (settings.always_on, settings.auto_away),
-            (Preference::Default, Preference::Default)
-        );
-        assert_eq!(fixture.bot("bender").await.unwrap().note, None);
     }
 
     #[tokio::test]
