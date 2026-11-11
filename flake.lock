@@ -898,11 +898,11 @@
         "weblounge-client-previous": "weblounge-client-previous"
       },
       "locked": {
-        "lastModified": 1794418764,
-        "narHash": "sha256-RdjaEW1E2HUMwurfZ0sHgKR9iy1BXLghbeBatShnRWo=",
+        "lastModified": 1794429635,
+        "narHash": "sha256-XoNC9YqpqlM/zlLNIix9vFFqAfmA/waKuFnbBBw6sDY=",
         "owner": "luizribeiro",
         "repo": "weblounge-client",
-        "rev": "6a1c540c5738c5c5b477fb77ec011ca95e07e823",
+        "rev": "9be06cff1737d3531d325166c0942c90121925e5",
         "type": "github"
       },
       "original": {
