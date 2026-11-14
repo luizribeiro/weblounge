@@ -6,7 +6,8 @@ let
   origin = config.weblounge.origin hostName;
   socket = ergo.websocketUrl hostName;
   members = config.weblounge.concierge.publicUrl;
-  upload = "${config.weblounge.origin config.weblounge.files.hostName}/upload";
+  files = config.weblounge.origin config.weblounge.files.hostName;
+  upload = "${files}/upload";
   inherit (config.weblounge) pushRelay;
 
   clientConfig = pkgs.writeText "weblounge-client-config.json" (builtins.toJSON {
@@ -28,8 +29,10 @@ let
     };
   });
 
-  # The client's engine is wasm, compiled in a SharedWorker.
+  # The client's engine is wasm, compiled in a SharedWorker. The composer
+  # previews a pasted image as a blob: URL, and messages show uploads inline.
   policy = {
+    img-src = "'self' blob: ${files}";
     script-src = "'self' 'wasm-unsafe-eval'";
     worker-src = "'self'";
     font-src = "'self'";
