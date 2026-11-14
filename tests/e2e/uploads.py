@@ -121,6 +121,19 @@ with subtest("the beta client's preflight learns the types and size the endpoint
     }.items():
         assert asked["headers"].get(name) == value, (name, asked)
 
+with subtest("nginx's 413 for a body far past the limit carries it, readably from the web clients alone"):
+    client.succeed("head -c 17000000 /dev/zero > /tmp/far-too-big")
+    answer = upload("/tmp/far-too-big", "-u", login(zoe), "-H", f"Origin: {beta}")
+    headers = answer["headers"]
+    assert answer["status"] == 413 and headers.get("upload-limit") == upload_limit, answer
+    assert headers.get("access-control-allow-origin") == beta, answer
+    assert headers.get("access-control-allow-credentials") == "true", answer
+    assert "upload-limit" in headers.get("access-control-expose-headers", "").lower(), answer
+    assert "max-age=31536000" in headers.get("strict-transport-security", ""), answer
+    elsewhere = upload("/tmp/far-too-big", "-u", login(zoe), "-H", "Origin: https://evil.example")
+    assert elsewhere["status"] == 413, elsewhere
+    assert not {"access-control-allow-origin", "access-control-allow-credentials"} & elsewhere["headers"].keys()
+
 with subtest("SVG, HTML and PDF get 415, whatever they're called"):
     for name, content in [
         ("drawing.svg", '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>'),

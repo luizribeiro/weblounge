@@ -7,7 +7,7 @@ let
   # Uploads are images served as they are, which nothing should run,
   # frame, index or follow links out of. The rest of the default policy is
   # for pages, which this site has none of.
-  headers = config.weblounge.nginx.securityHeadersWith
+  headersWith = extra: config.weblounge.nginx.securityHeadersWith
     {
       script-src = null;
       style-src = null;
@@ -16,10 +16,24 @@ let
       base-uri = null;
       sandbox = "";
     }
-    {
+    ({
       Referrer-Policy = "no-referrer";
       X-Robots-Tag = "noindex, nofollow, noimageindex, noai, noimageai";
-    };
+    } // extra);
+  headers = headersWith { };
+  # nginx stops what's far past the limit itself, as concierge would, and
+  # lets the web clients read why.
+  tooLarge = headersWith
+    {
+      Access-Control-Allow-Origin = "$files_cors_origin";
+      Access-Control-Allow-Credentials = "$files_cors_credentials";
+      Access-Control-Expose-Headers = "Upload-Limit";
+      Vary = "Origin";
+      Upload-Limit = "maxsize=${toString cfg.maxBytes}";
+    } + ''
+    default_type text/plain;
+    return 413 "Images can be ${toString (cfg.maxBytes / 1000000)} MB at most.\n";
+  '';
   # An upload's id and the extension of its type, as filehost names them.
   uploadPath = "^/[A-Za-z0-9_-]{22}\\.(png|jpg|gif|webp)$";
 in
@@ -131,6 +145,14 @@ in
     weblounge.ergo.settings.server.additional-isupport =
       lib.genAttrs [ "soju.im/FILEHOST" "draft/FILEHOST" ] (_: "${config.weblounge.origin cfg.hostName}/upload");
 
+    services.nginx.appendHttpConfig = config.weblounge.nginx.originMap "$files_cors_origin"
+      (lib.attrValues config.weblounge.concierge.webClients) + ''
+      map $files_cors_origin $files_cors_credentials {
+        "" "";
+        default "true";
+      }
+    '';
+
     services.nginx.virtualHosts.${cfg.hostName} = {
       enableACME = true;
       forceSSL = true;
@@ -161,11 +183,13 @@ in
         recommendedProxySettings = false;
         extraConfig = ''
           client_max_body_size 16m;
+          error_page 413 @upload_too_large;
           proxy_request_buffering off;
           proxy_http_version 1.1;
           proxy_set_header X-Real-IP $remote_addr;
         '';
       };
+      locations."@upload_too_large".extraConfig = tooLarge;
       locations."/".return = "404";
     };
   };
