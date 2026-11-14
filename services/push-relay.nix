@@ -118,11 +118,7 @@ in
       limit_req_zone $uri zone=push_relay_routes:4m rate=5r/s;
       limit_req_zone $push_relay_home zone=push_relay_homes:2m rate=20r/s;
       limit_req_zone $binary_remote_addr zone=push_relay_devices:2m rate=1r/s;
-      map $http_origin $push_relay_cors_origin {
-        default "";
-        ${lib.concatMapStrings (origin: "\"${origin}\" $http_origin;\n") cfg.allowedOrigins}
-      }
-    '';
+    '' + config.weblounge.nginx.originMap "$push_relay_cors_origin" cfg.allowedOrigins;
 
     services.nginx.virtualHosts.${hostName} = {
       enableACME = true;

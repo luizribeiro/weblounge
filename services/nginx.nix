@@ -70,6 +70,18 @@ in
     description = "add_header lines for the security headers, with these CSP directives over the default policy, and these headers over theirs.";
   };
 
+  options.weblounge.nginx.originMap = lib.mkOption {
+    type = lib.types.functionTo (lib.types.functionTo lib.types.lines);
+    readOnly = true;
+    default = variable: origins: ''
+      map $http_origin ${variable} {
+        default "";
+        ${lib.concatMapStrings (origin: "\"${origin}\" $http_origin;\n") origins}
+      }
+    '';
+    description = "An http-level map that sets the variable to a request's Origin when it's one of these origins, and to nothing otherwise.";
+  };
+
   options.weblounge.nginx.errorPages = lib.mkOption {
     type = lib.types.functionTo lib.types.attrs;
     readOnly = true;
