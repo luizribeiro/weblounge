@@ -33,6 +33,12 @@ in
       default = "files.${config.weblounge.domain}";
       description = "The host uploads are served from, and taken on.";
     };
+    maxBytes = lib.mkOption {
+      type = lib.types.ints.positive;
+      readOnly = true;
+      default = lib.toInt (lib.trim (builtins.readFile ../crates/filehost/max-bytes));
+      description = "The largest image anyone may upload, in bytes, as concierge and the scrubber hold uploads to.";
+    };
     directory = lib.mkOption {
       type = lib.types.str;
       readOnly = true;

@@ -10,8 +10,22 @@ use std::fmt;
 
 use common::random;
 
-/// The largest image anyone may upload, in bytes.
-pub const MAX_BYTES: usize = 10_000_000;
+/// The largest image anyone may upload, in bytes. nginx reads it from
+/// the same file, for the refusals it answers itself.
+pub const MAX_BYTES: usize = decimal(include_str!("../max-bytes"));
+
+/// The number `text` spells in decimal digits, up to a newline.
+const fn decimal(text: &str) -> usize {
+    let digits = text.as_bytes();
+    let mut value = 0;
+    let mut i = 0;
+    while i < digits.len() && digits[i] != b'\n' {
+        assert!(digits[i].is_ascii_digit(), "not a decimal number");
+        value = value * 10 + (digits[i] - b'0') as usize;
+        i += 1;
+    }
+    value
+}
 
 /// The images the network takes, whatever a client calls what it sends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,6 +143,13 @@ pub fn parse_file_name(name: &str) -> Option<(UploadId, ImageType)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_limit_in_decimal_up_to_a_newline() {
+        assert_eq!(decimal("10000000\n"), 10_000_000);
+        assert_eq!(decimal("25"), 25);
+        assert_eq!(MAX_BYTES, 10_000_000);
+    }
 
     #[test]
     fn ids_carry_at_least_128_bits_in_url_safe_characters() {
