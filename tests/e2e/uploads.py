@@ -10,6 +10,8 @@ if TYPE_CHECKING:
         Browser,
         access_token,
         add_member,
+        answer_of,
+        beta_client,
         concierge_admin,
         concierge_sql,
         files_host,
@@ -23,6 +25,10 @@ zoe: Account = {"account": "zoe", "password": "a-photo-of-the-harbour"}
 yuki: Account = {"account": "yuki", "password": "snow-on-the-lantern-roof"}
 uploads_dir = "/var/lib/concierge-files"
 link_pattern = rf"https://{re.escape(files_host)}/[A-Za-z0-9_-]{{22}}\.(png|jpg|gif|webp)"
+
+
+beta = beta_client["origin"]
+upload_limit = "maxsize=10000000"
 
 
 def login(account: Account) -> str:
@@ -92,7 +98,28 @@ with subtest("wrong credentials get 401, and leave nothing"):
 with subtest("an image past 10 MB gets 413 with the limit, as senpai reads it"):
     client.succeed("head -c 10000001 /dev/zero > /tmp/too-big")
     answer = upload("/tmp/too-big", "-u", login(zoe))
-    assert answer["status"] == 413 and answer["headers"]["upload-limit"] == "maxsize=10000000", answer
+    assert answer["status"] == 413 and answer["headers"]["upload-limit"] == upload_limit, answer
+
+with subtest("the beta client's preflight learns the types and size the endpoint takes, and may post"):
+    preflight = [
+        "-X",
+        "OPTIONS",
+        "-H",
+        f"Origin: {beta}",
+        "-H",
+        "Access-Control-Request-Method: POST",
+        "-H",
+        "Access-Control-Request-Headers: authorization,content-type,content-disposition",
+    ]
+    asked = answer_of(https(files_host, "/upload", "-D", "-", *preflight))
+    assert asked["status"] == 204, asked
+    for name, value in {
+        "access-control-allow-origin": beta,
+        "access-control-allow-credentials": "true",
+        "accept-post": "image/png, image/jpeg, image/gif, image/webp",
+        "upload-limit": upload_limit,
+    }.items():
+        assert asked["headers"].get(name) == value, (name, asked)
 
 with subtest("SVG, HTML and PDF get 415, whatever they're called"):
     for name, content in [

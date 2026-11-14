@@ -401,6 +401,7 @@ async fn assert_web_client_may_upload(site: &Site, bearer: &str, origin: &str) {
         Some("Authorization, Content-Type, Content-Disposition")
     );
     assert_eq!(granted(header::ACCESS_CONTROL_MAX_AGE), Some("3600"));
+    assert_announces_what_it_takes(&asked);
     let posted = site
         .upload_with(PNG, Some(bearer), &[(header::ORIGIN.as_str(), origin)])
         .await;
@@ -416,6 +417,32 @@ async fn assert_web_client_may_upload(site: &Site, bearer: &str, origin: &str) {
         Some("Location, Upload-Limit")
     );
     assert_eq!(granted(header::VARY), Some("origin"));
+}
+
+fn assert_announces_what_it_takes(response: &Response) {
+    assert_eq!(
+        header_of(response, header::HeaderName::from_static("accept-post")),
+        Some("image/png, image/jpeg, image/gif, image/webp")
+    );
+    assert_eq!(
+        header_of(response, header::HeaderName::from_static("upload-limit")),
+        Some("maxsize=10000000")
+    );
+}
+
+#[tokio::test]
+async fn any_client_asking_with_options_learns_the_types_and_size_taken() {
+    let site = Site::start().await;
+    let asked = site
+        .send(Request::options("/upload").body(Body::empty()).unwrap())
+        .await;
+    assert_eq!(asked.status(), 204);
+    assert_announces_what_it_takes(&asked);
+    assert!(
+        !asked
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+    );
 }
 
 #[tokio::test]

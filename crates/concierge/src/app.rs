@@ -268,12 +268,12 @@ pub fn router(app: App) -> Router {
         // through files.weblounge.org alone; nginx keeps it off this site.
         .route(
             routes::upload::PATH,
-            post(routes::upload::upload).options(cors::preflight).layer(
-                middleware::from_fn_with_state(
+            post(routes::upload::upload)
+                .options(routes::upload::options)
+                .layer(middleware::from_fn_with_state(
                     routes::upload::cors(upload_clients),
                     cors::allow_web_clients_with_credentials,
-                ),
-            ),
+                )),
         )
         .with_state(state);
     // Pages reload themselves when the dev loop restarts concierge.

@@ -11,7 +11,7 @@ use axum::{
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use filehost::{UploadId, handoff::Answer};
+use filehost::{ImageType, UploadId, handoff::Answer};
 
 use crate::{
     app::{App, AppState},
@@ -30,6 +30,7 @@ use super::signin;
 
 pub const PATH: &str = "/upload";
 const UPLOAD_LIMIT: HeaderName = HeaderName::from_static("upload-limit");
+const ACCEPT_POST: HeaderName = HeaderName::from_static("accept-post");
 
 /// Whose an upload is: a member's own, or one of their bots'.
 pub struct Uploader {
@@ -54,6 +55,27 @@ pub fn cors(clients: WebClients) -> cors::Credentialed {
         allowed_headers: "Authorization, Content-Type, Content-Disposition",
         exposed_headers: Some("Location, Upload-Limit"),
     }
+}
+
+/// What a client may ask before it posts, a browser's preflight among
+/// them: the types the endpoint takes, in `Accept-Post`, and how big, in
+/// `Upload-Limit`.
+pub async fn options() -> Response {
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    let headers = response.headers_mut();
+    headers.insert(ACCEPT_POST, accepted_types());
+    headers.insert(UPLOAD_LIMIT, upload_limit());
+    response
+}
+
+fn accepted_types() -> HeaderValue {
+    let types = ImageType::ALL.map(ImageType::content_type).join(", ");
+    HeaderValue::from_str(&types).expect("content types are header values")
+}
+
+fn upload_limit() -> HeaderValue {
+    HeaderValue::from_str(&format!("maxsize={}", upload_rules::MAX_BYTES))
+        .expect("a number is a header value")
 }
 
 /// The size a client says its upload is.
@@ -257,15 +279,12 @@ fn unauthorized() -> Response {
 
 /// `413`, with the limit in `Upload-Limit`, where senpai reads it.
 fn too_large() -> Response {
-    let limit = format!("maxsize={}", upload_rules::MAX_BYTES);
     let message = format!(
         "Images can be {} at most.",
         upload_rules::in_megabytes(upload_rules::MAX_BYTES)
     );
     let mut response = plain(StatusCode::PAYLOAD_TOO_LARGE, &message);
-    if let Ok(limit) = HeaderValue::from_str(&limit) {
-        response.headers_mut().insert(UPLOAD_LIMIT, limit);
-    }
+    response.headers_mut().insert(UPLOAD_LIMIT, upload_limit());
     response
 }
 
