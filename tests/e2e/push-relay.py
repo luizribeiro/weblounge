@@ -29,7 +29,7 @@ def statuses(machine: "QemuMachine", address: str, paths: list[str], *flags: str
 def create_device(*flags: str) -> str:
     """Asks for a device the way the web client does, for an APNs target, which the relay
     takes only once it has checked the session and then refuses as not yet built."""
-    body = json.dumps({"target": {"platform": "apns", "token": "a-device-token"}})
+    body = json.dumps({"target": {"platform": "apns", "token": "a-device-token", "environment": "production"}})
     return https(push, "/v1/devices", *status_only, "-H", "Content-Type: application/json", "--data", body, *flags)
 
 
