@@ -10,7 +10,7 @@ let
   upload = "${files}/upload";
   origins = map config.weblounge.origin (lib.attrNames cfg);
 
-  clientConfig = hostName: client: pkgs.writeText "weblounge-client-config.json" (builtins.toJSON {
+  clientConfig = hostName: client: {
     mode = "hosted";
     inherit (client) channel;
     network = {
@@ -28,7 +28,7 @@ let
       relay = pushRelay.publicUrl;
       relay_vapid = pushRelay.vapidPublicKey;
     };
-  });
+  };
 
   # The client's engine is wasm, compiled in a SharedWorker. The composer
   # previews a pasted image as a blob: URL, and messages show uploads inline.
@@ -46,6 +46,10 @@ let
       headersWith = cacheControl:
         config.weblounge.nginx.securityHeadersWith (policy hostName) { Cache-Control = cacheControl; };
       build = pkgs.weblounge.clients.${client.channel};
+      jsonFile = name: value: {
+        alias = pkgs.writeText "weblounge-client-${name}" (builtins.toJSON value);
+        extraConfig = headersWith "no-cache";
+      };
     in
     lib.mkMerge [
       (config.weblounge.nginx.errorPages { "404" = "404.html"; })
@@ -65,9 +69,10 @@ let
           extraConfig = headersWith "no-cache";
         };
         locations."/assets/".extraConfig = headersWith "public, max-age=31536000, immutable";
-        locations."= /config.json" = {
-          alias = clientConfig hostName client;
-          extraConfig = headersWith "no-cache";
+        locations."= /config.json" = jsonFile "config.json" (clientConfig hostName client);
+        locations."= /version.json" = jsonFile "version.json" {
+          inherit (build) commit version;
+          inherit (client) channel;
         };
         locations."= /socket" = ergo.websocketProxy;
       }

@@ -84,7 +84,7 @@ and says to try again.
 
 The web client is [weblounge-client](https://github.com/luizribeiro/weblounge-client),
 built by its own flake. `services/web-client.nix` serves it at each host
-name in `weblounge.webClients`, with a build and a channel:
+name in `weblounge.webClients` from the pin of its channel:
 
 | Host | Build | Channel |
 | --- | --- | --- |
@@ -95,6 +95,16 @@ The release input names its rev or tag in its URL, so bumping the beta
 client never moves it; to ship a release, change that URL in `flake.nix`
 and run `nix flake lock`. Each host serves its own `/config.json`, which
 tells the client its `channel`, where Ergo is and how to sign in.
+
+A flake input carries no git tags, so each pin's version string, as
+`node apps/tauri/release/describe-version.mjs <rev>` prints it in a client
+checkout, sits beside it in `client-versions.json`; moving a pin means
+updating its entry too. Builds that support it are built with that version.
+Each host's `/version.json` names what it serves:
+
+```json
+{"channel": "beta", "commit": "<the pin's 40-hex rev>", "version": "0.2.0+67"}
+```
 
 A member signed in on the members' site lands in #lounge without typing
 anything:

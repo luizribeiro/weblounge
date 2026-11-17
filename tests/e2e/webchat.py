@@ -117,6 +117,15 @@ for host, channel in channels.items():
         vapid_key = base64.urlsafe_b64decode(config["push"]["relay_vapid"] + "==")
         assert len(vapid_key) == 65 and vapid_key[0] == 4, "relay_vapid is not an uncompressed P-256 point"
 
+pins = json.loads(client.succeed("cat /etc/client-pins.json"))
+for host, channel in channels.items():
+    with subtest(f"{host}'s version.json names the {channel} pin's commit and version"):
+        body, content_type = https(host, "/version.json", "-f", "-w", "\n%{content_type}").rsplit("\n", 1)
+        assert content_type == "application/json", content_type
+        version = json.loads(body)
+        assert version == {**pins[channel], "channel": channel}, (version, pins)
+        assert re.fullmatch(r"[0-9a-f]{40}", version["commit"]), version
+
 
 def client_asset(referrer: str, pattern: str) -> str:
     [path] = set(re.findall(rf"/?(?:assets/)?({pattern})", referrer))
@@ -136,7 +145,15 @@ for host in channels:
         assert "content-type: application/wasm" in client_headers(host, wasm)
         assert "content-type: text/javascript" in client_headers(host, "/service-worker.js")
         startup = re.findall(r'href="(/startup/[^"]+\.png)"', page)[0]
-        for path in ["/", "/config.json", "/manifest.webmanifest", "/icons/favicon.svg", "/service-worker.js", startup]:
+        for path in [
+            "/",
+            "/config.json",
+            "/version.json",
+            "/manifest.webmanifest",
+            "/icons/favicon.svg",
+            "/service-worker.js",
+            startup,
+        ]:
             headers = client_headers(host, path)
             assert "cache-control: no-cache" in headers, (path, headers)
             assert connects(host) in headers, (path, headers)
