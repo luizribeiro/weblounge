@@ -208,7 +208,7 @@
       "inputs": {
         "flake-compat": "flake-compat_2",
         "nixpkgs": [
-          "weblounge-client-release",
+          "weblounge-client",
           "nixpkgs"
         ]
       },
@@ -230,7 +230,7 @@
       "inputs": {
         "flake-compat": "flake-compat_3",
         "nixpkgs": [
-          "weblounge-client-release",
+          "weblounge-client",
           "weblounge-client-previous",
           "nixpkgs"
         ]
@@ -396,7 +396,7 @@
     "rust-overlay_2": {
       "inputs": {
         "nixpkgs": [
-          "weblounge-client-release",
+          "weblounge-client",
           "nixpkgs"
         ]
       },
@@ -417,7 +417,7 @@
     "rust-overlay_3": {
       "inputs": {
         "nixpkgs": [
-          "weblounge-client-release",
+          "weblounge-client",
           "weblounge-client-previous",
           "nixpkgs"
         ]
@@ -503,34 +503,13 @@
     },
     "weblounge-client": {
       "inputs": {
-        "crane": [
-          "weblounge-client-release",
-          "crane"
-        ],
-        "flake-utils": [
-          "weblounge-client-release",
-          "flake-utils"
-        ],
-        "git-hooks": [
-          "weblounge-client-release",
-          "git-hooks"
-        ],
-        "nixpkgs": [
-          "weblounge-client-release",
-          "nixpkgs"
-        ],
-        "papo-test-infra": [
-          "weblounge-client-release",
-          "papo-test-infra"
-        ],
-        "rust-overlay": [
-          "weblounge-client-release",
-          "rust-overlay"
-        ],
-        "weblounge-client-previous": [
-          "weblounge-client-release",
-          "weblounge-client-previous"
-        ]
+        "crane": "crane_2",
+        "flake-utils": "flake-utils_2",
+        "git-hooks": "git-hooks_2",
+        "nixpkgs": "nixpkgs_2",
+        "papo-test-infra": "papo-test-infra",
+        "rust-overlay": "rust-overlay_2",
+        "weblounge-client-previous": "weblounge-client-previous"
       },
       "locked": {
         "lastModified": 1794886070,
@@ -555,7 +534,7 @@
         "papo-test-infra": "papo-test-infra_2",
         "rust-overlay": "rust-overlay_3",
         "weblounge-client-previous": [
-          "weblounge-client-release"
+          "weblounge-client"
         ]
       },
       "locked": {
@@ -575,13 +554,34 @@
     },
     "weblounge-client-release": {
       "inputs": {
-        "crane": "crane_2",
-        "flake-utils": "flake-utils_2",
-        "git-hooks": "git-hooks_2",
-        "nixpkgs": "nixpkgs_2",
-        "papo-test-infra": "papo-test-infra",
-        "rust-overlay": "rust-overlay_2",
-        "weblounge-client-previous": "weblounge-client-previous"
+        "crane": [
+          "weblounge-client",
+          "crane"
+        ],
+        "flake-utils": [
+          "weblounge-client",
+          "flake-utils"
+        ],
+        "git-hooks": [
+          "weblounge-client",
+          "git-hooks"
+        ],
+        "nixpkgs": [
+          "weblounge-client",
+          "nixpkgs"
+        ],
+        "papo-test-infra": [
+          "weblounge-client",
+          "papo-test-infra"
+        ],
+        "rust-overlay": [
+          "weblounge-client",
+          "rust-overlay"
+        ],
+        "weblounge-client-previous": [
+          "weblounge-client",
+          "weblounge-client-previous"
+        ]
       },
       "locked": {
         "lastModified": 1794886070,

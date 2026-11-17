@@ -28,22 +28,22 @@
       inputs.crane.follows = "crane";
       inputs.git-hooks.follows = "git-hooks";
     };
-    # The release irc.weblounge.org serves, and the push relay, cut by hand:
-    # its rev is in the URL, so updating the beta client leaves it where it
-    # is. Its build pins its own toolchain and dependency hashes, so nothing
-    # follows ours.
-    weblounge-client-release.url = "github:luizribeiro/weblounge-client/64b912c434bf297659d4dad44827329465c3f988";
-    # The web client in beta at beta.weblounge.org. It builds with the
-    # release's toolchain, so the lock carries one copy of it.
-    weblounge-client = {
-      url = "github:luizribeiro/weblounge-client";
-      inputs.crane.follows = "weblounge-client-release/crane";
-      inputs.flake-utils.follows = "weblounge-client-release/flake-utils";
-      inputs.git-hooks.follows = "weblounge-client-release/git-hooks";
-      inputs.nixpkgs.follows = "weblounge-client-release/nixpkgs";
-      inputs.papo-test-infra.follows = "weblounge-client-release/papo-test-infra";
-      inputs.rust-overlay.follows = "weblounge-client-release/rust-overlay";
-      inputs.weblounge-client-previous.follows = "weblounge-client-release/weblounge-client-previous";
+    # The web client in beta at beta.weblounge.org, and the push relay. Its
+    # build pins its own toolchain and dependency hashes, so nothing follows
+    # ours.
+    weblounge-client.url = "github:luizribeiro/weblounge-client";
+    # The release irc.weblounge.org serves, cut by hand: its rev is in the
+    # URL, so updating the beta client leaves its source where it is. It
+    # builds with beta's toolchain, so the lock carries one copy of it.
+    weblounge-client-release = {
+      url = "github:luizribeiro/weblounge-client/64b912c434bf297659d4dad44827329465c3f988";
+      inputs.crane.follows = "weblounge-client/crane";
+      inputs.flake-utils.follows = "weblounge-client/flake-utils";
+      inputs.git-hooks.follows = "weblounge-client/git-hooks";
+      inputs.nixpkgs.follows = "weblounge-client/nixpkgs";
+      inputs.papo-test-infra.follows = "weblounge-client/papo-test-infra";
+      inputs.rust-overlay.follows = "weblounge-client/rust-overlay";
+      inputs.weblounge-client-previous.follows = "weblounge-client/weblounge-client-previous";
     };
   };
 
