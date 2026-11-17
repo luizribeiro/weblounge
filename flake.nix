@@ -33,7 +33,7 @@
     weblounge-client.url = "github:luizribeiro/weblounge-client";
     # The release irc.weblounge.org serves, cut by hand: its rev or tag is
     # in the URL, so updating the beta client leaves it where it is.
-    weblounge-client-release.url = "github:luizribeiro/weblounge-client/c902f26ab8909ea969f6982cd7a63798834b990a";
+    weblounge-client-release.url = "github:luizribeiro/weblounge-client/64b912c434bf297659d4dad44827329465c3f988";
   };
 
   outputs = { nixpkgs, git-hooks, ... } @ inputs:
