@@ -40,6 +40,23 @@ in
     };
   };
 
+  testAStablePasswordComesFromSopsAndTheRestStayEphemeral =
+    let
+      secrets = (credenzaWith {
+        example = { vhost = "weblounge/example"; stablePassword = true; };
+      }).config.weblounge.secrets;
+    in
+    {
+      expr = {
+        example = { inherit (secrets.example-password) fromSops ephemeral loadedBy; };
+        concierge = { inherit (secrets.concierge-password) fromSops ephemeral; };
+      };
+      expected = {
+        example = { fromSops = true; ephemeral = false; loadedBy = [ "example-account" ]; };
+        concierge = { fromSops = false; ephemeral = true; };
+      };
+    };
+
   testConciergeAndItsAdminCommandsReserveTheHouseAccounts = {
     expr = lib.elem "CONCIERGE_HOUSE_ACCOUNTS=bender,concierge,example"
       (credenzaWith { example.vhost = "weblounge/example"; }).config.systemd.services.concierge.serviceConfig.Environment;

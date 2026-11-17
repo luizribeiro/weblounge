@@ -1,6 +1,6 @@
 # House accounts: Ergo accounts of the network's own, neither members nor
-# members' bots. Each gets a generated password in RAM and a
-# <name>-account oneshot, which holds Ergo's API token, registers the
+# members' bots. Each gets a password, generated in RAM unless it's
+# stable and from sops, and a <name>-account oneshot, which holds Ergo's API token, registers the
 # account or puts the password back, and gives it its vhost; whatever
 # connects as it starts after it, with the password.
 { config, lib, pkgs, ... }:
@@ -33,6 +33,15 @@ let
         readOnly = true;
         default = "${name}-password";
         description = "The secret holding the account's password; add what connects as it to its loadedBy.";
+      };
+      stablePassword = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Whether the password comes from sops and stays the same across
+          boots, for clients that connect as the account from elsewhere
+          with a password typed in once.
+        '';
       };
     };
   };
@@ -88,7 +97,8 @@ in
     weblounge.secrets = lib.mkMerge (lib.mapAttrsToList
       (_: account: {
         ${account.password} = {
-          ephemeral = true;
+          fromSops = account.stablePassword;
+          ephemeral = !account.stablePassword;
           loadedBy = [ account.unit ];
         };
         ergo-api-token.loadedBy = [ account.unit ];
