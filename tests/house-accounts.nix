@@ -57,6 +57,19 @@ in
       };
     };
 
+  testAStablePasswordRerunsItsOneshotWhenSopsChangesIt = {
+    expr = lib.mapAttrs (_: secret: secret.restartUnits)
+      (credenzaWith { example = { vhost = "weblounge/example"; stablePassword = true; }; }).config.sops.secrets;
+    expected = {
+      bender-password = [ "bender-account.service" ];
+      example-password = [ "example-account.service" ];
+      push-relay-apns-key = [ ];
+      push-relay-introspection-secret = [ ];
+      push-relay-vapid-key = [ ];
+      smtp-password = [ ];
+    };
+  };
+
   testConciergeAndItsAdminCommandsReserveTheHouseAccounts = {
     expr = lib.elem "CONCIERGE_HOUSE_ACCOUNTS=bender,concierge,example"
       (credenzaWith { example.vhost = "weblounge/example"; }).config.systemd.services.concierge.serviceConfig.Environment;

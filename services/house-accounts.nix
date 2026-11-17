@@ -105,6 +105,12 @@ in
       })
       cfg);
 
+    # A new or changed password reaches Ergo only when the oneshot runs,
+    # and deploys may leave it be.
+    sops.secrets = lib.mapAttrs'
+      (_: account: lib.nameValuePair account.password { restartUnits = [ "${account.unit}.service" ]; })
+      (lib.filterAttrs (_: account: account.stablePassword) cfg);
+
     systemd.services = lib.mapAttrs' (name: account: lib.nameValuePair account.unit (ensure name account)) cfg;
   };
 }
