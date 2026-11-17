@@ -27,9 +27,8 @@ pub fn nudge(newcomer: &MemberName) -> String {
 pub fn hello(newcomer: &MemberName, inviter: &MemberName, public_url: &SiteOrigin) -> Vec<String> {
     vec![
         format!("Hi {newcomer}! I'm concierge, weblounge's resident bot. Welcome aboard."),
-        "Make sure notifications are on, so you hear when someone mentions you. On the \
-         webchat, use the \"Turn on desktop notifications\" link at the top or Settings, if \
-         your browser supports it."
+        "To get notified about DMs and mentions, turn on notifications when weblounge \
+         asks, or any time in Settings → Notifications."
             .to_owned(),
         format!(
             "Want weblounge on your phone or desktop? These apps work well here: \
@@ -60,9 +59,8 @@ mod tests {
             hello(&erin, &MemberName::new("luiz"), &public_url),
             [
                 "Hi erin! I'm concierge, weblounge's resident bot. Welcome aboard.",
-                "Make sure notifications are on, so you hear when someone mentions you. \
-                 On the webchat, use the \"Turn on desktop notifications\" link at the top \
-                 or Settings, if your browser supports it.",
+                "To get notified about DMs and mentions, turn on notifications when weblounge \
+                 asks, or any time in Settings → Notifications.",
                 "Want weblounge on your phone or desktop? These apps work well here: \
                  https://members.weblounge.org/help/apps",
                 "I can't chat yet. Questions? Ask luiz, who invited you, or anyone in #lounge.",

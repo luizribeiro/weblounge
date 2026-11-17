@@ -132,8 +132,8 @@ with subtest("a newcomer is welcomed as they first connect, and gets one hello")
     wait_for_step("frank", "oriented_at")
     assert history_lines("concierge", **frank, speaker="concierge") == [
         "Hi frank! I'm concierge, weblounge's resident bot. Welcome aboard.",
-        "Make sure notifications are on, so you hear when someone mentions you. On the webchat, "
-        'use the "Turn on desktop notifications" link at the top or Settings, if your browser supports it.',
+        "To get notified about DMs and mentions, turn on notifications when weblounge asks, "
+        "or any time in Settings → Notifications.",
         "Want weblounge on your phone or desktop? These apps work well here: https://members.weblounge.org/help/apps",
         "I can't chat yet. Questions? Ask luiz, who invited you, or anyone in #lounge.",
     ]
