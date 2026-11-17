@@ -7,6 +7,14 @@
 @import "./components/card.css";
 @import "./components/chair.css";
 
+/* On phones the felt reads as noise and seams against the iOS app's solid
+   status-bar bands, so members' pages stay plain there. */
+@media (max-width: 600px), (pointer: coarse) {
+  body {
+    background-image: none;
+  }
+}
+
 .page:has(> .home) {
   padding-block: 1.5rem;
 }
