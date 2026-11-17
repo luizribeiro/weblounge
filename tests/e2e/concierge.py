@@ -42,7 +42,7 @@ with subtest("the sign-in page runs under an iPhone's notch and home bar, padded
 
 with subtest("members' pages drop the felt on phones, so they meet the iOS app's bands flat"):
     assert re.search(
-        r"@media \(max-width: ?600px\), ?\(pointer: ?coarse\) ?\{\s*body ?\{\s*background-image: ?none", css
+        r"@media ?\(max-width: ?600px\), ?\(pointer: ?coarse\) ?\{\s*body ?\{\s*background-image: ?none", css
     ), css
 
 with subtest("concierge serves the assets its page links, under hashed names cached for good"):
