@@ -3,16 +3,16 @@
 final: prev:
 let
   packagesOf = flake: flake.packages.${final.stdenv.hostPlatform.system};
-  releasePackages = packagesOf weblounge-client-release;
+  clientPackages = packagesOf weblounge-client;
 in
 {
   ergochat = final.callPackage ./ergochat.nix { inherit (prev) ergochat; };
 
   weblounge = {
     web = final.callPackage ./web.nix { };
-    client = (packagesOf weblounge-client).app;
-    clientRelease = releasePackages.app;
-    inherit (releasePackages) push-relay;
+    client = clientPackages.app;
+    clientRelease = (packagesOf weblounge-client-release).app;
+    inherit (clientPackages) push-relay;
     ergoConfig = final.callPackage ./ergo-config.nix { };
     inherit (final.callPackage ./workspace.nix { craneLib = crane.mkLib final; inherit advisory-db; }) concierge mailer scrubber greeter;
   };

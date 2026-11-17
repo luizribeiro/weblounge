@@ -129,8 +129,8 @@ https://beta.weblounge.localhost:10443.
 ## Push notifications
 
 `https://push.weblounge.org` is the push relay, `services/push-relay.nix`,
-also from weblounge-client, built from the release input,
-`weblounge-client-release`, so bumping the beta client leaves it alone. A device registers with it once,
+also from weblounge-client but through an input of its own, `push-relay`,
+so it and the web client can move apart. A device registers with it once,
 which takes a member's session token that it checks with concierge, and
 gets a route for each home, such as our Ergo, to POST its encrypted
 pushes to. The relay passes them on to the device's browser push service,
