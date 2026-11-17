@@ -10,8 +10,9 @@ let
   upload = "${files}/upload";
   origins = map config.weblounge.origin (lib.attrNames cfg);
 
-  clientConfig = hostName: pkgs.writeText "weblounge-client-config.json" (builtins.toJSON {
+  clientConfig = hostName: client: pkgs.writeText "weblounge-client-config.json" (builtins.toJSON {
     mode = "hosted";
+    inherit (client) channel;
     network = {
       name = ergo.settings.network.name;
       endpoint = ergo.websocketUrl hostName;
@@ -64,7 +65,7 @@ let
         };
         locations."/assets/".extraConfig = headersWith "public, max-age=31536000, immutable";
         locations."= /config.json" = {
-          alias = clientConfig hostName;
+          alias = clientConfig hostName client;
           extraConfig = headersWith "no-cache";
         };
         locations."= /socket" = ergo.websocketProxy;
@@ -79,6 +80,10 @@ in
       options.package = lib.mkOption {
         type = lib.types.package;
         description = "The build of weblounge-client to serve.";
+      };
+      options.channel = lib.mkOption {
+        type = lib.types.enum [ "beta" "release" ];
+        description = "Which of the client's channels this build is, as config.json tells it.";
       };
     });
     default = { };

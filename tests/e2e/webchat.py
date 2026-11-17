@@ -132,6 +132,7 @@ with subtest("beta.weblounge.org serves the beta web client, set up to sign memb
     config = json.loads(body)
     assert config == {
         "mode": "hosted",
+        "channel": "beta",
         "network": {"name": "weblounge", "endpoint": f"wss://{beta}/socket", "autojoin": ["#lounge"]},
         "oauth": {
             "issuer": f"https://{members}",
