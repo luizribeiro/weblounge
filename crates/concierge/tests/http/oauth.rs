@@ -679,3 +679,25 @@ async fn only_the_introspection_clients_with_their_own_secrets_may_introspect() 
             .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
     );
 }
+
+#[tokio::test]
+async fn gamjas_tokens_last_their_sessions_but_its_codes_buy_nothing() {
+    let site = Site::start().await;
+    site.add_member("alice").await;
+    let cookie = site.sign_in("alice").await;
+    let token = site.access_token(&cookie).await;
+    let code = site.authorization_code(&cookie).await;
+    site.execute("UPDATE oauth_tokens SET client_id = 'gamja'")
+        .await;
+    site.execute("UPDATE oauth_codes SET client_id = 'gamja'")
+        .await;
+
+    let answer = site.introspect(&token).await;
+    assert_eq!(answer["active"], true);
+    assert_eq!(answer["client_id"], "gamja");
+    let as_gamja = site.exchange(&code, &[("client_id", "gamja")]).await;
+    assert_eq!(as_gamja.status(), 401);
+    let response = site.exchange(&code, &[]).await;
+    assert_eq!(response.status(), 400);
+    assert_eq!(json(response).await["error"], "invalid_grant");
+}
