@@ -1,78 +1,12 @@
-{ config, lib, pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
-  inherit (config.weblounge) ergo;
   hostName = "beta.${config.weblounge.domain}";
-  origin = config.weblounge.origin hostName;
-  socket = ergo.websocketUrl hostName;
-  members = config.weblounge.concierge.publicUrl;
-  files = config.weblounge.origin config.weblounge.files.hostName;
-  upload = "${files}/upload";
-  inherit (config.weblounge) pushRelay;
-
-  clientConfig = pkgs.writeText "weblounge-client-config.json" (builtins.toJSON {
-    mode = "hosted";
-    network = {
-      name = ergo.settings.network.name;
-      endpoint = socket;
-      autojoin = ergo.settings.channels.auto-join;
-    };
-    oauth = {
-      issuer = members;
-      client_id = "weblounge-client";
-      redirect_uri = "${origin}/";
-      session_token_endpoint = "${members}/oauth/session-token";
-    };
-    push = {
-      relay = pushRelay.publicUrl;
-      relay_vapid = pushRelay.vapidPublicKey;
-    };
-  });
-
-  # The client's engine is wasm, compiled in a SharedWorker. The composer
-  # previews a pasted image as a blob: URL, and messages show uploads inline.
-  policy = {
-    img-src = "'self' blob: ${files}";
-    script-src = "'self' 'wasm-unsafe-eval'";
-    worker-src = "'self'";
-    font-src = "'self'";
-    manifest-src = "'self'";
-    connect-src = "'self' ${socket} ${members} ${upload} ${pushRelay.publicUrl}";
-  };
-  headersWith = cacheControl:
-    config.weblounge.nginx.securityHeadersWith policy { Cache-Control = cacheControl; };
 in
 {
-  imports = [ ./concierge.nix ./ergo.nix ./files.nix ./nginx.nix ./push-relay.nix ];
+  imports = [ ./web-client.nix ];
 
-  weblounge.ergo.settings.server.websockets.allowed-origins = [ origin ];
+  weblounge.webClients.${hostName}.package = pkgs.weblounge.client;
 
-  weblounge.concierge.webClients.CONCIERGE_BETA_CLIENT_URL = origin;
-
-  weblounge.pushRelay.allowedOrigins = [ origin ];
-
-  services.nginx.virtualHosts.${hostName} = lib.mkMerge [
-    (config.weblounge.nginx.errorPages { "404" = "404.html"; })
-    {
-      enableACME = true;
-      forceSSL = true;
-      root = pkgs.weblounge.client;
-      # Only the files under /assets/ carry their content's hash in their
-      # names; the rest keep theirs across builds. The error pages' assets
-      # set their own Cache-Control, so the server level sets none.
-      extraConfig = config.weblounge.nginx.securityHeaders policy;
-      # The client routes by path, so a reload of /weblounge/lounge gets
-      # index.html; a missing asset under /assets/ still answers 404.
-      locations."/" = {
-        tryFiles = "$uri /index.html";
-        extraConfig = headersWith "no-cache";
-      };
-      locations."/assets/".extraConfig = headersWith "public, max-age=31536000, immutable";
-      locations."= /config.json" = {
-        alias = clientConfig;
-        extraConfig = headersWith "no-cache";
-      };
-      locations."= /socket" = ergo.websocketProxy;
-    }
-  ];
+  weblounge.concierge.webClients.CONCIERGE_BETA_CLIENT_URL = config.weblounge.origin hostName;
 }
