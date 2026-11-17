@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         Account,
         Browser,
         add_member,
+        assert_covers_safe_areas,
         concierge_admin,
         concierge_admin_command,
         concierge_sql,
@@ -34,6 +35,10 @@ with subtest("members.weblounge.org serves concierge's sign-in page in the share
     assert stylesheet, page
     css = https("members.weblounge.org", stylesheet[1], "-f")
     assert "--paper:" in css, css
+
+with subtest("the sign-in page runs under an iPhone's notch and home bar, padded clear of them"):
+    assert_covers_safe_areas(page)
+    assert "env(safe-area-inset-top)" in css, css
 
 with subtest("concierge serves the assets its page links, under hashed names cached for good"):
     member_assets = set(re.findall(r'(?:href|src)="(/assets/[^"#]+)', page))
@@ -77,6 +82,7 @@ with subtest("while concierge is down, nginx says it's back in a moment, and it'
     assert "<h1>Back in a moment.</h1>" in down, down
     assert '<a class="button button-primary" href="">Try again</a>' in down, down
     assert "<script" not in down and "Sign in" not in down, down
+    assert_covers_safe_areas(down)
     credenza.systemctl("start concierge.service")
     credenza.wait_for_open_port(8080)
     assert "Sign in." in https(members, "/signin", "-f")

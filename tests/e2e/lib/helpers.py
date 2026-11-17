@@ -173,6 +173,14 @@ def not_found_page(name: str, path: str) -> str:
     return page
 
 
+def assert_covers_safe_areas(page: str) -> None:
+    """iPhones only draw a page under their notch and home bar, rather than
+    leaving bands of their own colour there, when it asks for the whole
+    screen."""
+    viewport = re.search(r'<meta name="viewport" content="([^"]+)"', page)
+    assert viewport and "viewport-fit=cover" in viewport[1].split(","), page
+
+
 def concierge_admin_command(*args: str) -> str:
     return f"su - luiz -c {shlex.quote(shlex.join(['concierge-admin', *args]))}"
 
