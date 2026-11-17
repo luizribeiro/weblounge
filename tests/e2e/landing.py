@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
-    from helpers import assert_client_address_absent, error_page, not_found_page
+    from helpers import assert_client_address_absent, assert_covers_safe_areas, error_page, not_found_page
 
 with subtest("nginx redirects to HTTPS and serves the parking page"):
     credenza.wait_for_unit("nginx.service")
@@ -57,6 +57,10 @@ with subtest("unknown paths get the not-found page, in its own stylesheet and st
     assert "<h1>There's nothing here.</h1>" in lost, lost
     assert '<svg xmlns="http://www.w3.org/2000/svg" id="chair"' in lost and "<script" not in lost, lost
     assert error_page("weblounge.org", "/_error/404.html", 404) == lost
+
+with subtest("the parking and not-found pages run under an iPhone's notch and home bar"):
+    assert_covers_safe_areas(page)
+    assert_covers_safe_areas(lost)
 
 with subtest("nginx logs requests without the client's address or query, even when they fail"):
     client.succeed("curl -sk -o /dev/null 'https://credenza/no-such-page?code=a-secret'")
