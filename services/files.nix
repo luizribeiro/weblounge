@@ -146,7 +146,7 @@ in
       lib.genAttrs [ "soju.im/FILEHOST" "draft/FILEHOST" ] (_: "${config.weblounge.origin cfg.hostName}/upload");
 
     services.nginx.appendHttpConfig = config.weblounge.nginx.originMap "$files_cors_origin"
-      (lib.attrValues config.weblounge.concierge.webClients) + ''
+      config.weblounge.concierge.webClients + ''
       map $files_cors_origin $files_cors_credentials {
         "" "";
         default "true";

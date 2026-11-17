@@ -13,10 +13,8 @@ use subtle::ConstantTimeEq;
 
 use crate::{authorization::Credentials, db::AuthorizationCode, origin::WebchatOrigin};
 
-/// gamja, the web client members are sent to.
-pub const WEBCHAT_CLIENT: &str = "gamja";
-/// The web client in beta beside gamja.
-pub const BETA_CLIENT: &str = "weblounge-client";
+/// Our web client, weblounge-client, at every origin it's served from.
+pub const WEB_CLIENT: &str = "weblounge-client";
 /// The clients allowed to introspect tokens.
 pub const INTROSPECTION_CLIENTS: &[IntrospectionClient] = &[
     IntrospectionClient {
@@ -37,47 +35,44 @@ pub const SESSION_TOKEN_LIFETIME: i64 = 15 * 60;
 const CHALLENGE_LENGTH: usize = 43;
 /// RFC 7636's bounds on a code verifier.
 const VERIFIER_LENGTHS: std::ops::RangeInclusive<usize> = 43..=128;
-/// Generous for any random state a client keeps; gamja's is 43 characters.
+/// Generous for any random state a client keeps.
 /// RFC 6749 allows printable ASCII in it.
 const MAX_STATE_LENGTH: usize = 256;
 
-/// A web client and where it may be sent back to: public, so it has no
-/// secret, and PKCE stands in.
+/// One origin the web client is served from, which it may be sent back
+/// to. The client is public, so it has no secret, and PKCE stands in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WebClient {
-    pub id: &'static str,
     pub origin: WebchatOrigin,
 }
 
-/// The web clients that may sign members in: gamja, which members are
-/// sent to, and the beta client where one is served.
+/// Where the web client signs members in from: the origin members are
+/// sent to, and any others it's served from, such as the beta's.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WebClients {
     pub webchat: WebClient,
-    pub beta: Option<WebClient>,
+    elsewhere: Vec<WebClient>,
 }
 
 impl WebClients {
-    pub fn new(webchat: WebchatOrigin, beta: Option<WebchatOrigin>) -> Self {
+    pub fn new(webchat: WebchatOrigin, elsewhere: impl IntoIterator<Item = WebchatOrigin>) -> Self {
         Self {
-            webchat: WebClient {
-                id: WEBCHAT_CLIENT,
-                origin: webchat,
-            },
-            beta: beta.map(|origin| WebClient {
-                id: BETA_CLIENT,
-                origin,
-            }),
+            webchat: WebClient { origin: webchat },
+            elsewhere: elsewhere
+                .into_iter()
+                .map(|origin| WebClient { origin })
+                .collect(),
         }
     }
 
     fn all(&self) -> impl Iterator<Item = &WebClient> {
-        std::iter::once(&self.webchat).chain(&self.beta)
+        std::iter::once(&self.webchat).chain(&self.elsewhere)
     }
 
-    /// The client with this id.
-    pub fn get(&self, id: &str) -> Option<&WebClient> {
-        self.all().find(|client| client.id == id)
+    /// The client that `redirect_uri` sends the browser back to.
+    fn redirected_to(&self, redirect_uri: &str) -> Option<&WebClient> {
+        self.all()
+            .find(|client| client.redirect_uri() == redirect_uri)
     }
 
     /// Whether `origin`, as a browser sends it, is one of the clients'.
@@ -154,14 +149,12 @@ pub enum Refusal {
 impl AuthorizationRequest {
     pub fn check(self, clients: &WebClients) -> Result<Authorization, Refusal> {
         let client = self
-            .client_id
+            .redirect_uri
             .as_deref()
-            .and_then(|id| clients.get(id))
+            .filter(|_| self.client_id.as_deref() == Some(WEB_CLIENT))
+            .and_then(|uri| clients.redirected_to(uri))
             .ok_or(Refusal::UnknownClient)?;
         let redirect_uri = client.redirect_uri();
-        if self.redirect_uri.as_deref() != Some(&redirect_uri) {
-            return Err(Refusal::UnknownClient);
-        }
         let state = self
             .state
             .filter(|state| (1..=MAX_STATE_LENGTH).contains(&state.len()))
@@ -182,7 +175,7 @@ impl AuthorizationRequest {
             .ok_or_else(|| invalid("invalid_request"))?;
         let state = state.clone().ok_or_else(|| invalid("invalid_request"))?;
         Ok(Authorization {
-            client_id: client.id,
+            client_id: WEB_CLIENT,
             redirect_uri,
             state,
             code_challenge,
@@ -374,16 +367,16 @@ mod tests {
         clients_at("https://irc.weblounge.org")
     }
 
-    fn clients_at(gamja: &str) -> WebClients {
+    fn clients_at(webchat: &str) -> WebClients {
         let origin = |url| WebchatOrigin::parse(url).unwrap();
-        WebClients::new(origin(gamja), Some(origin(BETA_ORIGIN)))
+        WebClients::new(origin(webchat), [origin(BETA_ORIGIN)])
     }
 
-    /// What gamja sends.
-    fn gamja() -> AuthorizationRequest {
+    /// What the web client sends from irc.weblounge.org.
+    fn webchat() -> AuthorizationRequest {
         AuthorizationRequest {
             response_type: Some("code".into()),
-            client_id: Some("gamja".into()),
+            client_id: Some(WEB_CLIENT.into()),
             redirect_uri: Some("https://irc.weblounge.org/".into()),
             state: Some("q7Hx2mZp9vLcT4wRfBa-_wq7Hx2mZp9vLcT4wRfBa-_".into()),
             code_challenge: Some(CHALLENGE.into()),
@@ -399,64 +392,44 @@ mod tests {
     }
 
     #[test]
-    fn accepts_gamjas_request() {
+    fn accepts_the_web_clients_request() {
         assert_eq!(
-            gamja().check(&clients()),
+            webchat().check(&clients()),
             Ok(Authorization {
-                client_id: "gamja",
+                client_id: WEB_CLIENT,
                 redirect_uri: "https://irc.weblounge.org/".into(),
-                state: gamja().state.unwrap(),
+                state: webchat().state.unwrap(),
                 code_challenge: challenge(),
             })
         );
     }
 
-    /// What the beta client sends.
+    /// What the web client sends from beta.weblounge.org.
     fn beta() -> AuthorizationRequest {
         AuthorizationRequest {
-            client_id: Some("weblounge-client".into()),
             redirect_uri: Some("https://beta.weblounge.org/".into()),
-            ..gamja()
+            ..webchat()
         }
     }
 
     #[test]
-    fn accepts_the_beta_clients_request() {
+    fn accepts_the_web_clients_request_from_beta() {
         assert_eq!(
             beta().check(&clients()),
             Ok(Authorization {
-                client_id: "weblounge-client",
+                client_id: WEB_CLIENT,
                 redirect_uri: "https://beta.weblounge.org/".into(),
-                state: gamja().state.unwrap(),
+                state: webchat().state.unwrap(),
                 code_challenge: challenge(),
             })
         );
     }
 
     #[test]
-    fn a_client_is_sent_back_only_to_its_own_redirect() {
-        let swapped = [
-            AuthorizationRequest {
-                redirect_uri: beta().redirect_uri,
-                ..gamja()
-            },
-            AuthorizationRequest {
-                redirect_uri: gamja().redirect_uri,
-                ..beta()
-            },
-        ];
-        for request in swapped {
-            let refusal = request.check(&clients()).unwrap_err();
-            assert_eq!(refusal, Refusal::UnknownClient);
-            assert_eq!(refusal.redirect(), None);
-        }
-    }
-
-    #[test]
-    fn without_a_beta_origin_the_beta_client_is_unknown() {
-        let gamja_only = WebClients::new(clients().webchat.origin, None);
-        assert!(gamja().check(&gamja_only).is_ok());
-        assert_eq!(beta().check(&gamja_only), Err(Refusal::UnknownClient));
+    fn without_a_beta_origin_the_beta_redirect_is_unknown() {
+        let irc_only = WebClients::new(clients().webchat.origin, []);
+        assert!(webchat().check(&irc_only).is_ok());
+        assert_eq!(beta().check(&irc_only), Err(Refusal::UnknownClient));
     }
 
     #[test]
@@ -475,8 +448,8 @@ mod tests {
         ] {
             assert!(!clients.at(origin), "{origin}");
         }
-        let gamja_only = WebClients::new(clients.webchat.origin, None);
-        assert!(!gamja_only.at(BETA_ORIGIN));
+        let irc_only = WebClients::new(clients.webchat.origin, []);
+        assert!(!irc_only.at(BETA_ORIGIN));
     }
 
     fn from_origin(origin: Option<&str>) -> HeaderMap {
@@ -492,10 +465,13 @@ mod tests {
         let clients = clients();
         let sent_by = |origin| {
             let headers = from_origin(origin);
-            clients.sent_by(&headers).map(|client| client.id)
+            clients
+                .sent_by(&headers)
+                .map(|client| client.origin.to_string())
         };
-        assert_eq!(sent_by(Some("https://irc.weblounge.org")), Some("gamja"));
-        assert_eq!(sent_by(Some(BETA_ORIGIN)), Some("weblounge-client"));
+        for origin in ["https://irc.weblounge.org", BETA_ORIGIN] {
+            assert_eq!(sent_by(Some(origin)).as_deref(), Some(origin));
+        }
         for origin in [
             None,
             Some("https://evil.example"),
@@ -525,7 +501,7 @@ mod tests {
         ] {
             let request = AuthorizationRequest {
                 redirect_uri: Some(uri.into()),
-                ..gamja()
+                ..webchat()
             };
             assert_eq!(
                 request.check(&clients()),
@@ -535,17 +511,23 @@ mod tests {
         }
         let request = AuthorizationRequest {
             redirect_uri: None,
-            ..gamja()
+            ..webchat()
         };
         assert_eq!(request.check(&clients()), Err(Refusal::UnknownClient));
     }
 
     #[test]
     fn other_clients_get_no_redirect() {
-        for client_id in [None, Some("ergo"), Some("Gamja"), Some("")] {
+        for client_id in [
+            None,
+            Some("ergo"),
+            Some("gamja"),
+            Some("Weblounge-Client"),
+            Some(""),
+        ] {
             let request = AuthorizationRequest {
                 client_id: client_id.map(Into::into),
-                ..gamja()
+                ..webchat()
             };
             let refusal = request.check(&clients()).unwrap_err();
             assert_eq!(refusal, Refusal::UnknownClient, "{client_id:?}");
@@ -565,10 +547,10 @@ mod tests {
         let vm = clients_at("https://irc.weblounge.localhost:10443");
         let request = AuthorizationRequest {
             redirect_uri: Some("https://irc.weblounge.localhost:10443/".into()),
-            ..gamja()
+            ..webchat()
         };
         assert!(request.check(&vm).is_ok());
-        assert_eq!(gamja().check(&vm), Err(Refusal::UnknownClient));
+        assert_eq!(webchat().check(&vm), Err(Refusal::UnknownClient));
     }
 
     fn refused_with(request: AuthorizationRequest) -> Option<String> {
@@ -577,7 +559,7 @@ mod tests {
 
     #[test]
     fn requests_without_pkce_s256_are_sent_back_with_an_error() {
-        let state = gamja().state.unwrap();
+        let state = webchat().state.unwrap();
         let back = format!("https://irc.weblounge.org/?error=invalid_request&state={state}");
         for (challenge, method) in [
             (None, Some("S256")),
@@ -593,7 +575,7 @@ mod tests {
             let request = AuthorizationRequest {
                 code_challenge: challenge.map(Into::into),
                 code_challenge_method: method.map(Into::into),
-                ..gamja()
+                ..webchat()
             };
             assert_eq!(
                 refused_with(request),
@@ -612,7 +594,7 @@ mod tests {
             Some("line\r\nbreak".into()),
             Some("caf\u{e9}".into()),
         ] {
-            let request = AuthorizationRequest { state, ..gamja() };
+            let request = AuthorizationRequest { state, ..webchat() };
             assert_eq!(
                 refused_with(request).as_deref(),
                 Some("https://irc.weblounge.org/?error=invalid_request")
@@ -625,7 +607,7 @@ mod tests {
         let request = AuthorizationRequest {
             response_type: Some("token".into()),
             state: Some("a b&c".into()),
-            ..gamja()
+            ..webchat()
         };
         assert_eq!(
             refused_with(request).as_deref(),
@@ -635,7 +617,7 @@ mod tests {
 
     #[test]
     fn the_code_goes_back_with_the_state() {
-        let authorization = gamja().check(&clients()).unwrap();
+        let authorization = webchat().check(&clients()).unwrap();
         assert_eq!(
             code_redirect(&authorization, "c0de"),
             format!(
@@ -647,7 +629,7 @@ mod tests {
 
     #[test]
     fn a_valid_request_can_still_be_refused_back_to_the_client() {
-        let authorization = gamja().check(&clients()).unwrap();
+        let authorization = webchat().check(&clients()).unwrap();
         assert_eq!(
             authorization.error_redirect("temporarily_unavailable"),
             format!(
@@ -662,7 +644,7 @@ mod tests {
     fn issued_code() -> AuthorizationCode {
         AuthorizationCode {
             session_hash: SessionHash::from_bytes(vec![0xa1]),
-            client_id: "gamja".into(),
+            client_id: WEB_CLIENT.into(),
             redirect_uri: "https://irc.weblounge.org/".into(),
             code_challenge: challenge(),
             expires_at: ISSUED + CODE_LIFETIME,
@@ -674,7 +656,7 @@ mod tests {
             grant_type: "authorization_code".into(),
             code: "c0de".into(),
             redirect_uri: "https://irc.weblounge.org/".into(),
-            client_id: "gamja".into(),
+            client_id: WEB_CLIENT.into(),
             code_verifier: VERIFIER.into(),
         }
     }
@@ -725,25 +707,18 @@ mod tests {
     }
 
     #[test]
-    fn a_code_is_not_redeemed_by_the_other_web_client() {
+    fn a_code_is_redeemed_only_at_the_origin_it_was_issued_for() {
         let beta_code = AuthorizationCode {
-            client_id: "weblounge-client".into(),
             redirect_uri: "https://beta.weblounge.org/".into(),
             ..issued_code()
         };
         let beta_exchange = || TokenRequest {
-            client_id: "weblounge-client".into(),
             redirect_uri: "https://beta.weblounge.org/".into(),
             ..exchange()
         };
         assert!(beta_exchange().redeems(&beta_code, ISSUED));
         assert!(!exchange().redeems(&beta_code, ISSUED));
         assert!(!beta_exchange().redeems(&issued_code(), ISSUED));
-        let beta_id_gamja_redirect = TokenRequest {
-            client_id: "weblounge-client".into(),
-            ..exchange()
-        };
-        assert!(!beta_id_gamja_redirect.redeems(&beta_code, ISSUED));
     }
 
     #[test]
@@ -877,7 +852,7 @@ mod tests {
     fn anything_else_is_refused() {
         for header in [
             None,
-            Some(basic(&format!("gamja:{SECRET}"))),
+            Some(basic(&format!("weblounge-client:{SECRET}"))),
             Some(basic(&format!("unknown:{SECRET}"))),
             Some(basic("ergo:wrong")),
             Some(basic("ergo:")),

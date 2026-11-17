@@ -31,7 +31,8 @@ pub const INTROSPECTION_PATH: &str = "/oauth/introspect";
 pub const SESSION_TOKEN_PATH: &str = "/oauth/session-token";
 
 /// RFC 8414's metadata. The introspection endpoint is left out: it's for
-/// Ergo alone, and gamja would call it from the browser if it were listed.
+/// Ergo alone, and the web client would call it from the browser if it
+/// were listed.
 #[derive(Serialize)]
 struct Metadata<'a> {
     issuer: &'a str,
@@ -97,8 +98,8 @@ pub async fn authorize(
 }
 
 /// Trades a code, with its PKCE verifier, for an access token that lasts
-/// as long as the session that approved the code. gamja keeps no refresh
-/// token and reuses its access token on every reconnection, so a token
+/// as long as the session that approved the code. A client gets no refresh
+/// token and may reuse its access token on every reconnection, so a token
 /// shorter than the session would cut members off mid-session.
 pub async fn token(
     State(app): State<AppState>,
@@ -111,9 +112,9 @@ pub async fn token(
     if request.grant_type != "authorization_code" {
         return token_error(StatusCode::BAD_REQUEST, "unsupported_grant_type");
     }
-    let Some(client) = app.web_clients.get(&request.client_id) else {
+    if request.client_id != oauth::WEB_CLIENT {
         return token_error(StatusCode::UNAUTHORIZED, "invalid_client");
-    };
+    }
     let Some(code) = Token::parse(request.code.expose()) else {
         return token_error(StatusCode::BAD_REQUEST, "invalid_grant");
     };
@@ -134,7 +135,14 @@ pub async fn token(
         Ok(None) => return token_error(StatusCode::BAD_REQUEST, "invalid_grant"),
         Err(error) => return internal_error("Looking up a session", error),
     };
-    issue_access_token(&app, &code.session_hash, client.id, now, session.expires_at).await
+    issue_access_token(
+        &app,
+        &code.session_hash,
+        oauth::WEB_CLIENT,
+        now,
+        session.expires_at,
+    )
+    .await
 }
 
 /// Hands a web client's page an access token for the members' session
@@ -165,9 +173,9 @@ pub async fn session_token(
     address: ClientAddress,
     headers: HeaderMap,
 ) -> Response {
-    let Some(client) = app.web_clients.sent_by(&headers) else {
+    if app.web_clients.sent_by(&headers).is_none() {
         return token_error(StatusCode::FORBIDDEN, "invalid_client");
-    };
+    }
     if !csrf::is_json(&headers) {
         return token_error(StatusCode::UNSUPPORTED_MEDIA_TYPE, "invalid_request");
     }
@@ -179,7 +187,14 @@ pub async fn session_token(
     };
     let now = db::now();
     let expires_at = oauth::session_token_expiry(now, signed_in.expires_at);
-    issue_access_token(&app, &signed_in.token_hash, client.id, now, expires_at).await
+    issue_access_token(
+        &app,
+        &signed_in.token_hash,
+        oauth::WEB_CLIENT,
+        now,
+        expires_at,
+    )
+    .await
 }
 
 /// What the web clients may send [`session_token`] with their cookies.

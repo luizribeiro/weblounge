@@ -5,6 +5,7 @@ let
   hostName = "members.${config.weblounge.domain}";
   publicUrl = config.weblounge.origin hostName;
   joinHostName = "join.${config.weblounge.domain}";
+  webchat = config.weblounge.origin config.weblounge.ergo.serverName;
   concierge = lib.getExe pkgs.weblounge.concierge;
   historyExpireTime = config.weblounge.ergo.settings.history.restrictions.expire-time;
   multiclient = config.weblounge.ergo.settings.accounts.multiclient;
@@ -108,9 +109,9 @@ in
   };
 
   options.weblounge.concierge.webClients = lib.mkOption {
-    type = lib.types.attrsOf lib.types.str;
-    default = { };
-    description = "The origins of the web clients concierge signs members in to, by the variable that tells concierge each one's.";
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "The origins of the web client concierge signs members in to; it sends members to the one at the IRC server's name.";
   };
 
   options.weblounge.concierge.listen = lib.mkOption {
@@ -128,7 +129,7 @@ in
 
   config = {
     weblounge.loopbackListeners.Concierge = cfg.listen;
-    weblounge.concierge.webClients.CONCIERGE_WEBCHAT_URL = config.weblounge.origin config.weblounge.ergo.serverName;
+    weblounge.concierge.webClients = [ webchat ];
 
     assertions = [{
       assertion = multiclient.always-on == "mandatory" && multiclient.auto-away == "mandatory";
@@ -191,7 +192,8 @@ in
         serviceConfig = config.weblounge.sandbox // config.weblounge.loopbackOnly // stateAccess // serviceOnly
           // withAccess [ outboxAccess filesAccess scrubberAccess ] // {
           RestrictAddressFamilies = config.weblounge.sandbox.RestrictAddressFamilies ++ [ "AF_UNIX" ];
-          Environment = lib.mapAttrsToList (name: value: "${name}=${value}") (filesEnvironment // cfg.webClients) ++ [
+          Environment = lib.mapAttrsToList (name: value: "${name}=${value}") filesEnvironment ++ [
+            "CONCIERGE_WEB_CLIENT_URLS=${lib.concatStringsSep "," ([ webchat ] ++ lib.remove webchat cfg.webClients)}"
             "CONCIERGE_OUTBOX=${outboxPath}"
             "CONCIERGE_LISTEN=${cfg.listen}"
             "CONCIERGE_PUBLIC_URL=${publicUrl}"
@@ -265,7 +267,7 @@ in
         # hold every redirect after a form's POST to form-action.
         extraConfig = config.weblounge.nginx.securityHeaders {
           connect-src = "'self'";
-          form-action = lib.concatStringsSep " " ([ "'self'" ] ++ lib.attrValues cfg.webClients);
+          form-action = lib.concatStringsSep " " ([ "'self'" ] ++ cfg.webClients);
           img-src = "'self' ${filesEnvironment.CONCIERGE_FILES_URL}";
         };
         locations."/" = {

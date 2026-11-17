@@ -11,8 +11,8 @@ use crate::{
     history,
     house::{self, HouseAccounts},
     name::{HouseName, MemberName},
-    oauth::{INTROSPECTION_CLIENTS, IntrospectionSecrets},
-    origin::{self, FilesOrigin, Origin, SiteOrigin, WebchatOrigin},
+    oauth::{INTROSPECTION_CLIENTS, IntrospectionSecrets, WebClients},
+    origin::{self, FilesOrigin, Origin, SiteOrigin},
     uploads::Store,
 };
 pub use common::config::ConfigError;
@@ -21,6 +21,7 @@ pub const SESSION_KEY_CREDENTIAL: &str = "session-key";
 pub const ERGO_API_TOKEN_CREDENTIAL: &str = "ergo-api-token";
 const DEFAULT_ERGO_API: &str = "http://127.0.0.1:8089";
 const DATABASE: &str = "concierge.db";
+const WEB_CLIENT_URLS: &str = "CONCIERGE_WEB_CLIENT_URLS";
 const MIN_SECRET_BYTES: usize = 32;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,10 +30,8 @@ pub struct Config {
     pub public_url: SiteOrigin,
     /// What invite links start with; the code follows.
     pub invite_links: String,
-    /// gamja's origin, the web client members are sent to.
-    pub webchat_url: WebchatOrigin,
-    /// The beta web client's origin, where one is served.
-    pub beta_client_url: Option<WebchatOrigin>,
+    /// The origins the web client is served from, members sent to the first.
+    pub web_clients: WebClients,
     /// Where uploads are served from.
     pub files_url: FilesOrigin,
     /// Where uploads are handed to the scrubber, and stored.
@@ -97,7 +96,7 @@ impl Config {
 
         let listen = require("CONCIERGE_LISTEN")?;
         let public_url = require("CONCIERGE_PUBLIC_URL")?;
-        let webchat_url = require("CONCIERGE_WEBCHAT_URL")?;
+        let web_client_urls = require(WEB_CLIENT_URLS)?;
         let join_url = var("CONCIERGE_JOIN_URL");
         let irc_server = require("CONCIERGE_IRC_SERVER")?;
         let history_expiry = require("CONCIERGE_HISTORY_EXPIRE_TIME")?;
@@ -115,10 +114,7 @@ impl Config {
             })?,
             invite_links: invite_links(public_url.as_str(), join_url.as_deref()),
             public_url,
-            webchat_url: origin("CONCIERGE_WEBCHAT_URL", webchat_url)?,
-            beta_client_url: var("CONCIERGE_BETA_CLIENT_URL")
-                .map(|url| origin("CONCIERGE_BETA_CLIENT_URL", url))
-                .transpose()?,
+            web_clients: web_clients_in(web_client_urls)?,
             files_url: origin("CONCIERGE_FILES_URL", require("CONCIERGE_FILES_URL")?)?,
             uploads: Store::from_vars(&var)?,
             irc_server: irc_server_in(irc_server)?,
@@ -316,6 +312,23 @@ fn house_accounts_in(names: String) -> Result<HouseAccounts, ConfigError> {
     })
 }
 
+/// Every origin the web client is served from, separated by commas, the
+/// one members are sent to first.
+fn web_clients_in(urls: String) -> Result<WebClients, ConfigError> {
+    let origins: Option<Vec<_>> = urls.split(',').map(Origin::parse).collect();
+    let mut origins = origins
+        .ok_or_else(|| {
+            invalid(
+                WEB_CLIENT_URLS,
+                urls.clone(),
+                "expected http(s) origins, without paths, separated by commas",
+            )
+        })?
+        .into_iter();
+    let webchat = origins.next().expect("split yields at least one part");
+    Ok(WebClients::new(webchat, origins))
+}
+
 fn house_name_in(name: &'static str, value: String) -> Result<HouseName, ConfigError> {
     house::parse_name(&value).map_err(|_| invalid(name, value, "expected a house account's name"))
 }
@@ -382,12 +395,14 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD};
     use std::collections::HashMap;
 
-    const PRODUCTION: [(&str, &str); 15] = [
+    const PRODUCTION: [(&str, &str); 14] = [
         ("CONCIERGE_LISTEN", "127.0.0.1:8080"),
         ("CONCIERGE_PUBLIC_URL", "https://members.weblounge.org"),
         ("CONCIERGE_JOIN_URL", "https://join.weblounge.org"),
-        ("CONCIERGE_WEBCHAT_URL", "https://irc.weblounge.org"),
-        ("CONCIERGE_BETA_CLIENT_URL", "https://beta.weblounge.org"),
+        (
+            "CONCIERGE_WEB_CLIENT_URLS",
+            "https://irc.weblounge.org,https://beta.weblounge.org",
+        ),
         ("CONCIERGE_FILES_URL", "https://files.weblounge.org"),
         ("CONCIERGE_UPLOADS", "/var/lib/concierge-files"),
         ("CONCIERGE_SCRUBBER", "/run/concierge-scrubber.sock"),
@@ -434,8 +449,10 @@ mod tests {
                 listen: "127.0.0.1:8080".parse().unwrap(),
                 public_url: origin("https://members.weblounge.org"),
                 invite_links: "https://join.weblounge.org/#".into(),
-                webchat_url: origin("https://irc.weblounge.org"),
-                beta_client_url: Some(origin("https://beta.weblounge.org")),
+                web_clients: WebClients::new(
+                    origin("https://irc.weblounge.org"),
+                    [origin("https://beta.weblounge.org")]
+                ),
                 files_url: origin("https://files.weblounge.org"),
                 uploads: Store {
                     directory: "/var/lib/concierge-files".into(),
@@ -555,40 +572,41 @@ mod tests {
     }
 
     #[test]
-    fn the_webchat_url_is_an_origin_too() {
-        let webchat = |url| parse_with(&[("CONCIERGE_WEBCHAT_URL", Some(url))]);
+    fn members_are_sent_to_the_first_web_client_url() {
+        let clients =
+            |urls| parse_with(&[(WEB_CLIENT_URLS, Some(urls))]).map(|config| config.web_clients);
+        let vm = clients("https://irc.weblounge.localhost:10443/").unwrap();
         assert_eq!(
-            webchat("https://irc.weblounge.localhost:10443/")
-                .unwrap()
-                .webchat_url
-                .as_str(),
+            vm.webchat.origin.as_str(),
             "https://irc.weblounge.localhost:10443"
         );
-        assert!(matches!(
-            webchat("https://irc.weblounge.org/chat"),
-            Err(ConfigError::Invalid { .. })
-        ));
-        assert_eq!(
-            parse_with(&[("CONCIERGE_WEBCHAT_URL", None)]),
-            Err(ConfigError::Missing("CONCIERGE_WEBCHAT_URL"))
-        );
+        assert!(!vm.at("https://beta.weblounge.org"));
+        let both = clients("https://irc.weblounge.org,https://beta.weblounge.org").unwrap();
+        assert_eq!(both.webchat.origin.as_str(), "https://irc.weblounge.org");
+        assert!(both.at("https://beta.weblounge.org"));
     }
 
     #[test]
-    fn the_beta_client_url_is_an_optional_origin() {
-        let beta = |url| parse_with(&[("CONCIERGE_BETA_CLIENT_URL", url)]);
+    fn every_web_client_url_is_an_origin() {
+        for urls in [
+            "",
+            "https://irc.weblounge.org,",
+            "https://irc.weblounge.org, https://beta.weblounge.org",
+            "https://irc.weblounge.org,https://beta.weblounge.org/app",
+            "https://irc.weblounge.org/chat",
+        ] {
+            let error = parse_with(&[(WEB_CLIENT_URLS, Some(urls))]).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "CONCIERGE_WEB_CLIENT_URLS={urls:?} is invalid: expected http(s) origins, without paths, separated by commas"
+                )
+            );
+        }
         assert_eq!(
-            beta(Some("https://beta.weblounge.localhost:10443/"))
-                .unwrap()
-                .beta_client_url
-                .map(|url| url.to_string()),
-            Some("https://beta.weblounge.localhost:10443".into())
+            parse_with(&[(WEB_CLIENT_URLS, None)]),
+            Err(ConfigError::Missing(WEB_CLIENT_URLS))
         );
-        assert!(matches!(
-            beta(Some("https://beta.weblounge.org/app")),
-            Err(ConfigError::Invalid { .. })
-        ));
-        assert_eq!(beta(None).unwrap().beta_client_url, None);
     }
 
     #[test]

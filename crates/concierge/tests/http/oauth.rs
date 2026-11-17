@@ -1,5 +1,8 @@
 use axum::http::header;
-use concierge::{name::MemberName, oauth::CODE_LIFETIME};
+use concierge::{
+    name::MemberName,
+    oauth::{CODE_LIFETIME, WEB_CLIENT},
+};
 use serde_json::Value;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -7,19 +10,20 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use crate::{BETA_URL, PUBLIC_URL, Site, WEBCHAT_URL, body_text, introspection_secret, location};
 
 impl Site {
-    /// Asks for a code as gamja does, with the session in `cookie`.
+    /// Asks for a code as the web client does on irc.weblounge.org, with
+    /// the session in `cookie`.
     async fn authorization_code(&self, cookie: &str) -> String {
         let response = self.get(&authorize_path(&[]), Some(cookie)).await;
         code_in(location(&response))
     }
 
-    /// Posts to the token endpoint from gamja's page, with changes to what
-    /// gamja sends.
+    /// Posts to the token endpoint from the web client's page, with
+    /// changes to what it sends.
     async fn exchange(&self, code: &str, changes: &[(&str, &str)]) -> axum::response::Response {
         self.exchange_from(code, changes, WEBCHAT_URL).await
     }
 
-    /// A member's access token, the way gamja gets one.
+    /// A member's access token, the way the web client gets one.
     pub(crate) async fn access_token(&self, cookie: &str) -> String {
         let code = self.authorization_code(cookie).await;
         let answer = json(self.exchange(&code, &[]).await).await;
@@ -68,7 +72,7 @@ impl Site {
             ("grant_type", "authorization_code"),
             ("code", code),
             ("redirect_uri", REDIRECT_URI),
-            ("client_id", "gamja"),
+            ("client_id", WEB_CLIENT),
             ("code_verifier", VERIFIER),
         ];
         for (name, value) in changes {
@@ -89,12 +93,13 @@ const CHALLENGE: &str = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 const STATE: &str = "q7Hx2mZp9vLcT4wRfBa-_w";
 const REDIRECT_URI: &str = "https://irc.weblounge.org/";
 
-/// The authorization request gamja makes, with some parameters replaced
+/// The authorization request the web client makes on irc.weblounge.org,
+/// with some parameters replaced
 /// or, given as None, left out.
 fn authorize_path(changes: &[(&str, Option<&str>)]) -> String {
     let mut params = vec![
         ("response_type", "code"),
-        ("client_id", "gamja"),
+        ("client_id", WEB_CLIENT),
         ("redirect_uri", REDIRECT_URI),
         ("state", STATE),
         ("code_challenge", CHALLENGE),
@@ -112,7 +117,8 @@ fn authorize_path(changes: &[(&str, Option<&str>)]) -> String {
     format!("/oauth/authorize?{query}")
 }
 
-/// The code in a redirect back to gamja, checking the state came along.
+/// The code in a redirect back to irc.weblounge.org, checking the state
+/// came along.
 fn code_in(redirect: &str) -> String {
     code_sent_to(REDIRECT_URI, redirect)
 }
@@ -240,6 +246,7 @@ async fn unknown_clients_and_redirects_get_an_error_page_not_a_redirect() {
     let cookie = site.sign_in("alice").await;
     for change in [
         ("client_id", Some("evil")),
+        ("client_id", Some("gamja")),
         ("client_id", None),
         ("redirect_uri", Some("https://evil.example/")),
         (
@@ -423,6 +430,7 @@ async fn a_code_is_bound_to_its_verifier_redirect_and_client() {
             "invalid_grant",
         ),
         (("client_id", "ergo"), 401, "invalid_client"),
+        (("client_id", "gamja"), 401, "invalid_client"),
         (
             ("grant_type", "refresh_token"),
             400,
@@ -487,23 +495,19 @@ async fn only_the_web_client_may_post_to_the_token_endpoint() {
 }
 
 const BETA_REDIRECT_URI: &str = "https://beta.weblounge.org/";
-const BETA_ID: &str = "weblounge-client";
 
 impl Site {
     /// Asks for a code as the beta client does, with the session in
     /// `cookie`.
     async fn beta_authorization_code(&self, cookie: &str) -> String {
-        let path = authorize_path(&[
-            ("client_id", Some(BETA_ID)),
-            ("redirect_uri", Some(BETA_REDIRECT_URI)),
-        ]);
+        let path = authorize_path(&[("redirect_uri", Some(BETA_REDIRECT_URI))]);
         let response = self.get(&path, Some(cookie)).await;
         code_sent_to(BETA_REDIRECT_URI, location(&response))
     }
 
     /// Posts to the token endpoint from the beta client's page, as it does.
     async fn beta_exchange(&self, code: &str) -> axum::response::Response {
-        let form = [("client_id", BETA_ID), ("redirect_uri", BETA_REDIRECT_URI)];
+        let form = [("redirect_uri", BETA_REDIRECT_URI)];
         self.exchange_from(code, &form, BETA_URL).await
     }
 }
@@ -535,17 +539,17 @@ async fn the_beta_client_signs_members_in_from_its_own_origin() {
         .to_owned();
     let answer = site.introspect(&token).await;
     assert_eq!(answer["username"], "alice");
-    assert_eq!(answer["client_id"], BETA_ID);
+    assert_eq!(answer["client_id"], WEB_CLIENT);
 }
 
 #[tokio::test]
-async fn a_code_is_redeemed_only_by_the_client_it_was_issued_to() {
+async fn a_code_is_redeemed_only_at_the_origin_it_was_issued_for() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
 
-    let gamjas = site.authorization_code(&cookie).await;
-    let response = site.beta_exchange(&gamjas).await;
+    let ircs = site.authorization_code(&cookie).await;
+    let response = site.beta_exchange(&ircs).await;
     assert_eq!(response.status(), 400);
     assert_eq!(json(response).await["error"], "invalid_grant");
 
@@ -583,7 +587,7 @@ async fn ergo_learns_whose_token_it_is() {
         serde_json::json!({
             "active": true,
             "username": "Alice",
-            "client_id": "gamja",
+            "client_id": WEB_CLIENT,
             "token_type": "Bearer",
             "exp": expiry,
         })
@@ -640,8 +644,8 @@ async fn only_the_introspection_clients_with_their_own_secrets_may_introspect() 
         format!("unknown:{}", introspection_secret("unknown")),
         format!("unknown:{}", introspection_secret("ergo")),
         "ergo:".to_owned(),
-        format!("gamja:{}", introspection_secret("ergo")),
-        format!("gamja:{}", introspection_secret("gamja")),
+        format!("{WEB_CLIENT}:{}", introspection_secret("ergo")),
+        format!("{WEB_CLIENT}:{}", introspection_secret(WEB_CLIENT)),
         format!("ergo:{} ", introspection_secret("ergo")),
     ] {
         let response = site.introspect_as(&credentials, &token).await;
@@ -660,7 +664,7 @@ async fn only_the_introspection_clients_with_their_own_secrets_may_introspect() 
         .post_with("/oauth/introspect", &[("token", &token)], None, &[])
         .await;
     assert_eq!(anonymous.status(), 401);
-    let from_gamja = site
+    let from_the_web_client = site
         .post_with(
             "/oauth/introspect",
             &[("token", &token)],
@@ -668,9 +672,9 @@ async fn only_the_introspection_clients_with_their_own_secrets_may_introspect() 
             &[(header::ORIGIN.as_str(), WEBCHAT_URL)],
         )
         .await;
-    assert_eq!(from_gamja.status(), 401);
+    assert_eq!(from_the_web_client.status(), 401);
     assert!(
-        !from_gamja
+        !from_the_web_client
             .headers()
             .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
     );

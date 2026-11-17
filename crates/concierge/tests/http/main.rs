@@ -136,7 +136,7 @@ impl Site {
             invite_links: format!("{JOIN_URL}/#"),
             web_clients: WebClients::new(
                 Origin::parse(WEBCHAT_URL).unwrap(),
-                Some(Origin::parse(BETA_URL).unwrap()),
+                [Origin::parse(BETA_URL).unwrap()],
             ),
             introspection_secrets: IntrospectionSecrets::new(
                 INTROSPECTION_CLIENTS

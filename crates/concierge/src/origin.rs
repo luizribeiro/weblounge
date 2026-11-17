@@ -19,7 +19,7 @@ pub struct Origin<S> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Members {}
 
-/// The web client, gamja.
+/// The web client, at any of the origins it is served from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Webchat {}
 

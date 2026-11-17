@@ -8,7 +8,7 @@ ergo_api := ergo_host + ":" + ergo_port
 
 export CONCIERGE_LISTEN := "127.0.0.1:8080"
 export CONCIERGE_PUBLIC_URL := "http://localhost:8080"
-export CONCIERGE_WEBCHAT_URL := "https://irc.weblounge.localhost:10443"
+export CONCIERGE_WEB_CLIENT_URLS := "https://irc.weblounge.localhost:10443"
 export CONCIERGE_IRC_SERVER := "irc.weblounge.localhost:16697"
 export CONCIERGE_ERGO_API := "http://" + ergo_api
 export CONCIERGE_ASSETS := dev_dir / "assets"

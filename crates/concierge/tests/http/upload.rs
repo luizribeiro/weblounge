@@ -46,13 +46,14 @@ impl Site {
         self.upload_with(body, authorization, &[]).await
     }
 
-    /// The `Authorization` gamja sends for the member signed in with
-    /// `cookie`.
+    /// The `Authorization` the web client sends for the member signed in
+    /// with `cookie`.
     pub(crate) async fn bearer(&self, cookie: &str) -> String {
         format!("Bearer {}", self.access_token(cookie).await)
     }
 
-    /// A member signed in, and the `Authorization` gamja sends for them.
+    /// A member signed in, and the `Authorization` the web client sends for
+    /// them.
     pub(crate) async fn member_with_bearer(&self, account: &str) -> String {
         self.add_member(account).await;
         let cookie = self.sign_in(account).await;

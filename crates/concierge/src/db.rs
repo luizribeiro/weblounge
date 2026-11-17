@@ -2580,7 +2580,7 @@ pub(crate) mod tests {
         execute(
             &db,
             "INSERT INTO oauth_tokens (token_hash, session_hash, client_id, created_at, expires_at)
-             VALUES (x'f1', x'a1', 'gamja', 0, 100), (x'f2', x'a2', 'gamja', 0, 100)",
+             VALUES (x'f1', x'a1', 'weblounge-client', 0, 100), (x'f2', x'a2', 'weblounge-client', 0, 100)",
         )
         .await
         .unwrap();
@@ -3260,7 +3260,7 @@ pub(crate) mod tests {
         NewAuthorizationCode {
             code_hash,
             session_hash,
-            client_id: "gamja",
+            client_id: "weblounge-client",
             redirect_uri: "https://irc.weblounge.org/",
             code_challenge: &CHALLENGE,
             expires_at,
@@ -3275,7 +3275,7 @@ pub(crate) mod tests {
         NewAccessToken {
             token_hash,
             session_hash,
-            client_id: "gamja",
+            client_id: "weblounge-client",
             created_at: 0,
             expires_at,
         }
@@ -3296,7 +3296,7 @@ pub(crate) mod tests {
             taken,
             AuthorizationCode {
                 session_hash: hash(b"\xa1"),
-                client_id: "gamja".into(),
+                client_id: "weblounge-client".into(),
                 redirect_uri: "https://irc.weblounge.org/".into(),
                 code_challenge: CHALLENGE.clone(),
                 expires_at: 60,
@@ -3365,7 +3365,7 @@ pub(crate) mod tests {
             live,
             Some(AccessToken {
                 account: MemberName::new("alice"),
-                client_id: "gamja".into(),
+                client_id: "weblounge-client".into(),
                 expires_at: 150,
             })
         );

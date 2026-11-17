@@ -93,6 +93,7 @@ in
   config = {
     weblounge.ergo.settings.server.websockets.allowed-origins = origins;
     weblounge.pushRelay.allowedOrigins = origins;
+    weblounge.concierge.webClients = origins;
     services.nginx.virtualHosts = lib.mapAttrs virtualHost cfg;
   };
 }

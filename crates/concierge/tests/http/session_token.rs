@@ -4,7 +4,7 @@ use axum::{
     response::Response,
 };
 use concierge::{
-    oauth::{INTROSPECTION_CLIENTS, SESSION_TOKEN_LIFETIME},
+    oauth::{INTROSPECTION_CLIENTS, SESSION_TOKEN_LIFETIME, WEB_CLIENT},
     rate_limit::OAUTH_REQUESTS_PER_ADDRESS,
 };
 use serde_json::json;
@@ -111,11 +111,11 @@ async fn a_signed_in_member_gets_a_short_lived_token_from_the_beta_clients_page(
     let introspected = site.introspect(token).await;
     assert_eq!(introspected["active"], true);
     assert_eq!(introspected["username"], "alice");
-    assert_eq!(introspected["client_id"], "weblounge-client");
+    assert_eq!(introspected["client_id"], WEB_CLIENT);
 }
 
 #[tokio::test]
-async fn the_token_is_for_the_client_whose_page_asked() {
+async fn the_web_clients_page_on_irc_gets_a_token_too() {
     let site = Site::start().await;
     site.add_member("alice").await;
     let cookie = site.sign_in("alice").await;
@@ -128,7 +128,7 @@ async fn the_token_is_for_the_client_whose_page_asked() {
         .as_str()
         .unwrap()
         .to_owned();
-    assert_eq!(site.introspect(&token).await["client_id"], "gamja");
+    assert_eq!(site.introspect(&token).await["client_id"], WEB_CLIENT);
 }
 
 #[tokio::test]

@@ -10,6 +10,4 @@ in
     package = pkgs.weblounge.client;
     channel = "beta";
   };
-
-  weblounge.concierge.webClients.CONCIERGE_BETA_CLIENT_URL = config.weblounge.origin hostName;
 }
