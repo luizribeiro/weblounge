@@ -26,7 +26,9 @@ if TYPE_CHECKING:
 
 mallory: Account = {"account": "mallory", "password": "an-insider-gone-bad"}
 tls_handshake = "openssl s_client -cipher DEFAULT:@SECLEVEL=0 </dev/null -connect"
-sites = ["weblounge.org", "members.weblounge.org", "join.weblounge.org", "irc.weblounge.org"]
+sites = ["weblounge.org", "members.weblounge.org", "join.weblounge.org"]
+# webchat.py checks what the web client's pages load under their CSP.
+web_client_sites = ["irc.weblounge.org", "beta.weblounge.org"]
 mallorys_browser = Browser("mallory")
 signed_out: list[str] = []
 pages_and_directives_they_need = [
@@ -36,7 +38,6 @@ pages_and_directives_they_need = [
         (members, path, mallorys_browser.cookies, {"script-src", "style-src", "img-src"})
         for path in ["/", "/no-such-page"]
     ),
-    ("irc.weblounge.org", "/", signed_out, {"script-src", "style-src", "img-src", "manifest-src"}),
     *((name, "/no-such-page", signed_out, {"style-src", "img-src"}) for name in sites if name != members),
 ]
 
@@ -133,7 +134,7 @@ with subtest("ergo's API and WebSocket listener and concierge listen on credenza
 with subtest("concierge's introspection refuses Ergo's id with any other secret"):
     introspect = "curl -s -o /dev/null -w '%{{http_code}}' -d token=x -u {} http://127.0.0.1:8080/oauth/introspect"
     secret = credenza.succeed(f"cat {generated['oauth-introspection-secret']}").strip()
-    for credentials in ["ergo:wrong", "ergo:4TA0I7mJ3fUUcW05KJiODg", f"gamja:{secret}"]:
+    for credentials in ["ergo:wrong", "ergo:4TA0I7mJ3fUUcW05KJiODg", f"weblounge-client:{secret}"]:
         assert credenza.succeed(introspect.format(shlex.quote(credentials))) == "401", credentials
     assert credenza.succeed(introspect.format(shlex.quote(f"ergo:{secret}"))) == "200"
 
@@ -374,7 +375,7 @@ with subtest("members manage their accounts and bots through concierge, not Nick
     assert "UNREGISTER" not in listing and "PASSWD" not in listing, listing
 
 with subtest("every site sends HSTS, nosniff, a referrer policy and a CSP that forbids framing"):
-    for name in sites:
+    for name in sites + web_client_sites:
         for path in ["/", "/no-such-page"]:
             headers = headers_of(name, path)
             hsts = headers.get("strict-transport-security", "")

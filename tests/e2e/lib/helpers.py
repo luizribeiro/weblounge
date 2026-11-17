@@ -263,11 +263,11 @@ class WebClient(TypedDict):
     origin: str
 
 
-gamja: WebClient = {"id": "gamja", "origin": webchat}
+webchat_client: WebClient = {"id": "weblounge-client", "origin": webchat}
 beta_client: WebClient = {"id": "weblounge-client", "origin": "https://beta.weblounge.org"}
 
 
-def authorize(browser, challenge, state="a-random-state", client: WebClient = gamja):
+def authorize(browser, challenge, state="a-random-state", client: WebClient = webchat_client):
     """What a web client does on load: answers the code concierge sends back."""
     query = urlencode(
         {
@@ -286,7 +286,7 @@ def authorize(browser, challenge, state="a-random-state", client: WebClient = ga
     return params["code"][0]
 
 
-def exchange(code, verifier, client: WebClient = gamja):
+def exchange(code, verifier, client: WebClient = webchat_client):
     fields = {
         "grant_type": "authorization_code",
         "code": code,

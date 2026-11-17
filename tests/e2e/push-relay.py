@@ -84,11 +84,11 @@ def allowed_origin(path: str, origin: str) -> str | None:
     return None
 
 
-with subtest("the device API lets the beta client's origin call it from a browser, and no other"):
-    beta = "https://beta.weblounge.org"
-    assert allowed_origin("/v1/devices", beta) == beta
+with subtest("the device API lets the web client's origins call it from a browser, and no other"):
+    for origin in ["https://irc.weblounge.org", "https://beta.weblounge.org"]:
+        assert allowed_origin("/v1/devices", origin) == origin
+        assert allowed_origin("/v1/r/some-route", origin) is None
     assert allowed_origin("/v1/devices", "https://weblounge.org.example") is None
-    assert allowed_origin("/v1/r/some-route", beta) is None
 
 
 credenza_from_client = client.succeed("getent ahostsv4 credenza | head -1 | cut -d' ' -f1").strip()

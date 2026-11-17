@@ -1,6 +1,6 @@
-"""In WebKit, open beta.weblounge.org signed out of members.weblounge.org
-and sign in where the beta client sends us, then open it again, signed
-in, and once more in a browser that keeps only members' cookies. Prints
+"""In WebKit, open the web client at ORIGIN signed out of
+members.weblounge.org and sign in where it sends us, then open it again,
+signed in, and once more in a browser that keeps only members' cookies. Prints
 the pages each visit went through, where it ended, and whether the
 client showed #lounge.
 
@@ -15,10 +15,8 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from browser import MEMBERS, TIMEOUT_MS, browsing
 
-BETA = "https://beta.weblounge.org"
 
-
-def visit(page, sign_in=None):
+def visit(page, origin, sign_in=None):
     visited = []
 
     def record(frame):
@@ -26,7 +24,7 @@ def visit(page, sign_in=None):
             visited.append(frame.url)
 
     page.on("framenavigated", record)
-    page.goto(f"{BETA}/", wait_until="commit")
+    page.goto(f"{origin}/", wait_until="commit")
     if sign_in:
         page.wait_for_url(f"{MEMBERS}/signin?**")
         sign_in(page)
@@ -48,7 +46,7 @@ def with_members_cookies_only(page):
 
 
 def main():
-    nick, password = sys.argv[1:]
+    origin, nick, password = sys.argv[1:]
 
     def sign_in(page):
         page.fill("#nick", nick)
@@ -58,10 +56,10 @@ def main():
     # A signed-out launch learns it must sign in from the session-token
     # endpoint's 401, which WebKit logs as a failed load.
     with browsing(expected_errors=["status of 401 (Unauthorized)"], webkit=True) as page:
-        report = {"signed out": visit(page, sign_in)}
+        report = {"signed out": visit(page, origin, sign_in)}
         page.goto("about:blank")
-        report["signed in"] = visit(page)
-        report["members cookies only"] = visit(with_members_cookies_only(page))
+        report["signed in"] = visit(page, origin)
+        report["members cookies only"] = visit(with_members_cookies_only(page), origin)
         print(json.dumps(report), flush=True)
 
 

@@ -6,6 +6,7 @@ import re
 import secrets
 import shlex
 from typing import TYPE_CHECKING
+from urllib.parse import urlencode
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
@@ -21,8 +22,6 @@ if TYPE_CHECKING:
         ergo_api,
         exchange,
         files_host,
-        fixtures,
-        get_file,
         https,
         irc,
         irc_command,
@@ -34,9 +33,18 @@ if TYPE_CHECKING:
     )
 
 grace: Account = {"account": "grace", "password": "a-kettle-on-the-hob"}
-ada: Account = {"account": "ada", "password": "the-analytical-engine"}
 graces_browser = Browser("grace")
-gamja_connects = f"connect-src 'self' wss://irc.weblounge.org/socket https://{members} https://{files_host}/upload;"
+irc_host = "irc.weblounge.org"
+beta = "beta.weblounge.org"
+channels = {irc_host: "release", beta: "beta"}
+
+
+def connects(host: str) -> str:
+    return f"connect-src 'self' wss://{host}/socket https://{members} https://{files_host}/upload https://{push};"
+
+
+def client_headers(host: str, path: str) -> str:
+    return https(host, path, "-fI").lower()
 
 
 add_member(**grace)
@@ -61,39 +69,8 @@ with subtest("the token logs in to IRC with SASL OAUTHBEARER and lands in #loung
     assert " 903 " in session, session
     assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
 
-with subtest("irc.weblounge.org serves gamja, set up to sign members in through concierge"):
-    page = https("irc.weblounge.org", "/", "-f")
-    assert "<title>gamja IRC client</title>" in page, page
-    config = json.loads(https("irc.weblounge.org", "/config.json", "-f"))
-    assert config == {
-        "server": {
-            "url": "wss://irc.weblounge.org/socket",
-            "autojoin": "#lounge",
-            "auth": "oauth2",
-            "autoconnect": True,
-        },
-        "oauth2": {"url": f"https://{members}", "client_id": "gamja"},
-    }, config
-
-with subtest("gamja wears the network's favicon"):
-    assert '<link rel="icon" type="image/svg+xml" href="favicon.svg">' in page, page
-    icon = https("irc.weblounge.org", "/favicon.svg", "-f", "-w", "\n%{content_type}")
-    svg, content_type = icon.rsplit("\n", 1)
-    assert content_type == "image/svg+xml" and 'id="mark"' in svg, icon
-
-with subtest("unknown paths on irc.weblounge.org get the not-found page, gamja's CSP and all"):
-    not_found_page("irc.weblounge.org", "/no-such-page")
-    headers = https("irc.weblounge.org", "/no-such-page", "-I").lower()
-    assert gamja_connects in headers, headers
-
-with subtest("gamja's CSP lets it reach Ergo's WebSocket, concierge and the upload endpoint, and nothing else"):
-    headers = https("irc.weblounge.org", "/", "-fI").lower()
-    [policy] = re.findall(r"^content-security-policy: (.*)$", headers, re.M)
-    assert gamja_connects in policy, policy
-    assert "default-src 'none'" in policy and "frame-ancestors 'none'" in policy, policy
-
-with subtest("the token logs in over gamja's WebSocket too"):
-    session = irc(token=token, websocket="irc.weblounge.org")
+with subtest("the token logs in over irc.weblounge.org's WebSocket too"):
+    session = irc(token=token, websocket=irc_host)
     assert " 903 " in session, session
     assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
 
@@ -116,89 +93,86 @@ with subtest("Ergo refuses WebSockets from pages on other origins"):
     status = https("irc.weblounge.org", "/socket", *upgrade, "-H", "Origin: https://evil.example")
     assert status == "403", status
 
-beta = "beta.weblounge.org"
-beta_connects = f"connect-src 'self' wss://{beta}/socket https://{members} https://{files_host}/upload https://{push};"
+pages = {}
+for host, channel in channels.items():
+    with subtest(f"{host} serves the web client's {channel} channel, set up to sign members in through concierge"):
+        page = pages[host] = https(host, "/", "-f")
+        assert "<title>weblounge</title>" in page, page
+        body, content_type = https(host, "/config.json", "-f", "-w", "\n%{content_type}").rsplit("\n", 1)
+        assert content_type == "application/json", content_type
+        config = json.loads(body)
+        assert config == {
+            "mode": "hosted",
+            "channel": channel,
+            "network": {"name": "weblounge", "endpoint": f"wss://{host}/socket", "autojoin": ["#lounge"]},
+            "oauth": {
+                "issuer": f"https://{members}",
+                "client_id": "weblounge-client",
+                "redirect_uri": f"https://{host}/",
+                "session_token_endpoint": f"https://{members}/oauth/session-token",
+            },
+            "push": {"relay": f"https://{push}", "relay_vapid": config["push"]["relay_vapid"]},
+        }, config
+        vapid_key = base64.urlsafe_b64decode(config["push"]["relay_vapid"] + "==")
+        assert len(vapid_key) == 65 and vapid_key[0] == 4, "relay_vapid is not an uncompressed P-256 point"
 
 
-def beta_headers(path: str) -> str:
-    return https(beta, path, "-fI").lower()
-
-
-with subtest("beta.weblounge.org serves the beta web client, set up to sign members in through concierge"):
-    page = https(beta, "/", "-f")
-    assert "<title>weblounge</title>" in page, page
-    body, content_type = https(beta, "/config.json", "-f", "-w", "\n%{content_type}").rsplit("\n", 1)
-    assert content_type == "application/json", content_type
-    config = json.loads(body)
-    assert config == {
-        "mode": "hosted",
-        "channel": "beta",
-        "network": {"name": "weblounge", "endpoint": f"wss://{beta}/socket", "autojoin": ["#lounge"]},
-        "oauth": {
-            "issuer": f"https://{members}",
-            "client_id": "weblounge-client",
-            "redirect_uri": f"https://{beta}/",
-            "session_token_endpoint": f"https://{members}/oauth/session-token",
-        },
-        "push": {"relay": f"https://{push}", "relay_vapid": config["push"]["relay_vapid"]},
-    }, config
-    vapid_key = base64.urlsafe_b64decode(config["push"]["relay_vapid"] + "==")
-    assert len(vapid_key) == 65 and vapid_key[0] == 4, "relay_vapid is not an uncompressed P-256 point"
-
-
-def beta_asset(referrer: str, pattern: str) -> str:
+def client_asset(referrer: str, pattern: str) -> str:
     [path] = set(re.findall(rf"/?(?:assets/)?({pattern})", referrer))
     return f"/assets/{path}"
 
 
-with subtest("the beta client's hashed assets keep a year, and the rest revalidates"):
-    script = beta_asset(page, r"index-[\w-]+\.js")
-    worker = beta_asset(https(beta, script, "-f"), r"engine\.shared-worker-[\w-]+\.js")
-    wasm = beta_asset(https(beta, worker, "-f"), r"engine_bg-[\w-]+\.wasm")
-    for path in [script, worker, wasm]:
-        headers = beta_headers(path)
-        assert "cache-control: public, max-age=31536000, immutable" in headers, (path, headers)
-        assert beta_connects in headers, (path, headers)
-    assert "content-type: application/wasm" in beta_headers(wasm)
-    assert "content-type: text/javascript" in beta_headers("/service-worker.js")
-    startup = re.findall(r'href="(/startup/[^"]+\.png)"', page)[0]
-    for path in ["/", "/config.json", "/manifest.webmanifest", "/icons/favicon.svg", "/service-worker.js", startup]:
-        headers = beta_headers(path)
-        assert "cache-control: no-cache" in headers, (path, headers)
-        assert beta_connects in headers, (path, headers)
+for host in channels:
+    with subtest(f"{host}'s hashed assets keep a year, and the rest revalidates"):
+        page = pages[host]
+        script = client_asset(page, r"index-[\w-]+\.js")
+        worker = client_asset(https(host, script, "-f"), r"engine\.shared-worker-[\w-]+\.js")
+        wasm = client_asset(https(host, worker, "-f"), r"engine_bg-[\w-]+\.wasm")
+        for path in [script, worker, wasm]:
+            headers = client_headers(host, path)
+            assert "cache-control: public, max-age=31536000, immutable" in headers, (path, headers)
+            assert connects(host) in headers, (path, headers)
+        assert "content-type: application/wasm" in client_headers(host, wasm)
+        assert "content-type: text/javascript" in client_headers(host, "/service-worker.js")
+        startup = re.findall(r'href="(/startup/[^"]+\.png)"', page)[0]
+        for path in ["/", "/config.json", "/manifest.webmanifest", "/icons/favicon.svg", "/service-worker.js", startup]:
+            headers = client_headers(host, path)
+            assert "cache-control: no-cache" in headers, (path, headers)
+            assert connects(host) in headers, (path, headers)
 
+    with subtest(f"a reload of {host}'s deep links gets the app, while a missing asset is a 404"):
+        deep = https(host, "/weblounge/lounge", "-fi")
+        assert "<title>weblounge</title>" in deep, deep
+        assert "cache-control: no-cache" in deep.lower(), deep
+        not_found_page(host, "/assets/no-such-chunk.js")
 
-with subtest("a reload of the beta client's deep links gets the app, while a missing asset is a 404"):
-    deep = https(beta, "/weblounge/lounge", "-fi")
-    assert "<title>weblounge</title>" in deep, deep
-    assert "cache-control: no-cache" in deep.lower(), deep
-    not_found_page(beta, "/assets/no-such-chunk.js")
+    with subtest(
+        f"{host}'s CSP lets the client run wasm in a worker, reach Ergo, concierge and uploads, and show them"
+    ):
+        [policy] = re.findall(r"^content-security-policy: (.*)$", client_headers(host, "/"), re.M)
+        assert connects(host) in policy, policy
+        for directive in [
+            "script-src 'self' 'wasm-unsafe-eval'",
+            "worker-src 'self'",
+            "style-src 'self';",
+            f"img-src 'self' blob: https://{files_host};",
+            "font-src 'self'",
+            "manifest-src 'self'",
+            "default-src 'none'",
+            "frame-ancestors 'none'",
+        ]:
+            assert directive in policy, (directive, policy)
 
-with subtest("the beta client's CSP lets it run wasm in a worker, reach Ergo, concierge and uploads, and show them"):
-    [policy] = re.findall(r"^content-security-policy: (.*)$", beta_headers("/"), re.M)
-    assert beta_connects in policy, policy
-    for directive in [
-        "script-src 'self' 'wasm-unsafe-eval'",
-        "worker-src 'self'",
-        "style-src 'self';",
-        f"img-src 'self' blob: https://{files_host};",
-        "font-src 'self'",
-        "manifest-src 'self'",
-        "default-src 'none'",
-        "frame-ancestors 'none'",
-    ]:
-        assert directive in policy, (directive, policy)
-
-with subtest("the beta client's manifest is served as one, so phones can install it"):
-    manifest = beta_headers("/manifest.webmanifest")
-    assert "content-type: application/manifest+json" in manifest, manifest
+    with subtest(f"{host}'s manifest is served as one, so phones can install it"):
+        manifest = client_headers(host, "/manifest.webmanifest")
+        assert "content-type: application/manifest+json" in manifest, manifest
 
 with subtest("concierge signs members in to the beta client, whose token logs in over beta's WebSocket"):
     metadata = https(members, "/.well-known/oauth-authorization-server", "-fi", "-H", f"Origin: https://{beta}")
     head, body = metadata.split("\r\n\r\n", 1)
     assert f"access-control-allow-origin: https://{beta}" in head.lower(), head
     endpoints = json.loads(body)
-    assert endpoints["issuer"] == config["oauth"]["issuer"], endpoints
+    assert endpoints["issuer"] == f"https://{members}", endpoints
     for endpoint in ["authorization_endpoint", "token_endpoint"]:
         assert endpoints[endpoint].startswith(f"{endpoints['issuer']}/"), endpoints
     verifier, challenge = pkce()
@@ -209,10 +183,26 @@ with subtest("concierge signs members in to the beta client, whose token logs in
     assert " 903 " in session, session
     assert re.search(r"^:grace!\S+ JOIN #lounge", session, re.M), session
 
-with subtest("a code for gamja buys the beta client nothing"):
+with subtest("a code issued at irc.weblounge.org buys nothing at beta's"):
     verifier, challenge = pkce()
     status, answer = exchange(authorize(graces_browser, challenge), verifier, client=beta_client)
     assert (status, answer) == ("400", {"error": "invalid_grant"}), (status, answer)
+
+with subtest("gamja's client id gets a sign-in error page, not a redirect or a code"):
+    query = urlencode(
+        {
+            "response_type": "code",
+            "client_id": "gamja",
+            "redirect_uri": f"https://{irc_host}/",
+            "state": "a-random-state",
+            "code_challenge": pkce()[1],
+            "code_challenge_method": "S256",
+        }
+    )
+    refused = graces_browser.get(f"/oauth/authorize?{query}", "-i")
+    assert refused.startswith("HTTP/2 400"), refused
+    assert "location:" not in refused.lower(), refused
+    assert "This sign-in link isn&#39;t one of ours." in refused, refused
 
 with subtest("the beta client's page gets a token for the member's session in the background, which logs in"):
     answer = session_token(graces_browser)
@@ -267,83 +257,21 @@ with subtest("a token for a member without an Ergo account creates none"):
     body, _ = ergo_api("ns/info", accountName="ghost")
     assert body.strip() == '{"success":false}', body
 
-with subtest("in a browser, a signed-in member opens irc.weblounge.org and lands in #lounge"):
-    page = client.succeed(f"webchat-browser {grace['account']} {shlex.quote(grace['password'])} 2>&1")
-    assert "#lounge" in page, page
+for host in channels:
+    with subtest(f"in WebKit, a signed-out member signs in where {host} sends them, and lands in #lounge"):
+        signin = ["client-signin-browser", f"https://{host}", grace["account"], grace["password"]]
+        report = json.loads(client.succeed(shlex.join(signin)))
+        signed_out, signed_in = report["signed out"], report["signed in"]
+        sign_in_page, callback, cleaned = signed_out["visited"][1:]
+        assert sign_in_page.startswith(f"https://{members}/signin?next=%2Foauth%2Fauthorize%3F"), report
+        assert re.fullmatch(rf"https://{host}/\?code=[\w-]+&state=[\w-]+", callback), report
+        assert cleaned == signed_out["url"] == signed_in["url"] == f"https://{host}/", report
+        assert signed_out["lounge"] and signed_in["lounge"], report
 
-with subtest("in WebKit, a signed-out member signs in where the beta client sends them, and lands in #lounge"):
-    report = json.loads(client.succeed(shlex.join(["beta-signin-browser", grace["account"], grace["password"]])))
-    signed_out, signed_in = report["signed out"], report["signed in"]
-    sign_in_page, callback, cleaned = signed_out["visited"][1:]
-    assert sign_in_page.startswith(f"https://{members}/signin?next=%2Foauth%2Fauthorize%3F"), report
-    assert re.fullmatch(rf"https://{beta}/\?code=[\w-]+&state=[\w-]+", callback), report
-    assert cleaned == signed_out["url"] == signed_in["url"] == f"https://{beta}/", report
-    assert signed_out["lounge"] and signed_in["lounge"], report
-
-with subtest("in WebKit, the beta client of a member signed in to concierge joins without leaving beta"):
-    fresh = report["members cookies only"]
-    assert fresh["lounge"], report
-    assert all(url.startswith(f"https://{beta}/") for url in fresh["visited"]), report
-
-with subtest("in a browser, pasting an image or picking one with gamja's upload button puts its link in the composer"):
-    paste = ["webchat-upload-browser", grace["account"], grace["password"], f"{fixtures}/photo.png"]
-    links = json.loads(client.succeed(shlex.join(paste)))
-    ways = {f"{width} {how}" for width in ["phone", "desktop"] for how in ["paste", "button"]}
-    assert set(links) == ways and len(set(links.values())) == len(ways), links
-    for way, link in links.items():
-        assert re.fullmatch(rf"https://{files_host}/[A-Za-z0-9_-]{{22}}\.png", link), (way, link)
-        assert get_file(link)["status"] == 200, link
-
-with subtest("in a browser, a member picks gamja's font size and font in Settings, and they stay after a reload"):
-    settings = ["webchat-settings-browser", grace["account"], grace["password"]]
-    report = json.loads(client.succeed(shlex.join(settings)))
-    assert report["default"] == {"root": "16px", "size": "13px", "family": "monospace"}, report
-    assert report["phone default"]["selects"]["fontSize"]["value"] == "", report
-    assert report["changed"]["root"] == report["changed"]["size"] == "18px", report
-    assert report["changed"]["family"].startswith("system-ui,"), report
-    assert report["reloaded"] == report["changed"], report
-    for width in ["phone", "desktop"]:
-        assert report[width]["fits"], (width, report)
-        selects = report[width]["selects"]
-        assert {name: select["value"] for name, select in selects.items()} == {
-            "fontSize": "18px",
-            "fontFamily": "sans-serif",
-        }, (width, report)
-        for select in selects.values():
-            assert select["height"] >= 44 and float(select["font_size"].removesuffix("px")) >= 16, (width, report)
-    client.copy_from_vm("/tmp/screens")
-
-with subtest("gamja shows each line once when one arrives while it catches up after a reconnect"):
-    add_member(**ada)
-    browser = ["webchat-reconnect-browser", grace["account"], grace["password"], ada["account"], ada["password"]]
-    shown = json.loads(client.succeed(shlex.join(browser)))
-    assert set(shown.values()) == {1}, shown
-
-with subtest("in a browser, gamja offers desktop notifications atop every buffer, and Settings turns them on and off"):
-    browser = ["webchat-notifications-browser", grace["account"], grace["password"], ada["account"], ada["password"]]
-    report = json.loads(client.succeed(shlex.join(browser)))
-    asking, granted = report["asking"], report["granted"]
-    assert asking["permission"] == "default", report
-    for where in ["phone lounge", "desktop lounge", "server buffer"]:
-        nag = asking[where]
-        assert nag["text"] == "Turn on desktop notifications to get notified about new messages Dismiss", (where, nag)
-        assert nag["link"] == "Turn on desktop notifications", (where, nag)
-        assert nag["link_height"] >= 44 and nag["dismiss_height"] >= 44 and nag["fits"], (where, nag)
-    assert asking["dismissed"] is None and asking["reopened"] is None, report
-    assert asking["settings"]["label"] == "Desktop notifications", report
-    assert not asking["settings"]["checked"] and asking["settings"]["blocked"] is None, report
-    assert asking["permission after asking"] == "denied", report
-    for width in ["phone", "desktop"]:
-        denied = asking[f"{width} denied"]
-        assert not denied["checked"] and denied["label_height"] >= 44 and denied["fits"], (width, denied)
-        assert denied["blocked"].startswith("Your browser blocks notifications from this site"), (width, denied)
-    assert granted["nagger"] is None and granted["on"]["checked"], report
-    assert not granted["off after reopening"]["checked"] and granted["on again"]["checked"], report
-    # Reopening gamja starts the record of shown notifications afresh.
-    mentioned = ["New highlight from ada in #lounge"]
-    assert granted["shown when on"] == mentioned and granted["shown when off"] == [], report
-    assert granted["shown when on again"] == mentioned, report
-    client.copy_from_vm("/tmp/screens", "notifications")
+    with subtest(f"in WebKit, {host}'s client of a member signed in to concierge joins without leaving {host}"):
+        fresh = report["members cookies only"]
+        assert fresh["lounge"], report
+        assert all(url.startswith(f"https://{host}/") for url in fresh["visited"]), report
 
 with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web client's login and bender take them"):
     in_ram = [

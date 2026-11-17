@@ -129,12 +129,16 @@ in
 
   config = {
     weblounge.loopbackListeners.Concierge = cfg.listen;
-    weblounge.concierge.webClients = [ webchat ];
-
-    assertions = [{
-      assertion = multiclient.always-on == "mandatory" && multiclient.auto-away == "mandatory";
-      message = "Concierge's help tells members they stay in their channels, away, with every app closed, so Ergo's always-on and auto-away must be mandatory.";
-    }];
+    assertions = [
+      {
+        assertion = multiclient.always-on == "mandatory" && multiclient.auto-away == "mandatory";
+        message = "Concierge's help tells members they stay in their channels, away, with every app closed, so Ergo's always-on and auto-away must be mandatory.";
+      }
+      {
+        assertion = lib.elem webchat cfg.webClients;
+        message = "Concierge sends members to the web client at ${webchat}, so weblounge.webClients must serve it there.";
+      }
+    ];
 
     weblounge.secrets.session-key.loadedBy = [ "concierge" ];
     weblounge.secrets.ergo-api-token.loadedBy = [ "concierge" ];
