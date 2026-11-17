@@ -90,14 +90,14 @@ pub struct Snippet {
 
 pub const CLIENTS: [Client; 6] = [
     Client {
-        slug: "gamja",
-        name: "gamja",
-        runs_on: "Any browser",
+        slug: "web",
+        name: "Web chat",
+        runs_on: "Any browser, and your phone's home screen",
         price: "Nothing to install",
-        note: "Signs you in with this site, so it's the quickest way in.",
+        note: "Our own, and it signs you in with this site, so it's the quickest way in.",
         links: &[Link {
             label: "Source",
-            url: "https://codeberg.org/emersion/gamja",
+            url: "https://github.com/luizribeiro/weblounge-client",
         }],
         setup: "It signs you in with your session here and opens #lounge.",
         config: None,
@@ -348,7 +348,7 @@ mod tests {
                 .map(|client| client.name)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(names(Group::Browser), ["gamja"]);
+        assert_eq!(names(Group::Browser), ["Web chat"]);
         assert_eq!(names(Group::Desktop), ["Halloy", "Mango"]);
         assert_eq!(names(Group::Mobile), ["Goguma", "Mango"]);
         assert_eq!(names(Group::Terminal), ["senpai", "WeeChat"]);
@@ -426,15 +426,15 @@ username = "alice"
     }
 
     #[test]
-    fn gamja_is_the_one_client_that_runs_in_the_browser() {
+    fn the_web_client_is_the_one_that_runs_in_the_browser() {
         let in_browser: Vec<_> = CLIENTS
             .iter()
             .filter(|client| client.in_browser())
             .map(|client| client.slug)
             .collect();
-        assert_eq!(in_browser, ["gamja"]);
-        assert!(client("gamja").snippet(&production(), "alice").is_none());
-        assert_eq!(client("gamja").ircs_link(&production()), None);
+        assert_eq!(in_browser, ["web"]);
+        assert!(client("web").snippet(&production(), "alice").is_none());
+        assert_eq!(client("web").ircs_link(&production()), None);
     }
 
     #[test]
@@ -454,7 +454,7 @@ username = "alice"
             client("halloy").ircs_link(&vm()).as_deref(),
             Some("ircs://irc.weblounge.localhost:16697/#lounge")
         );
-        for slug in ["gamja", "goguma", "mango", "senpai", "weechat"] {
+        for slug in ["web", "goguma", "mango", "senpai", "weechat"] {
             assert_eq!(client(slug).ircs_link(&production()), None, "{slug}");
         }
     }

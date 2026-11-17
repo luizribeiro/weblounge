@@ -137,12 +137,15 @@ async fn every_guide_says_where_to_get_the_app_then_how_to_add_weblounge() {
 }
 
 #[tokio::test]
-async fn gamjas_guide_just_opens_the_chat() {
-    let page = body_text(crate::alices("/help/apps/gamja").await).await;
-    assert!(page.contains("<h1>Set up gamja</h1>"), "{page}");
+async fn the_web_clients_guide_just_opens_the_chat() {
+    let page = body_text(crate::alices("/help/apps/web").await).await;
+    assert!(page.contains("<h1>Set up Web chat</h1>"), "{page}");
     assert!(crate::opens_the_chat(&page), "{page}");
     assert!(!page.contains("<ol"), "{page}");
-    assert!(!page.contains("codeberg.org/emersion/gamja"), "{page}");
+    assert!(
+        !page.contains("github.com/luizribeiro/weblounge-client"),
+        "{page}"
+    );
     assert!(!page.contains("<code>PLAIN</code>"), "{page}");
     assert!(!page.contains("<pre>"), "{page}");
 }

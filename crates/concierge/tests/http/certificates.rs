@@ -44,7 +44,7 @@ async fn weechat_gets_its_one_file_and_its_commands_only() {
 #[tokio::test]
 async fn apps_that_cant_present_one_have_no_certificate_guide() {
     let (site, cookie) = crate::signed_in_alice().await;
-    for slug in ["gamja", "senpai", "goguma", "mango", "hexchat"] {
+    for slug in ["web", "senpai", "goguma", "mango", "hexchat"] {
         let response = site
             .get(&format!("/help/apps/{slug}/certificate"), Some(&cookie))
             .await;
@@ -65,7 +65,7 @@ async fn only_the_guides_of_apps_that_can_link_to_it() {
             "{page}"
         );
     }
-    for slug in ["gamja", "senpai", "goguma", "mango"] {
+    for slug in ["web", "senpai", "goguma", "mango"] {
         let page = body_text(site.get(&format!("/help/apps/{slug}"), Some(&cookie)).await).await;
         assert!(!page.contains("/certificate"), "{slug}: {page}");
     }
