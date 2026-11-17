@@ -267,8 +267,8 @@ webchat_client: WebClient = {"id": "weblounge-client", "origin": webchat}
 beta_client: WebClient = {"id": "weblounge-client", "origin": "https://beta.weblounge.org"}
 
 
-def authorize(browser, challenge, state="a-random-state", client: WebClient = webchat_client):
-    """What a web client does on load: answers the code concierge sends back."""
+def authorize_path(challenge, state="a-random-state", client: WebClient = webchat_client):
+    """Where a web client sends the browser to sign in."""
     query = urlencode(
         {
             "response_type": "code",
@@ -279,7 +279,12 @@ def authorize(browser, challenge, state="a-random-state", client: WebClient = we
             "code_challenge_method": "S256",
         }
     )
-    redirect = browser.get(f"/oauth/authorize?{query}", *outcome).split(" ", 1)[1]
+    return f"/oauth/authorize?{query}"
+
+
+def authorize(browser, challenge, state="a-random-state", client: WebClient = webchat_client):
+    """What a web client does on load: answers the code concierge sends back."""
+    redirect = browser.get(authorize_path(challenge, state, client), *outcome).split(" ", 1)[1]
     assert redirect.startswith(f"{client['origin']}/?"), redirect
     params = parse_qs(urlsplit(redirect).query)
     assert params["state"] == [state], redirect

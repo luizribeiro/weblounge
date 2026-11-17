@@ -6,16 +6,17 @@ import re
 import secrets
 import shlex
 from typing import TYPE_CHECKING
-from urllib.parse import urlencode
 
 if TYPE_CHECKING:
     from driver import client, credenza, subtest
     from helpers import (
         Account,
         Browser,
+        WebClient,
         access_token,
         add_member,
         authorize,
+        authorize_path,
         beta_client,
         concierge_admin,
         concierge_sql,
@@ -189,17 +190,8 @@ with subtest("a code issued at irc.weblounge.org buys nothing at beta's"):
     assert (status, answer) == ("400", {"error": "invalid_grant"}), (status, answer)
 
 with subtest("gamja's client id gets a sign-in error page, not a redirect or a code"):
-    query = urlencode(
-        {
-            "response_type": "code",
-            "client_id": "gamja",
-            "redirect_uri": f"https://{irc_host}/",
-            "state": "a-random-state",
-            "code_challenge": pkce()[1],
-            "code_challenge_method": "S256",
-        }
-    )
-    refused = graces_browser.get(f"/oauth/authorize?{query}", "-i")
+    gamja: WebClient = {"id": "gamja", "origin": f"https://{irc_host}"}
+    refused = graces_browser.get(authorize_path(pkce()[1], client=gamja), "-i")
     assert refused.startswith("HTTP/2 400"), refused
     assert "location:" not in refused.lower(), refused
     assert "This sign-in link isn&#39;t one of ours." in refused, refused
