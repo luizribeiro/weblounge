@@ -1,10 +1,7 @@
-{ config, pkgs, ... }:
+{ config, ... }:
 
 {
   imports = [ ./web-client.nix ];
 
-  weblounge.webClients.${config.weblounge.ergo.serverName} = {
-    package = pkgs.weblounge.clientRelease;
-    channel = "release";
-  };
+  weblounge.webClients.${config.weblounge.ergo.serverName}.channel = "release";
 }

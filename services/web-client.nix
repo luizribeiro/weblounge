@@ -1,5 +1,5 @@
 # weblounge-client, the web client, served at each host name in
-# weblounge.webClients with the build given there.
+# weblounge.webClients from the pin of the channel given there.
 { config, lib, pkgs, ... }:
 
 let
@@ -45,6 +45,7 @@ let
     let
       headersWith = cacheControl:
         config.weblounge.nginx.securityHeadersWith (policy hostName) { Cache-Control = cacheControl; };
+      build = pkgs.weblounge.clients.${client.channel};
     in
     lib.mkMerge [
       (config.weblounge.nginx.errorPages { "404" = "404.html"; })
@@ -52,7 +53,7 @@ let
         enableACME = true;
         forceSSL = true;
         globalRedirect = null;
-        root = client.package;
+        root = build.package;
         # Only the files under /assets/ carry their content's hash in their
         # names; the rest keep theirs across builds. The error pages' assets
         # set their own Cache-Control, so the server level sets none.
@@ -77,17 +78,13 @@ in
 
   options.weblounge.webClients = lib.mkOption {
     type = lib.types.attrsOf (lib.types.submodule {
-      options.package = lib.mkOption {
-        type = lib.types.package;
-        description = "The build of weblounge-client to serve.";
-      };
       options.channel = lib.mkOption {
         type = lib.types.enum [ "beta" "release" ];
-        description = "Which of the client's channels this build is, as config.json tells it.";
+        description = "Which of the client's pins to serve, as config.json tells it.";
       };
     });
     default = { };
-    description = "The host names weblounge-client is served at, each with its build.";
+    description = "The host names weblounge-client is served at, each with its channel.";
   };
 
   config = {
