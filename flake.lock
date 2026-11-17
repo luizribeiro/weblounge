@@ -512,11 +512,11 @@
         "weblounge-client-previous": "weblounge-client-previous"
       },
       "locked": {
-        "lastModified": 1794886070,
-        "narHash": "sha256-PpdaqrrPUxnzsVo6U10zJRAASDh/JW6zM0kAPnv9/KQ=",
+        "lastModified": 1794888585,
+        "narHash": "sha256-qmQZLcyAGX2QmohSw8y7z6xqEpLQTxx3aNLYS89+5uQ=",
         "owner": "luizribeiro",
         "repo": "weblounge-client",
-        "rev": "64b912c434bf297659d4dad44827329465c3f988",
+        "rev": "d578b01f86cc20603a3dc90625d50175857d5928",
         "type": "github"
       },
       "original": {
@@ -538,17 +538,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1794874772,
-        "narHash": "sha256-VZYK5zTsXALfOlYysHw3aZZIzPieQf4vlOERWUIyT6w=",
+        "lastModified": 1794884468,
+        "narHash": "sha256-00+PhjwPE5kzI8pU6bLFLk6sRS7h8OAFwoyYlymgRSI=",
         "owner": "luizribeiro",
         "repo": "weblounge-client",
-        "rev": "c902f26ab8909ea969f6982cd7a63798834b990a",
+        "rev": "66f1c2caeb3ff7387cf73f4b8d0a6452f68249f7",
         "type": "github"
       },
       "original": {
         "owner": "luizribeiro",
         "repo": "weblounge-client",
-        "rev": "c902f26ab8909ea969f6982cd7a63798834b990a",
+        "rev": "66f1c2caeb3ff7387cf73f4b8d0a6452f68249f7",
         "type": "github"
       }
     },
