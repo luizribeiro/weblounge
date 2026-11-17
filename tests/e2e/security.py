@@ -46,8 +46,8 @@ generated = {
     "ergo-api-token": f"{in_ram}/ergo-api-token",
     "session-key": f"{on_disk}/session-key",
     "oauth-introspection-secret": f"{in_ram}/oauth-introspection-secret",
-    "bender-password": f"{in_ram}/bender-password",
 }
+secret_paths = {**generated, "bender-password": "/run/secrets/bender-password"}
 
 
 def assert_loopback_only(port, path):
@@ -173,7 +173,7 @@ with subtest("ergo's API refuses any token but the generated one"):
         _, status = ergo_api("status", token=token)
         assert status == "401", (token, status)
 
-with subtest("the generated secrets stay out of the Nix store, readable by root alone"):
+with subtest("the secrets stay out of the Nix store, and the generated ones are readable by root alone"):
     modes = credenza.succeed(f"stat -c '%a %U' {in_ram} {on_disk} {' '.join(generated.values())}")
     assert modes == "700 root\n" * 2 + "600 root\n" * len(generated), modes
     ergo_config = (
@@ -191,7 +191,7 @@ with subtest("the generated secrets stay out of the Nix store, readable by root 
         ("oauth-introspection-secret", f"{ergo_config}; {concierge_config}"),
         ("bender-password", bender_config),
     ]:
-        credenza.fail(f"{{ {config}; }} | grep -qF $(cat {generated[secret]})")
+        credenza.fail(f"{{ {config}; }} | grep -qF $(cat {secret_paths[secret]})")
 
 with subtest("the secrets services read only as they start live in RAM, and nowhere on disk"):
     assert credenza.succeed(f"stat -f -c %T {in_ram}").strip() == "tmpfs"

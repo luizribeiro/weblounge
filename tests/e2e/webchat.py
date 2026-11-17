@@ -265,11 +265,10 @@ for host in channels:
         assert fresh["lounge"], report
         assert all(url.startswith(f"https://{host}/") for url in fresh["visited"]), report
 
-with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web client's login and bender take them"):
-    in_ram = [
-        f"/run/weblounge-secrets/{name}" for name in ["ergo-api-token", "oauth-introspection-secret", "bender-password"]
-    ]
+with subtest("a reboot makes new secrets in RAM, which ergo, concierge and the web login take, but keeps bender's"):
+    in_ram = [f"/run/weblounge-secrets/{name}" for name in ["ergo-api-token", "oauth-introspection-secret"]]
     before = credenza.succeed(shlex.join(["cat", *in_ram])).split()
+    benders = credenza.succeed("cat /run/secrets/bender-password")
     credenza.shutdown()
     credenza.start()
     credenza.wait_for_unit("louro.service")
@@ -283,6 +282,7 @@ with subtest("a reboot makes new secrets in RAM, and ergo, concierge, the web cl
         irc_command("JOIN #bots", "NAMES #bots", token=rebooted) + " | grep ' 353 grace = #bots :.*bender' >/dev/null"
     )
     client.wait_until_succeeds(names, timeout=60)
+    assert credenza.succeed("cat /run/secrets/bender-password") == benders
 
 with subtest("tokens and codes never reach the journal"):
     credenza.succeed("journalctl --sync")

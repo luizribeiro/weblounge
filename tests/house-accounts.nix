@@ -63,16 +63,19 @@ in
     expected = true;
   };
 
-  testBenderIsAHouseAccountThatDeploysLeaveConnected = {
+  testBenderIsAHouseAccountThatDeploysLeaveConnectedWithAStablePassword = {
     expr = {
       ensures = lib.hasInfix "ensure-house-account bender weblounge/bot/bender" config.systemd.services.bender-account.script;
       inherit (config.systemd.services.bender-account) restartIfChanged;
       louroRequires = config.systemd.services.louro.requires;
+      inherit (config.weblounge.secrets.bender-password) fromSops ephemeral;
     };
     expected = {
       ensures = true;
       restartIfChanged = false;
       louroRequires = [ "bender-account.service" ];
+      fromSops = true;
+      ephemeral = false;
     };
   };
 

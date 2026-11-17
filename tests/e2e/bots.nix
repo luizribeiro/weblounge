@@ -12,7 +12,7 @@ vmTest {
     };
     # credenza from before its secrets moved to RAM, to deploy from and back to.
     specialisation.secrets-on-disk.configuration = {
-      weblounge.secrets = lib.genAttrs [ "ergo-api-token" "oauth-introspection-secret" "bender-password" ]
+      weblounge.secrets = lib.genAttrs [ "ergo-api-token" "oauth-introspection-secret" ]
         (_: { ephemeral = lib.mkForce false; });
     };
   };

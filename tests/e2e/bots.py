@@ -102,12 +102,10 @@ with subtest("a restart puts back bender's password, whatever it was changed to"
     credenza.succeed("systemctl restart bender-account.service louro.service")
     wait_for_bender()
 
-with subtest("bender logs in again after its password's generator and its account restart, as a deploy may do"):
-    password = credenza.succeed("cat /run/weblounge-secrets/bender-password")
+with subtest("bender logs in again after the secrets' generator and its account restart, as a deploy may do"):
     credenza.succeed("systemctl stop weblounge-secrets")
     credenza.fail("systemctl is-active louro.service")
     credenza.succeed("systemctl start louro.service")
-    assert credenza.succeed("cat /run/weblounge-secrets/bender-password") == password
     wait_for_bender()
 
 with subtest("a deploy that changes concierge restarts it but leaves bender connected"):
@@ -133,6 +131,9 @@ with subtest("a deploy that restarts ergo and bender together starts bender once
 with subtest("going back to secrets on disk, and deploying them to RAM again, keeps bender and concierge working"):
     for system in ["/run/booted-system/specialisation/secrets-on-disk", "/run/booted-system"]:
         credenza.succeed(f"{system}/bin/switch-to-configuration test")
+        # A change to the secrets' generator stops louro with it; on credenza,
+        # multi-user.target, which the switch starts, brings it back.
+        credenza.succeed("systemctl start louro.service")
         credenza.wait_for_unit("louro.service")
         credenza.wait_for_open_port(8089)
         assert "ergo: http://127.0.0.1:8089/ answers" in concierge_admin("status"), system

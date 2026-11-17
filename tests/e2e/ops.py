@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from driver import credenza, subtest
-    from helpers import Account, ops_lines, register, wait_for_bender, wait_for_ops_line
+    from helpers import Account, ergo_api, ops_lines, register, wait_for_bender, wait_for_ops_line
 
 olive: Account = {"account": "olive", "password": "watches-the-ops-channel"}
 booted = r"credenza booted after \d+s \(kernel \d+\.\d+\S*\)"
@@ -36,6 +36,17 @@ with subtest("root posts to #ops with ops-notify"):
     since = lines_so_far()
     credenza.succeed("ops-notify 'looking into the slow joins'")
     wait_since("looking into the slow joins", since)
+
+with subtest("bender keeps its password from sops when its account's oneshot runs again"):
+    password = credenza.succeed("cat /run/secrets/bender-password")
+    assert password == "bender-stands-in-for-its-sops-password", password
+    credenza.succeed("systemctl restart bender-account.service")
+    body, _ = ergo_api("check_auth", accountName="bender", passphrase=password)
+    assert '"success":true' in body, body
+    wait_for_bender()
+    since = lines_so_far()
+    credenza.succeed("ops-notify 'bender came back with the same password'")
+    wait_since("bender came back with the same password", since)
 
 with subtest("only the louro group reaches louro's socket"):
     credenza.succeed(louro_status_as_service("SupplementaryGroups=louro"))

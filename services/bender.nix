@@ -32,7 +32,11 @@ in
   # louro's commands find the socket by it, as root runs them by hand.
   environment.variables.LOURO_SOCKET = config.services.louro.socket;
 
-  weblounge.ergo.houseAccounts.${nick}.vhost = "weblounge/bot/${nick}";
+  weblounge.ergo.houseAccounts.${nick} = {
+    vhost = "weblounge/bot/${nick}";
+    # A second louro, on another machine, logs in as it too.
+    stablePassword = true;
+  };
 
   # Its script runs concierge, which changes with every change to
   # concierge; restarting it on deploy would take bender down with it, as
