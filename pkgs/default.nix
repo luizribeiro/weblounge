@@ -10,7 +10,6 @@ in
 
   weblounge = {
     web = final.callPackage ./web.nix { };
-    gamja = final.callPackage ./gamja.nix { };
     client = clientPackages.app;
     clientRelease = (packagesOf weblounge-client-release).app;
     inherit (clientPackages) push-relay;

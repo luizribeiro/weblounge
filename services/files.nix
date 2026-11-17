@@ -140,7 +140,7 @@ in
       };
     };
 
-    # IRC clients find the upload endpoint in ISUPPORT: gamja and senpai read
+    # IRC clients find the upload endpoint in ISUPPORT: senpai reads
     # soju.im/FILEHOST, the draft spec draft/FILEHOST.
     weblounge.ergo.settings.server.additional-isupport =
       lib.genAttrs [ "soju.im/FILEHOST" "draft/FILEHOST" ] (_: "${config.weblounge.origin cfg.hostName}/upload");

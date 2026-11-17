@@ -82,43 +82,55 @@ and says to try again.
 
 ## The web client
 
-`https://irc.weblounge.org` serves [gamja](https://codeberg.org/emersion/gamja)
-from nixpkgs, patched in `pkgs/gamja.nix`. A member signed in on the
-members' site lands in #lounge without typing anything:
+The web client is [weblounge-client](https://github.com/luizribeiro/weblounge-client),
+built by its own flake. `services/web-client.nix` serves it at each host
+name in `weblounge.webClients`, with a build and a channel:
 
-1. gamja's `config.json`, generated in `services/webchat.nix`, sends it to
-   concierge's `/oauth/authorize`. Concierge, a small OAuth 2.0 server,
-   issues a one-minute, single-use code to the signed-in member, or has
-   them sign in first.
-2. gamja trades the code and its PKCE verifier at `/oauth/token` for an
-   access token that lasts as long as the member's session; signing out
-   or a password reset ends it.
-3. gamja connects to `wss://irc.weblounge.org/socket`, which nginx proxies
-   to Ergo's WebSocket listener on `127.0.0.1:8097`, and logs in with SASL
-   OAUTHBEARER. Ergo asks concierge's `/oauth/introspect` on loopback whose
-   token it is, authenticating with the generated
+| Host | Build | Channel |
+| --- | --- | --- |
+| `https://irc.weblounge.org` | `weblounge-client-release`, a release cut by hand | `release` |
+| `https://beta.weblounge.org` | `weblounge-client`, which follows the client's main branch | `beta` |
+
+The release input names its rev or tag in its URL, so bumping the beta
+client never moves it; to ship a release, change that URL in `flake.nix`
+and run `nix flake lock`. Each host serves its own `/config.json`, which
+tells the client its `channel`, where Ergo is and how to sign in.
+
+A member signed in on the members' site lands in #lounge without typing
+anything:
+
+1. The client sends the browser to concierge's `/oauth/authorize` as
+   `weblounge-client`, with its own origin's root as the redirect URI.
+   Concierge, a small OAuth 2.0 server, issues a one-minute, single-use
+   code to the signed-in member, or has them sign in first. From the
+   background, the client can also trade the member's session cookie
+   for a short-lived token at `/oauth/session-token`.
+2. The client trades the code and its PKCE verifier at `/oauth/token`
+   for an access token that lasts as long as the member's session;
+   signing out or a password reset ends it.
+3. The client connects to `wss://<host>/socket`, which nginx proxies to
+   Ergo's WebSocket listener on `127.0.0.1:8097`, and logs in with SASL
+   OAUTHBEARER. Ergo asks concierge's `/oauth/introspect` on loopback
+   whose token it is, authenticating with the generated
    `oauth-introspection-secret`, and never creates an account for it.
+
+Concierge takes the client's origins from `CONCIERGE_WEB_CLIENT_URLS` and
+sends members to the first, irc.weblounge.org. The same list makes up
+Ergo's WebSocket origins, the push relay's and the upload endpoint's CORS.
 
 Concierge's `INTROSPECTION_CLIENTS` lists who may introspect, each with
 a secret of its own; all get the same answers. Besides Ergo, the push
 relay checks members' session tokens as `push-relay`, with
 `push-relay-introspection-secret` from sops.
 
-In the VM it's at https://irc.weblounge.localhost:10443.
-
-`https://beta.weblounge.org` serves the web client that will replace
-gamja, [weblounge-client](https://github.com/luizribeiro/weblounge-client),
-built by its own flake, the `weblounge-client` input. It signs members in
-the same way, as concierge's second OAuth client, `weblounge-client`,
-reads its settings from the `/config.json` `services/beta-client.nix`
-generates, and connects to `wss://beta.weblounge.org/socket`. Members
-are still sent to gamja.
+In the VM it's at https://irc.weblounge.localhost:10443 and
+https://beta.weblounge.localhost:10443.
 
 ## Push notifications
 
 `https://push.weblounge.org` is the push relay, `services/push-relay.nix`,
 also from weblounge-client but through an input of its own, `push-relay`,
-so it and the beta client can move apart. A device registers with it once,
+so it and the web client can move apart. A device registers with it once,
 which takes a member's session token that it checks with concierge, and
 gets a route for each home, such as our Ergo, to POST its encrypted
 pushes to. The relay passes them on to the device's browser push service,
@@ -218,7 +230,7 @@ Two processes share the work, so the one that parses what members
 upload holds nothing else:
 
 1. Concierge authenticates the upload with the credentials the client
-   logs in to IRC with: gamja's access token as a Bearer, or a nick and
+   logs in to IRC with: the web client's access token as a Bearer, or a nick and
    password as Basic, which Ergo checks behind the sign-in limits. It
    checks the limits, and records each upload in its `uploads` table.
 2. `crates/scrubber`, a binary of its own, does everything with the
