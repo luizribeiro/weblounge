@@ -27,9 +27,10 @@ def statuses(machine: "QemuMachine", address: str, paths: list[str], *flags: str
 
 
 def create_device(*flags: str) -> str:
-    """Asks for a device the way the web client does, for an APNs target, which the relay
-    takes only once it has checked the session and then refuses as not yet built."""
-    body = json.dumps({"target": {"platform": "apns", "token": "a-device-token", "environment": "production"}})
+    """Asks for a device the way the iOS app does, for an APNs target, which the relay
+    takes only once it has checked the session."""
+    target = {"platform": "apns", "token": "5f1c6e0b9a3d4c2e" * 4, "environment": "sandbox"}
+    body = json.dumps({"target": target})
     return https(push, "/v1/devices", *status_only, "-H", "Content-Type: application/json", "--data", body, *flags)
 
 
@@ -62,7 +63,7 @@ with subtest("creating a device checks the member's session token with concierge
     nells_browser = Browser("nell")
     nells_browser.sign_in("nell", "a-nest-in-the-eaves")
     token = json.loads(session_token(nells_browser)["body"])["access_token"]
-    assert create_device("-H", f"Authorization: Bearer {token}") == "501"
+    assert create_device("-H", f"Authorization: Bearer {token}") == "201"
     assert create_device("-H", "Authorization: Bearer not-a-session-token") == "401"
     assert create_device() == "401"
 

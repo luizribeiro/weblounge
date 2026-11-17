@@ -55,6 +55,12 @@ in
       loadedBy = [ "push-relay" ];
     };
     weblounge.secrets.push-relay-introspection-secret.loadedBy = [ "push-relay" ];
+    # The .p8 token key Apple issued for our team, which the relay signs
+    # its APNs requests with.
+    weblounge.secrets.push-relay-apns-key = {
+      fromSops = true;
+      loadedBy = [ "push-relay" ];
+    };
 
     weblounge.sqliteVacuum.push-relay = "/var/lib/${stateDirectory}/push-relay.sqlite3";
 
@@ -75,6 +81,12 @@ in
         PUSH_RELAY_VAPID_KEY_FILE = "%d/push-relay-vapid-key";
         PUSH_RELAY_CONCIERGE_URL = config.weblounge.concierge.introspectionUrl;
         PUSH_RELAY_CONCIERGE_SECRET_FILE = "%d/push-relay-introspection-secret";
+        PUSH_RELAY_APNS_KEY_FILE = "%d/push-relay-apns-key";
+        PUSH_RELAY_APNS_KEY_ID = "MULN3S4R3F";
+        PUSH_RELAY_APNS_TEAM_ID = "JR4C2QJKWJ";
+        # Development-signed builds of the iOS app get sandbox tokens.
+        PUSH_RELAY_APNS_TOPIC_SANDBOX = "org.weblounge.ios.dev";
+        PUSH_RELAY_APNS_TOPIC_PRODUCTION = "org.weblounge.ios";
         TOKIO_WORKER_THREADS = "2";
       };
       serviceConfig = config.weblounge.sandbox // config.weblounge.internetOnly // {
