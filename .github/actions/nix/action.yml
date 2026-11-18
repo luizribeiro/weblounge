@@ -39,11 +39,14 @@ runs:
           /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
         df -h /
 
+    # Cachix downloads sometimes drop mid-transfer; build what fails.
     - uses: cachix/install-nix-action@v31
       with:
         extra_nix_config: |
           system-features = nixos-test benchmark big-parallel kvm
           max-jobs = ${{ inputs.max-jobs }}
+          fallback = true
+          download-attempts = 5
 
     # Lets CI run before the cache exists, or while Cachix is down.
     - id: cachix
