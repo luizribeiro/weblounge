@@ -512,11 +512,11 @@
         "weblounge-client-previous": "weblounge-client-previous"
       },
       "locked": {
-        "lastModified": 1794978215,
-        "narHash": "sha256-X7k0uNuinE8XGyFeQ+KdtGPErbVDe7MuBpzL6GkRY3k=",
+        "lastModified": 1794984612,
+        "narHash": "sha256-eYKkAD1inwq9CmrukkS8yS5DG4qVjr7vyjHeQsykEhA=",
         "owner": "luizribeiro",
         "repo": "weblounge-client",
-        "rev": "17fc49354f35eee48af22b0ebd9a7d29047293ff",
+        "rev": "7f6d7649ff3e2c83e20255c79a1c73a073877100",
         "type": "github"
       },
       "original": {
