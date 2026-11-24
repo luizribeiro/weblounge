@@ -36,7 +36,7 @@
     # URL, so updating the beta client leaves its source where it is. It
     # builds with beta's toolchain, so the lock carries one copy of it.
     weblounge-client-release = {
-      url = "github:luizribeiro/weblounge-client/64b912c434bf297659d4dad44827329465c3f988";
+      url = "github:luizribeiro/weblounge-client/b6b2c848aefd42f0581c34820315f355eac1df7a";
       inputs.crane.follows = "weblounge-client/crane";
       inputs.flake-utils.follows = "weblounge-client/flake-utils";
       inputs.git-hooks.follows = "weblounge-client/git-hooks";
