@@ -73,6 +73,7 @@ with subtest("the web client's token uploads a photo, and its link serves it to 
         "x-content-type-options": "nosniff",
         "content-security-policy": "default-src 'none'; frame-ancestors 'none'; sandbox",
         "cross-origin-resource-policy": "cross-origin",
+        "cache-control": "private, max-age=2592000, immutable",
         "referrer-policy": "no-referrer",
         "x-robots-tag": "noindex, nofollow, noimageindex, noai, noimageai",
     }.items():
@@ -80,6 +81,10 @@ with subtest("the web client's token uploads a photo, and its link serves it to 
     assert "max-age=31536000" in headers["strict-transport-security"], headers
     client.succeed("head -c 3 /tmp/fetched | od -An -tx1 | grep -q 'ff d8 ff'")
     client.fail("grep -qaF Pixelphone /tmp/fetched")
+
+with subtest("a link to no upload is answered 404, which nothing is told to cache"):
+    missing = get_file(photo.replace(photo.rsplit("/", 1)[1][:22], "NoUploadWasMadeAsThis1"))
+    assert missing["status"] == 404 and "cache-control" not in missing["headers"], missing
 
 with subtest("a member's and a bot's IRC logins upload, each image under the type it is"):
     stored(upload(f"{fixtures}/photo.png", "-u", login(zoe)), "png")

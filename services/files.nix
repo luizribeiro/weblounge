@@ -165,10 +165,16 @@ in
         # nginx serves each type by its extension; browsers show these
         # inline, and are told so. A symlink a compromised scrubber plants
         # could point at anything nginx may read, its TLS keys included.
+        #
+        # An upload's bytes never change under its id, so a browser that
+        # has them needn't ask again; no cache between it and us may keep
+        # what only its link keeps private. Errors go without, or a 404
+        # would outlive the upload it was too early for.
         extraConfig = headers + ''
           disable_symlinks on;
           add_header Cross-Origin-Resource-Policy "cross-origin" always;
           add_header Content-Disposition "inline" always;
+          add_header Cache-Control "private, max-age=${toString (30 * 24 * 60 * 60)}, immutable";
         '';
       };
       locations."= /robots.txt" = {
