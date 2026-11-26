@@ -153,6 +153,16 @@ pub async fn start_session(
     Ok(token.cookie())
 }
 
+/// Ends the browser's session, if it has a live one, and with it the OAuth
+/// codes and tokens issued for it. Answers the cookie that makes the
+/// browser forget it.
+pub async fn end_session(app: &App, visitor: &Visitor) -> sqlx::Result<HeaderValue> {
+    if let Some(signed_in) = &visitor.0 {
+        app.db.end_session(&signed_in.token_hash).await?;
+    }
+    Ok(session::removal_cookie())
+}
+
 pub fn sign_in_url(next: &str) -> String {
     let next: String = form_urlencoded::byte_serialize(next.as_bytes()).collect();
     format!("{SIGN_IN_PATH}?next={next}")

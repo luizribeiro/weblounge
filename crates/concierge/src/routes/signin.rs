@@ -17,7 +17,7 @@ use crate::{
     app::{App, AppState},
     auth::{self, Visitor},
     db::Member,
-    nick, password_rules, rate_limit, session,
+    nick, password_rules, rate_limit,
 };
 
 /// The same answer whether the account exists or not.
@@ -97,13 +97,14 @@ pub async fn submit(
 }
 
 pub async fn sign_out(State(app): State<AppState>, visitor: Visitor) -> Response {
-    if let Some(signed_in) = &visitor.0
-        && let Err(error) = app.db.end_session(&signed_in.token_hash).await
-    {
-        return internal_error("Ending a session", error);
+    match auth::end_session(&app, &visitor).await {
+        Ok(cookie) => (
+            [(header::SET_COOKIE, cookie)],
+            Redirect::to(auth::SIGN_IN_PATH),
+        )
+            .into_response(),
+        Err(error) => internal_error("Ending a session", error),
     }
-    let cookie = [(header::SET_COOKIE, session::removal_cookie())];
-    (cookie, Redirect::to(auth::SIGN_IN_PATH)).into_response()
 }
 
 fn page<'a>(
