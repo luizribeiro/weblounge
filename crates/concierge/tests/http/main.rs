@@ -6,6 +6,7 @@ mod account;
 mod bots;
 mod certificates;
 mod checks;
+mod client_signout;
 mod clients;
 mod errors;
 mod help;

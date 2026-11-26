@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
     middleware::{self, map_response},
     response::{IntoResponse, Redirect},
-    routing::{get, post},
+    routing::{MethodRouter, get, post},
 };
 use ergo_api::Client;
 use outbox::Outbox;
@@ -89,7 +89,6 @@ pub fn router(app: App) -> Router {
     let public_url = app.public_url.clone();
     let web_clients = app.web_clients.clone();
     let upload_clients = web_clients.clone();
-    let session_token_clients = web_clients.clone();
     let state = Arc::new(app);
     // Unknown paths are members' too, so signed-out visitors can't tell
     // which pages exist.
@@ -246,18 +245,16 @@ pub fn router(app: App) -> Router {
         .route(&format!("{}{{file}}", assets::URL_PREFIX), get(asset))
         .layer(middleware::from_fn_with_state(public_url, csrf::guard_site))
         .merge(webchat_api)
-        // The web clients post here with the members' session cookie, which
-        // the handler and its CORS grant guard instead of our pages' guard.
+        // The web clients post to these with the members' session cookie,
+        // which the handlers and their CORS grant guard instead of our
+        // pages' guard.
         .route(
             routes::oauth::SESSION_TOKEN_PATH,
-            post(routes::oauth::session_token)
-                .options(cors::preflight)
-                .layer(map_response(routes::no_store))
-                .layer(middleware::from_fn_with_state(state.clone(), auth::resolve))
-                .layer(middleware::from_fn_with_state(
-                    routes::oauth::session_token_cors(session_token_clients),
-                    cors::allow_web_clients_with_credentials,
-                )),
+            session_endpoint(post(routes::oauth::session_token), &state),
+        )
+        .route(
+            routes::oauth::SIGN_OUT_PATH,
+            session_endpoint(post(routes::oauth::sign_out), &state),
         )
         // Ergo calls this, not a browser, and authenticates with its secret.
         .route(
@@ -280,6 +277,19 @@ pub fn router(app: App) -> Router {
     #[cfg(debug_assertions)]
     let router = router.layer(tower_livereload::LiveReloadLayer::new());
     router
+}
+
+/// `endpoint`, for the web clients' pages to post to with the members'
+/// session cookie, after asking the browser's leave.
+fn session_endpoint(endpoint: MethodRouter<AppState>, state: &AppState) -> MethodRouter<AppState> {
+    endpoint
+        .options(cors::preflight)
+        .layer(map_response(routes::no_store))
+        .layer(middleware::from_fn_with_state(state.clone(), auth::resolve))
+        .layer(middleware::from_fn_with_state(
+            routes::oauth::session_cors(state.web_clients.clone()),
+            cors::allow_web_clients_with_credentials,
+        ))
 }
 
 async fn asset(State(app): State<AppState>, Path(file): Path<String>) -> impl IntoResponse {

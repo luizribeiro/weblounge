@@ -29,6 +29,7 @@ pub const AUTHORIZE_PATH: &str = "/oauth/authorize";
 pub const TOKEN_PATH: &str = "/oauth/token";
 pub const INTROSPECTION_PATH: &str = "/oauth/introspect";
 pub const SESSION_TOKEN_PATH: &str = "/oauth/session-token";
+pub const SIGN_OUT_PATH: &str = "/oauth/signout";
 
 /// RFC 8414's metadata. The introspection endpoint is left out: it's for
 /// Ergo alone, and the web client would call it from the browser if it
@@ -173,11 +174,8 @@ pub async fn session_token(
     address: ClientAddress,
     headers: HeaderMap,
 ) -> Response {
-    if app.web_clients.sent_by(&headers).is_none() {
-        return token_error(StatusCode::FORBIDDEN, "invalid_client");
-    }
-    if !csrf::is_json(&headers) {
-        return token_error(StatusCode::UNSUPPORTED_MEDIA_TYPE, "invalid_request");
+    if let Some(refusal) = refusal_unless_from_web_client_page(&app, &headers) {
+        return refusal;
     }
     if !app.oauth_requests.allows(address.0, Instant::now()) {
         return token_error(StatusCode::TOO_MANY_REQUESTS, "invalid_request");
@@ -197,8 +195,44 @@ pub async fn session_token(
     .await
 }
 
-/// What the web clients may send [`session_token`] with their cookies.
-pub fn session_token_cors(clients: WebClients) -> cors::Credentialed {
+/// Ends the browser's members' session when a web client's page signs its
+/// member out, or the page's next sign-in would go straight through
+/// [`session_token`] or [`authorize`] on a shared machine. The tokens the
+/// page holds die with the session; other devices stay signed in. Posted
+/// to as [`session_token`] is, and not rate limited, so signing out
+/// always works; a browser already signed out gets the same 204.
+pub async fn sign_out(
+    State(app): State<AppState>,
+    visitor: Visitor,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(refusal) = refusal_unless_from_web_client_page(&app, &headers) {
+        return refusal;
+    }
+    match auth::end_session(&app, &visitor).await {
+        Ok(cookie) => (StatusCode::NO_CONTENT, [(header::SET_COOKIE, cookie)]).into_response(),
+        Err(error) => internal_error("Ending a session", error),
+    }
+}
+
+/// The answer to a request that carries the members' session cookie,
+/// unless a web client's page sent it, with a body no form can send.
+fn refusal_unless_from_web_client_page(app: &App, headers: &HeaderMap) -> Option<Response> {
+    if app.web_clients.sent_by(headers).is_none() {
+        return Some(token_error(StatusCode::FORBIDDEN, "invalid_client"));
+    }
+    if !csrf::is_json(headers) {
+        return Some(token_error(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "invalid_request",
+        ));
+    }
+    None
+}
+
+/// What the web clients may send [`session_token`] and [`sign_out`] with
+/// their cookies.
+pub fn session_cors(clients: WebClients) -> cors::Credentialed {
     cors::Credentialed {
         clients,
         allowed_headers: "Content-Type",

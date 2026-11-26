@@ -114,7 +114,10 @@ anything:
    Concierge, a small OAuth 2.0 server, issues a one-minute, single-use
    code to the signed-in member, or has them sign in first. From the
    background, the client can also trade the member's session cookie
-   for a short-lived token at `/oauth/session-token`.
+   for a short-lived token at `/oauth/session-token`. When the member
+   signs out, the client posts the same way to `/oauth/signout`, which
+   ends that session, and every token issued for it, so the next sign-in
+   asks for the password.
 2. The client trades the code and its PKCE verifier at `/oauth/token`
    for an access token that lasts as long as the member's session;
    signing out or a password reset ends it.
