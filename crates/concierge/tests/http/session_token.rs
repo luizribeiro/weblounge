@@ -12,17 +12,22 @@ use serde_json::json;
 use crate::{BETA_URL, PUBLIC_URL, Site, WEBCHAT_URL, oauth::json};
 
 const PATH: &str = "/oauth/session-token";
-const JSON: (&str, &str) = ("content-type", "application/json");
+pub(crate) const JSON: (&str, &str) = ("content-type", "application/json");
 
-fn from(origin: &str) -> [(&str, &str); 2] {
+pub(crate) fn from(origin: &str) -> [(&str, &str); 2] {
     [("origin", origin), JSON]
 }
 
 impl Site {
-    /// Posts to the session-token endpoint with the session in `cookie`
-    /// and `headers`; the beta client's page sends [`from`] its origin.
-    async fn session_token_with(&self, cookie: Option<&str>, headers: &[(&str, &str)]) -> Response {
-        let mut request = Request::post(PATH);
+    /// Posts `{}` to `path` with the session in `cookie` and `headers`, as
+    /// a web client's page does with [`from`] its origin.
+    pub(crate) async fn post_from_page(
+        &self,
+        path: &str,
+        cookie: Option<&str>,
+        headers: &[(&str, &str)],
+    ) -> Response {
+        let mut request = Request::post(path);
         if let Some(cookie) = cookie {
             request = request.header(header::COOKIE, cookie);
         }
@@ -32,19 +37,27 @@ impl Site {
         self.send(request.body(Body::from("{}")).unwrap()).await
     }
 
-    async fn stored_tokens(&self) -> i64 {
+    pub(crate) async fn session_token_with(
+        &self,
+        cookie: Option<&str>,
+        headers: &[(&str, &str)],
+    ) -> Response {
+        self.post_from_page(PATH, cookie, headers).await
+    }
+
+    pub(crate) async fn stored_tokens(&self) -> i64 {
         self.query_scalar("SELECT COUNT(*) FROM oauth_tokens").await
     }
 }
 
-fn header_of(response: &Response, name: header::HeaderName) -> Option<&str> {
+pub(crate) fn header_of(response: &Response, name: header::HeaderName) -> Option<&str> {
     response
         .headers()
         .get(name)
         .map(|value| value.to_str().unwrap())
 }
 
-fn assert_readable_by(response: &Response, origin: &str) {
+pub(crate) fn assert_readable_by(response: &Response, origin: &str) {
     let granted = |name| header_of(response, name);
     assert_eq!(granted(header::ACCESS_CONTROL_ALLOW_ORIGIN), Some(origin));
     assert_eq!(
@@ -54,7 +67,7 @@ fn assert_readable_by(response: &Response, origin: &str) {
     assert_eq!(granted(header::VARY), Some("origin"));
 }
 
-fn assert_unreadable(response: &Response) {
+pub(crate) fn assert_unreadable(response: &Response) {
     let cors: Vec<_> = response
         .headers()
         .keys()
@@ -230,20 +243,21 @@ async fn a_post_a_form_could_make_gets_no_token() {
     assert_eq!(site.stored_tokens().await, 0);
 }
 
-/// What a browser asks before the beta client's page posts.
-async fn preflight(site: &Site, origin: &str) -> Response {
-    let request = Request::options(PATH)
+/// What a browser asks before a web client's page posts to `path`.
+async fn preflight(site: &Site, path: &str, origin: &str) -> Response {
+    let request = Request::options(path)
         .header(header::ORIGIN, origin)
         .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
         .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type");
     site.send(request.body(Body::empty()).unwrap()).await
 }
 
-#[tokio::test]
-async fn browsers_get_leave_to_post_from_the_web_clients_pages_alone() {
+/// That browsers may post to `path` from the web clients' pages, and from
+/// no other site's.
+pub(crate) async fn assert_preflight_admits_the_web_clients_alone(path: &str) {
     let site = Site::start().await;
     for origin in [BETA_URL, WEBCHAT_URL] {
-        let asked = preflight(&site, origin).await;
+        let asked = preflight(&site, path, origin).await;
         assert_eq!(asked.status(), 204, "{origin}");
         assert_readable_by(&asked, origin);
         let granted = |name| header_of(&asked, name);
@@ -255,8 +269,13 @@ async fn browsers_get_leave_to_post_from_the_web_clients_pages_alone() {
         assert_eq!(granted(header::ACCESS_CONTROL_MAX_AGE), Some("3600"));
     }
     for origin in ["https://evil.example", PUBLIC_URL, "null"] {
-        assert_unreadable(&preflight(&site, origin).await);
+        assert_unreadable(&preflight(&site, path, origin).await);
     }
+}
+
+#[tokio::test]
+async fn browsers_get_leave_to_post_from_the_web_clients_pages_alone() {
+    assert_preflight_admits_the_web_clients_alone(PATH).await;
 }
 
 #[tokio::test]
