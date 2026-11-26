@@ -341,11 +341,21 @@ def answer_of(response: str) -> Answer:
     return {"status": int(status.split()[1]), "headers": {k.lower(): v for k, v in headers.items()}, "body": body}
 
 
-def session_token(browser: Browser | None = None, origin: str = beta_client["origin"]) -> Answer:
-    """Asks for a token for browser's session, or for none, the way the beta client's page does from origin."""
+def post_from_client_page(path: str, browser: Browser | None, origin: str) -> Answer:
+    """Posts to path with browser's cookies, or none, the way a web client's page does from origin."""
     cookies = browser.cookies if browser else []
     flags = ["-D", "-", "-H", f"Origin: {origin}", "-H", "Content-Type: application/json", "--data", "{}"]
-    return answer_of(https(members, "/oauth/session-token", *cookies, *flags))
+    return answer_of(https(members, path, *cookies, *flags))
+
+
+def session_token(browser: Browser | None = None, origin: str = beta_client["origin"]) -> Answer:
+    """Asks for a token for browser's session, or for none, the way the beta client's page does from origin."""
+    return post_from_client_page("/oauth/session-token", browser, origin)
+
+
+def client_sign_out(browser: Browser | None = None, origin: str = beta_client["origin"]) -> Answer:
+    """Signs browser out of the members' site, the way the beta client's page does from origin."""
+    return post_from_client_page("/oauth/signout", browser, origin)
 
 
 def upload(path: str, *credentials: str) -> Answer:

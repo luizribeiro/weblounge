@@ -9,8 +9,11 @@ if TYPE_CHECKING:
     from helpers import (
         Account,
         Browser,
+        access_token,
         add_member,
         assert_covers_safe_areas,
+        authorize_path,
+        client_sign_out,
         concierge_admin,
         concierge_admin_command,
         concierge_sql,
@@ -23,6 +26,7 @@ if TYPE_CHECKING:
         members,
         not_found_page,
         outcome,
+        pkce,
         session_token,
         wait_for_members,
     )
@@ -285,6 +289,32 @@ with subtest("signing out ends the session"):
     assert signed_out == f"303 https://{members}/signin", signed_out
     after = browser.get("/", *outcome)
     assert after == f"303 https://{members}/signin", after
+
+with subtest("a web client's page signs the browser out, so its tokens die and signing in asks again"):
+    add_member("rhea", "a-raven-on-the-roof")
+    rheas_browser = Browser("rhea")
+    assert rheas_browser.sign_in("rhea", "a-raven-on-the-roof") == f"303 https://{members}/"
+    lasting = access_token(rheas_browser)
+    background = json.loads(session_token(rheas_browser)["body"])["access_token"]
+    for token in [lasting, background]:
+        assert " 903 " in irc(token=token)
+    evil = client_sign_out(rheas_browser, origin="https://evil.example")
+    assert evil["status"] == 403 and "access-control-allow-origin" not in evil["headers"], evil
+    assert rheas_browser.get("/", *outcome) == "200 "
+
+    signed_out = client_sign_out(rheas_browser)
+    assert signed_out["status"] == 204, signed_out
+    assert signed_out["headers"]["access-control-allow-origin"] == "https://beta.weblounge.org", signed_out
+    assert signed_out["headers"]["access-control-allow-credentials"] == "true", signed_out
+    assert signed_out["headers"]["set-cookie"].startswith("__Host-session=; Path=/; Max-Age=0;"), signed_out
+
+    for token in [lasting, background]:
+        client.fail(irc_command(token=token))
+    assert rheas_browser.get("/", *outcome) == f"303 https://{members}/signin"
+    assert session_token(rheas_browser)["status"] == 401
+    asked = rheas_browser.get(authorize_path(pkce()[1]), *outcome)
+    assert asked.startswith(f"303 https://{members}/signin?next="), asked
+    assert client_sign_out(rheas_browser)["status"] == 204
 
 with subtest("concierge-admin member reset-password ends the member's website sessions"):
     assert browser.sign_in("dana", password).startswith("303 ")
